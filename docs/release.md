@@ -62,14 +62,24 @@ first `make scie` downloads python-build-standalone and the `science` tool into
 runtime never needs pip. `make stage` copies the six shipped scripts into `build/src/`
 and writes `_version.py` there; the checkout never holds a version file.
 
-The builds went green on all four runners on 2026-09-13 (numpy 2.5.3, CPython 3.13.15
-from python-build-standalone). Still to do for reproducible re-releases: pin
-`numpy==2.5.3` in the `scie` recipe and `--scie-pbs-release YYYYMMDD` (the release the
-build used is in the `make scie` log).
+The scie build is pinned at the top of the Makefile: `PBS_RELEASE` (the
+python-build-standalone release), `PY_VERSION` (its CPython patch) and `NUMPY`. A
+rebuild months later produces the same binary. To move to a newer Python, bump the
+three together, `make scie smoke-scie`, and run the release workflow's dry run before
+tagging.
+
+`science`, pex's scie builder, asks `api.github.com` for the release's asset list even
+when the release is pinned. Unauthenticated, GitHub's shared runner addresses hit the
+API rate limit (the v2026.09.13.4 run failed that way on the Apple silicon job). The
+workflow exports `SCIENCE_AUTH_API_GITHUB_COM_BEARER` with the job's token; locally,
+`SCIENCE_AUTH_API_GITHUB_COM_BEARER=$(gh auth token) make scie` does the same if you
+ever see a 403 from the build.
 
 Releases so far: `v2026.09.13` (the publish job failed for want of `-R`, so it was
 published by hand from the run's artifacts), `v2026.09.13.1` (the fix, published by the
-workflow) and `v2026.09.13.2` (the enik light show mode).
+workflow), `v2026.09.13.2` (enik), `v2026.09.13.3` (cyclops), `v2026.09.13.4` (convey
+and athena; the tag's run failed on the API rate limit above, so there is no release
+for it) and `v2026.09.13.5` (the same code with the pin and the token).
 
 ## If CI cannot publish
 
