@@ -1,8 +1,10 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """May-The_Lord_Poseidon-Convey-You.py (formerly deadtui.py) - browse and play the archive.org Grateful Dead collection in a terminal.
 
 Stock python3 (curses) + mpv. No pip installs. Search/metadata code is reused
-from gdarchive.py in the same directory.
+from gdarchive.py in the same directory. Runs on Linux and macOS (see README:
+brew install mpv; numpy for the light show, mutagen for tagging fetched shows;
+the DAC rate readout is Linux-only and simply stays blank elsewhere).
 
 Levels:  home  >  years  >  dates in a year  >  sources for a date  >  tracks
 The home screen is sectioned: Now (▶ Now playing, 🎲 Random show), The Dead
@@ -1855,6 +1857,8 @@ class App:
             self.mpv.start()
             if self.mpv.adopted:
                 self.adopt_playlist()
+        except FileNotFoundError:
+            self.say("mpv is not installed (apt install mpv / brew install mpv)", 60)
         except Exception as e:
             self.say(f"mpv failed to start: {e}", 30)
         while True:

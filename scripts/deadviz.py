@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """deadviz.py - terminal light show driven by whatever PipeWire is playing.
 
 Captures the default sink's monitor (so it hears exactly what the Rotel gets,
@@ -32,12 +32,18 @@ Modes:
              jump on the beat, drifting jellyfish, a crab on the bottom
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
+On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
+set it as the output device (or a Multi-Output Device with it and the DAC), and the
+tap reads it back through ffmpeg's avfoundation input. DEADVIZ_DEVICE names the
+device (default "BlackHole 2ch"); DEADVIZ_CAPTURE forces parec or ffmpeg.
 """
 
 import curses
 import math
 import os
+import shutil
 import subprocess
+import sys
 import threading
 import time
 
@@ -70,19 +76,39 @@ class Capture(threading.Thread):
         self.error = None
         self.alive = True
 
+    @staticmethod
+    def backend():
+        """(name, command) for the audio tap on this machine, or (None, why)."""
+        want = os.environ.get("DEADVIZ_CAPTURE", "auto")
+        if want in ("auto", "parec") and shutil.which("parec"):
+            return "parec", ["parec", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=2",
+                             "-d", "@DEFAULT_MONITOR@", "--latency-msec=40"]
+        if want in ("auto", "ffmpeg") and shutil.which("ffmpeg") and (sys.platform == "darwin" or want == "ffmpeg"):
+            # macOS: no monitor source exists, so route output through a loopback device
+            # (BlackHole, free) set as the system output, and read that device back.
+            dev = os.environ.get("DEADVIZ_DEVICE", "BlackHole 2ch")
+            return "ffmpeg", ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "avfoundation", "-i", f":{dev}",
+                              "-ac", "2", "-ar", str(RATE), "-f", "s16le", "-"]
+        if sys.platform == "darwin":
+            return None, "no audio tap: brew install ffmpeg blackhole-2ch, set BlackHole as output (DEADVIZ_DEVICE names it)"
+        return None, "no audio tap: parec (pulseaudio-utils, via pipewire-pulse) is not installed"
+
     def run(self):
-        cmd = ["parec", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=2",
-               "-d", "@DEFAULT_MONITOR@", "--latency-msec=40"]
+        name, cmd = self.backend()
+        if not name:
+            self.error = cmd
+            return
         try:
             self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         except OSError as e:
-            self.error = f"parec: {e}"
+            self.error = f"{name}: {e}"
             return
         need = CHUNK * 2 * 2
         while self.alive:
             data = self.proc.stdout.read(need)
             if not data:
-                self.error = "parec ended (is a sink present?)"
+                self.error = (f"{name} ended (is a sink present?)" if name == "parec"
+                              else f"{name} ended (is the loopback device present? DEADVIZ_DEVICE)")
                 return
             frames = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
             frames = frames.reshape(-1, 2)

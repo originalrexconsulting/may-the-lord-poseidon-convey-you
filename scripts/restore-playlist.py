@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """restore-playlist.py - reload a saved mpv playlist into the running deadtui mpv.
 
   scripts/restore-playlist.py dead/playlist-2026-09-13.json          # from where it was saved

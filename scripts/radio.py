@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """radio.py - lossless (FLAC) classical internet radio through Strawberry.
 
 Stock python3 only. Needs ffprobe (probe/now) and a running Strawberry.

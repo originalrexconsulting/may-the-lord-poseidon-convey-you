@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """ansi2svg.py - turn a `tmux capture-pane -e -p` dump into an SVG screenshot.
 
     tmux capture-pane -e -p -t <pane> | scripts/ansi2svg.py > docs/screenshots/home.svg

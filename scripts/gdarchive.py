@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """gdarchive.py - search and download Grateful Dead shows from archive.org.
 
 Stock python3 only (urllib, json). No pip installs.

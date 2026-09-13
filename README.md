@@ -41,6 +41,25 @@ earth, and the cast drops by.
 
 Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
+## Running it
+
+Linux (Debian): `apt install mpv python3-numpy python3-mutagen pulseaudio-utils ffmpeg`
+(numpy is the light show, mutagen tags fetched shows, parec is the light show's audio
+tap, ffmpeg converts SHN tapes). Then `scripts/May-The_Lord_Poseidon-Convey-You.py`.
+
+macOS: `brew install mpv ffmpeg python numpy` and `pip3 install mutagen` (both optional:
+without numpy there is no light show, without mutagen fetched shows are left untagged).
+Playback goes straight to CoreAudio, so pick the DAC in Sound settings. The light show
+needs an audio tap, which macOS does not provide by itself: `brew install blackhole-2ch`,
+make a Multi-Output Device in Audio MIDI Setup with the DAC and BlackHole, set it as
+output, and the tap reads BlackHole back through ffmpeg (`DEADVIZ_DEVICE` names it if
+yours is not "BlackHole 2ch"). The status line's DAC rate readout is Linux-only and
+stays blank. `radio.py`'s own commands (`play`, `now`) drive Strawberry over D-Bus and
+are Linux-only; the station list itself is used by the TUI everywhere.
+
+Windows: run it under WSL as Linux. Native Windows would need `windows-curses` and a
+named pipe for mpv; not done.
+
 `SYSTEM.md` is the reference: the setup, every key, every script, and the
 facts about archive.org that shape what you get (soundboards stream only,
 audience tapes download lossless). `AUDIO-ANSIBLE.md` is the spec for the
