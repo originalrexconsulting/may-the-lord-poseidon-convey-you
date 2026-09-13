@@ -18,7 +18,9 @@ band Jerry left behind, 1996 on (archive.org collection JGB; Jerry's own Garcia
 Band tapes were removed from archive.org at the estate's request). JGB shows
 fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
 `🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
-opens it, and plays the best source.
+opens it, and plays the best source. `☔ Rain and Snow` plays weather and water
+songs (RAIN_SONGS): a random song, a random night's version of it (on-disk shows
+first some of the time), four to start, and three more each time the last one begins.
 Playback goes through mpv (JSON IPC over a unix socket), which plays through
 PipeWire like everything else on the laptop. Shows already fetched into
 dead/shows/ are played from the local lossless files instead of the stream.
@@ -96,6 +98,15 @@ MEMORY = "memory"      # sentinel: set lists of evenings worth keeping
 HIST = "history"       # sentinel: everything played, newest first
 QUEUE = "queue"        # sentinel: the playlist mpv is playing right now
 RANDOM = "random"      # sentinel: a random Dead show, best source, straight into play
+RAIN = "rain"          # sentinel: Rain and Snow, random weather and water songs, one version after another
+RAIN_SONGS = [
+    "Cold Rain and Snow", "Looks Like Rain", "Mission in the Rain", "Box of Rain", "Morning Dew",
+    "Here Comes Sunshine", "Sunshine Daydream", "Big River", "Row Jimmy", "Ship of Fools", "Lost Sailor",
+    "Saint of Circumstance", "Weather Report Suite", "Let It Grow", "Black Muddy River", "Wharf Rat",
+    "The Wheel", "Lazy Lightning", "Franklin's Tower", "Mississippi Half-Step", "Wave to the Wind",
+    "Ripple", "Estimated Prophet", "Crazy Fingers", "Brokedown Palace",
+]
+RAIN_BATCH = 4         # versions fetched per roll; more are added as the last one starts
 YEARS_GD = ("years", "GratefulDead")   # home row that opens the Dead years
 HDR = "hdr"            # (HDR, text): a section header on the home screen, not selectable
 # LP menus. archive.org library vinyl transfers: one 24-bit FLAC per side, titled from
@@ -855,7 +866,7 @@ class App:
         (HDR, "Now"),
         QUEUE, RANDOM,
         (HDR, "The Dead"),
-        YEARS_GD, TEARS, JGB,
+        YEARS_GD, RAIN, TEARS, JGB,
         (HDR, "Memories"),
         # one row per MEMORIES entry goes here
         (HDR, "Not Dead"),
@@ -867,6 +878,7 @@ class App:
         QUEUE: "▶ Now playing        the current playlist",
         RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
         YEARS_GD: "Grateful Dead        1965-1995, by year",
+        RAIN: "☔ Rain and Snow      random weather and water songs, a random night's version of each, on and on",
         TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
         JGB: "JGB                  Melvin Seals & Jerry Garcia Band, 1996 on, after Jerry",
         RADIO: "♪ Classical radio    lossless FLAC stations",
@@ -912,6 +924,61 @@ class App:
         year = int(self.state["year"]) if self.state.get("year") else None
         same = (self.state.get("collection") or gd.DEFAULT_COLLECTION) == collection
         self.push(lvl, items.index(year) if same and year in items else 0)
+
+    def random_version(self, song):
+        """A random night's version of `song`: (doc, track index, tracks, meta), or None."""
+        key = "song-index-" + gd.norm(song).replace(" ", "-")
+
+        def fetch():
+            args = SimpleNamespace(collection=gd.DEFAULT_COLLECTION, year=None, date=None, song=song, min_rating=None,
+                                   min_reviews=None, source="any", downloadable=False, query=None,
+                                   sort="date asc", limit=3000)
+            return gd.search(args)[1]
+        docs = list(cached(key, fetch) or [])
+        self.rng.shuffle(docs)
+        if self.rng.random() < 0.4:                                         # some of the time, what is on disk first
+            docs.sort(key=lambda d: not os.path.isdir(local_show_dir(d)))
+        for d in docs[:10]:
+            try:
+                files, _, _ = gd.choose_files(item_meta(d["identifier"]), "best", song)
+                if not files:
+                    continue
+                idx, tracks, meta = self.song_track_index(d, song)
+                return d, idx, tracks, meta
+            except Exception:
+                continue
+        return None
+
+    def rain_tracks(self, n):
+        out = []
+        for song in self.rng.sample(RAIN_SONGS, min(n, len(RAIN_SONGS))):
+            self.loading(f"☔ looking for a {song}...")
+            hit = self.random_version(song)
+            if not hit:
+                continue
+            doc, idx, tracks, meta = hit
+            t = dict(tracks[idx])
+            t["title"] = f"{show_title(doc, meta)}: {t['title']}"
+            out.append(t)
+        return out
+
+    def rain(self):
+        tracks = self.rain_tracks(RAIN_BATCH)
+        if not tracks:
+            self.say("no rain today (archive.org?)")
+            return
+        self.now = {"doc": None, "tracks": tracks, "title": "☔ Rain and Snow", "rain": True}
+        self.mpv.play([t["src"] for t in tracks], 0)
+        self.say(f"☔ {len(tracks)} songs to start; more fall as it goes", 8)
+        self.push_queue()
+
+    def rain_more(self):
+        """Called from the main loop when the last queued song starts: add a few more."""
+        more = self.rain_tracks(3)
+        for t in more:
+            self.mpv.cmd("loadfile", t["src"], "append")
+        self.now["tracks"].extend(more)
+        self.msg_until = 0
 
     def random_show(self):
         """Any night: a random year, a random date in it (rated 4+ when the year has such), best source."""
@@ -1545,6 +1612,8 @@ class App:
             self.push_queue()
         elif lvl.kind == "home" and item == RANDOM:
             self.random_show()
+        elif lvl.kind == "home" and item == RAIN:
+            self.rain()
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1602,6 +1671,8 @@ class App:
             self.push_queue()
         elif lvl.kind == "home" and item == RANDOM:
             self.random_show()
+        elif lvl.kind == "home" and item == RAIN:
+            self.rain()
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1762,6 +1833,10 @@ class App:
             self.say(f"mpv failed to start: {e}", 30)
         while True:
             st = self.mpv.status() if self.mpv.sock else None
+            if st and self.now and self.now.get("rain") and st["count"] == len(self.now["tracks"]) \
+                    and st["pos"] >= st["count"] - 1 and not st["paused"]:
+                self.rain_more()
+                st = self.mpv.status()
             if st and (not self.now or st["count"] != len(self.now["tracks"])):
                 # something else loaded a playlist into our mpv (restore-playlist.py, a hand-typed
                 # loadfile): describe it the same way an adopted mpv is described
