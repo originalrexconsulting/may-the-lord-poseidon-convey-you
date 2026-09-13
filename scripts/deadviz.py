@@ -43,6 +43,13 @@ Modes:
              him to sleep, and if it lasts, a glowing stake comes in from the mouth of
              the cave, he wakes up roaring that Nobody did it, the flock runs out with
              the men under it, and the cave starts over
+  convey     May the Lord Poseidon convey you: the voyage Polyphemus promised. A black
+             ship rows west across the night sea toward Ithaca, faster the louder the
+             music, oars on the beat, sail full with the mids. On a big beat the Earth
+             Shaker rises ahead of it, trident up, and conveys it his way: a wave
+             throws the ship back east and takes a companion. Lose them all and
+             Odysseus is alone on a raft. Reach Ithaca at last and it starts over
+             at the Cyclops's island, boulder and all
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
@@ -68,7 +75,7 @@ WINDOW = 2048         # FFT size
 BANDS = 48
 FPS = 24
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
-         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops"]
+         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -1367,6 +1374,185 @@ class Viz:
             self.put(1, max(0, (w - len(msg)) // 2) + shake, msg, self.fg(1.0, True, base=RADIAL_FG))
         elif an.beat > 0.5 and ph == "lounge" and not asleep:
             self.put(1, max(0, (w - 10) // 2), "POLYPHEMUS", self.fg(0.9, True, base=RADIAL_FG))
+
+    # ---- convey (the voyage Polyphemus promised: the Earth Shaker sees Odysseus home)
+    RAFT = ["    o    ", "   /|\\   ", "~[=====]~"]
+    ITHACA = ["         ⌂  ", "    __/‾‾‾\\__", " __/         \\__"]
+    CYCLOPS_ISLE = ["    /‾‾‾‾‾\\    ", " __/  (o)  \\__ ", "/             \\"]
+
+    def ship_rows(self, n, oar_frame, wind):
+        """The black ship, bow to the left: n companions on deck, oars in one of three positions."""
+        deck = "  \\___" + "".join("o___" if i < n else "____" for i in range(6)) + "__/"
+        W = len(deck)
+        sail_l, sail_r = ("(", ")") if wind else ("|", "|")
+        inner = W - 16
+        mast = " " * 19 + "|"
+        rows = [mast, mast + "\\",
+                " " * 7 + "_" * 11 + "|_" + "_" * (inner - 1),
+                " " * 7 + sail_l + " " * (inner + 10) + sail_r,
+                " " * 7 + sail_l + " " * (inner + 10) + sail_r,
+                " " * 7 + sail_l + " " * (inner + 10) + sail_r,
+                " " * 7 + "|" + "_" * (inner + 10) + "|",
+                mast,
+                deck,
+                "   \\" + "_" * (W - 6) + "/"]
+        oar = "\\|/"[oar_frame]
+        rows.append("      " + "".join(f"{oar}   " for i in range(6) if i < n))
+        return rows
+
+    def draw_convey(self, h, w):
+        an = self.an
+        t = self.t
+        st = self.state("convey", h, w, lambda: {
+            "x": float(w - 44), "n": 6, "raft": False, "god": None, "cool": t + 6, "shake": 0,
+            "text": None, "rock": None, "arrived": None, "reset_at": None, "spray": [],
+            "stars": np.column_stack([self.rng.random(60) * (w - 1), self.rng.random(60) * max(1, h // 3),
+                                      self.rng.random(60)])})
+        hz = int(h * 0.32)
+        x = np.arange(w - 1)
+        amp = 0.5 + an.bass * (h * 0.09) + an.beat * 1.2
+        surf = (hz + amp * np.sin(x * 0.16 - t * 1.6) + amp * 0.4 * np.sin(x * 0.37 + t * 2.4)
+                + 0.4 * np.sin(x * 0.06 + t * 0.5))
+        god = st["god"]
+        if god is not None:                                        # his wave rolls east toward the ship
+            surf = surf + god["amp"] * np.exp(-((x - god["wave"]) / 7.0) ** 2)
+        if an.beat > 0.35:
+            st["shake"] = max(st["shake"], 2)
+        dx = dy = 0
+        if st["shake"] > 0:
+            st["shake"] -= 1
+            dx, dy = int(self.rng.integers(-1, 2)), int(self.rng.integers(-1, 2))
+        # sky and sea, as in the poseidon mode
+        for sx, sy, ph in st["stars"]:
+            band = int(sx / max(1, w - 1) * (BANDS // 2)) + BANDS // 2
+            tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
+            if sy + dy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45:
+                self.put(int(sy) + dy, int(sx) + dx, "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        rows = np.arange(h - 1)[:, None]
+        depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
+        under = rows >= surf[None, :]
+        self.field(np.clip(0.5 - depth * 0.9 + an.bass * 0.1, 0.0, 0.999), mask=under, base=WATER_BG)
+        for xx in range(0, w - 1):
+            yy = int(surf[xx])
+            if 0 <= yy < h - 1 and surf[xx] <= surf[max(0, xx - 1)] and surf[xx] <= surf[min(w - 2, xx + 1)]:
+                self.put(yy + dy, xx + dx, "≈" if an.treble > 0.35 else "~", self.fg(0.9, an.treble > 0.35, base=WAVE_FG))
+
+        def sprite(rows_, px, py, attr_fn, halo=True):
+            for i, row in enumerate(rows_):
+                yy = py + i
+                if not (0 <= yy < h - 1):
+                    continue
+                first, last = len(row) - len(row.lstrip()), len(row.rstrip())
+                if halo and last > first:
+                    x0, x1 = max(0, px + first), min(w - 1, px + last)
+                    if x1 > x0 and yy >= surf[min(max(px + len(row) // 2, 0), w - 2)] - 1:
+                        self.put(yy, x0, " " * (x1 - x0), curses.color_pair(WATER_BG))
+                for j, ch in enumerate(row):
+                    if ch != " " and 0 <= px + j < w - 1:
+                        self.put(yy, px + j, ch, attr_fn(ch))
+        # the islands: Ithaca on the western horizon once it is near, the Cyclops's isle astern at the start
+        ship_w = 42
+        prog = 1 - (st["x"] - 2) / max(1, w - ship_w - 2)          # 0 at the start, 1 at Ithaca
+        if prog > 0.55:
+            ix = 1 - int((1 - min(1.0, (prog - 0.55) / 0.35)) * 16)
+            sprite(self.ITHACA, ix + dx, int(surf[:20].min()) - 3 + dy, lambda ch: self.fg(0.75, ch == "⌂", base=RADIAL_FG))
+        if prog < 0.35:
+            cx = w - 16 + int(min(1.0, prog / 0.35) * 18)
+            sprite(self.CYCLOPS_ISLE, cx + dx, int(surf[-20:].min()) - 3 + dy,
+                   lambda ch: self.fg(0.95 if ch in "(o)" else 0.5, ch in "(o)", base=RADIAL_FG))
+        # the god: on a big beat he rises ahead of the ship and sends his wave
+        if god is None and an.beat > 0.55 and t > st["cool"] and st["arrived"] is None and st["x"] > 30:
+            gx = max(2, int(st["x"]) - 30 - int(self.rng.integers(0, 12)))
+            st["god"] = god = {"x": gx, "wave": float(gx + 8), "amp": 5 + an.bass * 5, "until": t + 3.5, "hit": False}
+            st["text"] = ("MAY THE LORD POSEIDON CONVEY YOU", t + 3)
+        if god is not None:
+            god["wave"] += 1.1 + an.bass * 0.6
+            ship_cx = st["x"] + (4 if st["raft"] else ship_w // 2)
+            if not god["hit"] and god["wave"] >= ship_cx:            # the wave takes the ship
+                god["hit"] = True
+                st["x"] = min(float(w - ship_w - 2), st["x"] + 14 + an.bass * 10)
+                st["shake"] = 6
+                if st["n"] > 0:
+                    st["n"] -= 1
+                    if st["n"] == 0:
+                        st["raft"] = True
+                        st["text"] = ("IN ANOTHER'S SHIP, HAVING LOST ALL COMPANIONS", t + 4)
+                st["spray"] = [[ship_cx + self.rng.random() * 30 - 15, surf[min(int(ship_cx), w - 2)] - 6 - self.rng.random() * 6, 1.0]
+                               for _ in range(24)]
+            if t > god["until"] and god["wave"] > w:
+                st["god"] = None
+                st["cool"] = t + 5 + self.rng.random() * 8
+            elif t < god["until"]:
+                gx, gy = god["x"] + dx, int(surf[min(god["x"] + 6, w - 2)]) - 3 + dy
+                frame = self.SWIM[(self.frame // 6) % 2]
+                for i, row in enumerate(frame):
+                    for j, ch in enumerate(row):
+                        if ch == " " or not (0 <= gy + i < h - 1 and 0 <= gx + j < w - 1):
+                            continue
+                        if ch == "Ψ":
+                            self.put(gy + i, gx + j, ch, self.fg(0.7 + an.beat, True, base=RADIAL_FG))
+                            for k in range(1, gy + i + 1):          # the trident lights the sky
+                                zig = gx + j + int(math.sin(k * 1.3 + t * 40) * 2)
+                                self.put(gy + i - k, zig, "│" if k % 3 else "╱", self.fg(0.95, True, base=WAVE_FG))
+                        elif ch in "òó":
+                            self.put(gy + i, gx + j, ch, self.fg(1.0, True, base=RADIAL_FG))
+                        else:
+                            self.put(gy + i, gx + j, ch, self.fg(0.99, True, base=WAVE_FG))
+        # the ship, or the raft, riding the swell
+        if st["arrived"] is None:
+            speed = (0.05 + an.rms * 0.4) * (0.5 if st["raft"] else 1.0)
+            st["x"] -= speed
+        cx = min(max(int(st["x"]) + (4 if st["raft"] else ship_w // 2), 0), w - 2)
+        if st["raft"]:
+            rows_ = self.RAFT
+            py = int(surf[cx]) - 2
+            sprite(rows_, int(st["x"]) + dx, py + dy,
+                   lambda ch: self.fg(0.95, True, base=WAVE_FG) if ch in "o/|\\" else self.fg(0.6, False, base=RADIAL_FG))
+        else:
+            oar = int(self.frame / max(2, 8 - int(an.rms * 12))) % 3
+            rows_ = self.ship_rows(st["n"], oar, an.mid > 0.25)
+            py = int(surf[cx]) - 9
+            sprite(rows_, int(st["x"]) + dx, py + dy,
+                   lambda ch: (self.fg(0.95, True, base=STAR_FG) if ch in "()|" else
+                               self.fg(0.98, True, base=WAVE_FG) if ch == "o" else
+                               self.fg(0.55, False, base=RADIAL_FG)))
+        spray = []
+        for sp in st["spray"]:
+            sp[1] -= 0.4
+            sp[2] -= 0.05
+            if sp[2] > 0 and 0 <= sp[1] < h - 1 and 0 <= sp[0] < w - 1:
+                self.put(int(sp[1]) + dy, int(sp[0]) + dx, "*" if sp[2] > 0.5 else "·", self.fg(0.9, True, base=WAVE_FG))
+                spray.append(sp)
+        st["spray"] = spray
+        # Ithaca at last; then the Cyclops sees him off again
+        if st["arrived"] is None and st["x"] <= 3:
+            st["arrived"] = t
+            st["text"] = ("ITHACA, AT LAST" + (", ALONE" if st["raft"] else ""), t + 4)
+        if st["arrived"] is not None and t - st["arrived"] > 4:
+            st.update({"x": float(w - ship_w - 2), "n": 6, "raft": False, "arrived": None, "god": None,
+                       "cool": t + 8, "text": ("COME BACK, ODYSSEUS", t + 2.5), "reset_at": t})
+            st["rock"] = {"t0": t + 2.5, "x0": float(w - 8), "x1": float(w - ship_w - 12)}
+        if st["reset_at"] is not None and 2.5 < t - st["reset_at"] < 5.5 and st["text"] is None:
+            st["text"] = ("MY FATHER WILL CONVEY YOU HOME", t + 3)
+        rock = st["rock"]
+        if rock is not None and t >= rock["t0"]:
+            k = (t - rock["t0"]) / 1.6
+            if k >= 1:
+                st["rock"] = None
+                st["shake"] = 4
+                st["spray"] = [[rock["x1"] + self.rng.random() * 12 - 6, surf[min(max(int(rock["x1"]), 0), w - 2)] - 4 - self.rng.random() * 5, 1.0]
+                               for _ in range(20)]
+            else:
+                rx = rock["x0"] + (rock["x1"] - rock["x0"]) * k
+                ry = surf[min(max(int(rx), 0), w - 2)] - 4 - 14 * math.sin(k * math.pi)
+                self.put(int(ry) + dy, int(rx) + dx, "●", self.fg(0.4, True, base=RADIAL_FG))
+        # words
+        if st["text"] and t < st["text"][1]:
+            msg = st["text"][0]
+            self.put(1, max(0, (w - len(msg)) // 2) + dx, msg[:w - 1], self.fg(1.0, True, base=RADIAL_FG))
+        elif st["text"] and t >= st["text"][1]:
+            st["text"] = None
+        self.put(h - 2, 1, f"companions {st['n']}  ·  {int(prog * 100)}% of the way home", self.fg(0.5, False, base=WAVE_FG))
 
     def next_mode(self, step=1):
         self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
