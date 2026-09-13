@@ -1,56 +1,8 @@
-# Home A/V System
+# The listening rig
 
-Reference for Chris and any Claude Code agent working on this system. Read fully before touching audio config, cabling, or streaming scripts.
+Reference for the scripts in this repo and the Linux audio setup they run on: a Debian ThinkPad feeding a Rotel A14 MKII's USB DAC through PipeWire, B&W 706 S3 speakers, a REL sub. Read before touching audio config or the streaming scripts. House-specific detail (room, cabling, vendors, to-do) lives in PRIVATE.md, which is not committed.
 
-Owner: Chris Paul, Oakland CA
-Horizon: ~15 years. Buy once, buy right. Authorized dealers only for Rotel and B&W.
-Last updated: 2026-09-12
-
-## Room
-
-- Listening distance ~8 ft, dim room, carpet over wood floor
-- Cat (Jack): grilles on and TV covered when idle
-- Dedicated grounded 15A/20A outlet being added for the rack; all A/V gear stays on that one outlet through the Furman
-- Nothing goes inside the cabinet that shouldn't (sub, router)
-
-## Components
-
-| Role | Unit | Notes |
-|---|---|---|
-| Amplifier / hub | Rotel A14 MKII (silver) | Integrated, built-in DAC, MM phono, PC-USB |
-| Speakers | B&W 706 S3 (mocha) on stands | Blu-Tack coupled, 4 pea-sized balls per speaker |
-| Subwoofer | REL Classic 98 (walnut) | High-level (Speakon) from amp speaker terminals |
-| Display | Sony Bravia 8 II 65" OLED (K-65XR80M2) | Sanus VLF728 full-motion mount, bottom edge 24" from floor |
-| Disc | Panasonic UB820 | 4K UHD / BD / DVD / CD; its DAC is used for disc audio |
-| FM tuner | Rotel T11 (silver) | KALW, KQED, KPFA usable; KDFC 90.3 marginal |
-| DAT | Tascam DA-20 MKII | Archive transfers only |
-| OTA | Mohu Leaf (2023, passive) | Wall-mounted, feeds TV tuner |
-| Streaming source | ThinkPad, Debian, PipeWire | USB-B to amp, Class 2 mode |
-| Power | Furman PST-8 | Everything A/V plugs in here |
-| Cabinet | BDI Corridor 8173 low, natural walnut | 79.25 x 21 x 20.25 in |
-| Network | MikroTik Chateau Pro AX | Outside cabinet (MIMO antennas) |
-| Planned | Apple TV 4K (next gen) | HDMI to TV; audio path unchanged |
-
-## Signal chain
-
-```
-ThinkPad ───USB-B (PC-USB)──────────┐
-TV ────────Toslink (mini-Toslink)───┤
-UB820 ─────RCA analog───────────────┼──▶ Rotel A14 MKII ──▶ B&W 706 S3
-Tascam DAT ─S/PDIF coax─────────────┤          │
-Rotel T11 ─RCA analog───────────────┘          └─Speakon high-level──▶ REL Classic 98
-
-UB820 ─────HDMI──────▶ TV
-Apple TV ──HDMI──────▶ TV (planned)
-Mohu Leaf ─coax──────▶ TV tuner
-```
-
-Rules baked into this topology:
-
-- Disc audio goes RCA analog from the UB820. Do not route disc audio through the TV or the amp's DAC.
-- Amp DAC handles TV optical, laptop USB, and DAT coax only.
-- Sub is high-level from the speaker terminals, never line-level pre-out.
-- Apple TV audio reaches the amp via TV Toslink, same as any other HDMI source.
+Last updated: 2026-09-13
 
 ## Settings that took work to get right
 
@@ -66,14 +18,13 @@ Do not change these without a reason.
 ## Sources and how they are used
 
 - archive.org: Grateful Dead live shows, working chronologically through ~1990. Streamed from ThinkPad over USB via `scripts/deadtui.py`.
-- KDFC: streamed from ThinkPad. FM path is not reliable in Oakland (1 kW from Sausalito). Repeaters 89.9 Livermore, 104.9 Sunnyvale are not better here.
 - Lossless classical radio: `scripts/radio.py play naim` (also ddur, klasu, klasupro, sector; all FLAC, verified 2026-09-11). Plays in a Strawberry tab named "Radio" so the Dead playlist is untouched; `radio.py now` shows the DAC's actual rate. Mother Earth Klassik (24/192) is gone, the station closed.
 - Criterion and other discs: UB820.
 - OTA TV: Mohu Leaf.
 
 ## Work a Claude Code agent may be asked to do
 
-Scope is the ThinkPad side. Hardware and cabling decisions are Chris's.
+Scope is the ThinkPad side. Hardware and cabling decisions are the owner's.
 
 1. PipeWire / ALSA config for the A14 MKII USB endpoint: sample rate handling, avoiding resampling, sink priority, making the amp the default sink when connected.
 2. Streaming helpers: archive.org show fetch/queue scripts, KDFC stream launcher, playback control from CLI.
@@ -129,14 +80,6 @@ Facts that shape what you get:
 - Most taper FLACs arrive untagged, so Strawberry indexes them with blank titles. `fetch` and `songs` tag FLAC/MP3/OGG after download (title, artist, album `<date> <venue>`, date, track, archive URL) via python3-mutagen. `--no-tag` skips it. Tagging changes the file md5, so the archive md5 is kept in a `GDARCHIVE_MD5` tag and later runs treat those files (and FLACs converted from SHN) as verified; the taper's `.ffp` audio fingerprints still verify. Re-running `fetch <identifier>` on an existing show tags it in place.
 - Strawberry: after a fetch, Tools > Rescan songs (or full rescan) so new tags and finished `.part` files replace the mid-download index entries.
 
-## Vendors
-
-- Crutchfield: primary vendor, authorized Rotel and B&W, 60-day returns. Ships UPS from Charlottesville VA. For delayed shipments call Crutchfield, not UPS.
-- EHEAD Audio, South San Francisco: appointment-only, carries both Rotel and B&W for audition.
-- Bay Mount Pro, Alameda (Arman, 510-485-9842): TV installation.
-
-Cable guidance: certified Ultra High Speed HDMI (Cable Matters, Zeskit, Monoprice). USB A-to-B: Cable Matters; no audiophile premium warranted.
-
 ## FreeBSD notes
 
 Assessed 2026-09-12 for FreeBSD 15 on the X1 Carbon Gen 12. Verdict: not worth moving the listening machine. Stay on Debian/PipeWire. Revisit only if the laptop is replaced with better-supported hardware.
@@ -166,13 +109,3 @@ If the exclusive bit-perfect path is ever wanted, mpv against the Rotel's ALSA `
 If testing anyway: boot a 15.x memstick image with the Rotel connected, check `dmesg | grep uaudio` and `/dev/sndstat`, play a 48 kHz file with `mpv --ao=oss`, and confirm the rate in sndstat. Do not install over Debian.
 
 References: FreeBSD forum threads on T14 Gen 5 Meteor Lake support and iwlwifi n/ac/ax status; iwlwifi(4) for 15.1; FreeBSD status report 2025 Q2 (LinuxKPI 802.11); cneira.github.io "Bit-perfect sound on FreeBSD".
-
-## Open items
-
-- [ ] REL Classic 98: confirm delivery, high-level cable run, crawl placement, dial in
-- [ ] Rotel T11: confirm delivery, antenna, station presets
-- [ ] Dedicated outlet: test with outlet tester before plugging in the Furman
-- [ ] Apple TV 4K next gen: buy on release
-- [ ] DAT archive project: pick audio interface, build capture pipeline
-- [ ] Sell Rotel RA-950AX and B&W DM602 locally, as a bundle if possible
-- [ ] Turntable: future, no hardware needed on the amp side (built-in MM phono)

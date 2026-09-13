@@ -4,7 +4,7 @@ For the Claude Code agent maintaining the laptop playbook. Read SYSTEM.md first.
 
 Target end state: PipeWire owns the Rotel A14 MKII, sample rate follows the source, Strawberry plays through PipeWire. This replaces PulseAudio, which is what the laptop was running as of 2026-09-11.
 
-Host: rexdev (Debian 13 trixie, user `cp`). Rotel appears as ALSA card `R20`.
+Host: the listening laptop (Debian 13 trixie). Rotel appears as ALSA card `R20`.
 
 Debian 13 ships PipeWire as the default audio server. The laptop running PulseAudio means it was carried over from an upgrade or installed explicitly. The playbook brings it in line with the trixie default; nothing here is exotic.
 
@@ -131,4 +131,4 @@ Reinstall `pulseaudio` (apt will remove `pipewire-pulse`) and reverse the servic
 - No `shell:` where a module exists. `shell:` only for `wpctl`/`pactl` checks.
 - Tag everything `audio`. Verification tasks also tagged `verify`.
 - Don't touch `/etc/pipewire`. All config is per-user under `~cp/.config`.
-- Report what changed in one short summary. Chris reads verdict first.
+- Report what changed in one short summary, verdict first.
