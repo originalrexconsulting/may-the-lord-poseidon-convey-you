@@ -17,6 +17,8 @@ through); `History` (every track played, newest first, from
 band Jerry left behind, 1996 on (archive.org collection JGB; Jerry's own Garcia
 Band tapes were removed from archive.org at the estate's request). JGB shows
 fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
+`Jokes` starts with CLIPS: moments inside shows played from an offset, such as the
+battery bit at 7:42 of Mission in the Rain, Boston 6/12/76.
 `🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
 opens it, and plays the best source. `☔ Rain and Snow` plays weather and water
 songs (RAIN_SONGS): a random song, a random night's version of it (on-disk shows
@@ -143,6 +145,12 @@ COLLECTIONS = {  # archive.org collection -> title and year span
     "JGB": {"title": "JGB · Melvin Seals & Jerry Garcia Band", "years": list(range(1996, time.gmtime().tm_year + 1))},
 }
 MENU_TITLES = {FIRESIGN: "Firesign Theatre", JOKES: "Jokes"}
+# Clips: a moment inside a show, played from an offset. Listed at the top of Jokes.
+CLIPS = [
+    {"clip": True, "title": "The battery bit", "note": "Dead stage banter, Boston Music Hall, at the end of Mission in the Rain",
+     "identifier": "gd1976-06-12.fm.sbd.moore.berger.100328.flac16", "date": "1976-06-12", "collection": ["GratefulDead"],
+     "kind": "sbd", "song": "Mission in the Rain", "start": 7 * 60 + 42},
+]
 # Memories: an evening as a set list. Each row: (collection, identifier, date, first song,
 # last song or "*" for the rest of the show or None for just that song, note).
 # ↵/p plays a row; a plays the whole evening in order, as one gapless playlist.
@@ -1006,9 +1014,11 @@ class App:
     def push_albums(self, menu=FIRESIGN, select_id=None):
         def render(d, w):
             loc = "*" if os.path.isdir(local_show_dir(d)) else " "
+            if d.get("clip"):
+                return f"{loc} ✂ {d['title']:17} {d['date']} at {fmt_time(d['start'])}: {d['note']}"[:w]
             who = "" if menu == FIRESIGN else f"{d['artist']:18} "
             return f"{loc} {d['date'][:4]}  {who}{d['title']}"[:w]
-        items = album_docs(menu)
+        items = (list(CLIPS) if menu == JOKES else []) + album_docs(menu)
         lvl = Level("albums", MENU_TITLES[menu], items, render, {"lp": menu})
         sel = next((i for i, d in enumerate(items) if d["identifier"] == select_id), 0) if select_id else 0
         self.push(lvl, sel)
@@ -1223,6 +1233,16 @@ class App:
         lvl = Level("queue", f"▶ {self.now['title']}", tracks, render, {"queue": True, "now": self.now})
         st = self.last_status
         self.push(lvl, st["pos"] if st else 0)
+
+    def play_clip(self, c):
+        self.loading(f"loading {c['identifier']}...")
+        try:
+            idx, tracks, meta = self.song_track_index(c, c["song"])
+        except Exception as e:
+            self.say(f"metadata: {e}")
+            return
+        self.play_doc(c, idx, seek_to=c["start"])
+        self.say(f"✂ {c['title']}: {c['song']} from {fmt_time(c['start'])}", 8)
 
     def push_radio(self, select_key=None):
         def render(s_, w):
@@ -1618,6 +1638,8 @@ class App:
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
             self.push_songs(item[0], item[1])
+        elif lvl.kind == "albums" and item.get("clip"):
+            self.play_clip(item)
         elif lvl.kind == "albums":
             self.push_tracks(item)
         elif lvl.kind == "years":
@@ -1677,6 +1699,8 @@ class App:
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
             self.push_songs(item[0], item[1])
+        elif lvl.kind == "albums" and item.get("clip"):
+            self.play_clip(item)
         elif lvl.kind == "albums":
             self.play_doc(item)
         elif lvl.kind == "years":
