@@ -3,6 +3,33 @@
 Written for Debian 13 (trixie) with PipeWire, which is what it runs on at home. Any
 distribution with the same packages works.
 
+## 0. Or just download a build
+
+Skip the Python packages entirely: each [release](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases)
+has a self-contained `poseidon-<ver>-linux-x86_64` (and `-linux-aarch64` for a Raspberry
+Pi 4/5 or an ARM server) with CPython 3.13, numpy and mutagen inside. Needs glibc 2.28 or
+newer (Debian 10, Ubuntu 18.10, RHEL 8 and anything later).
+
+```
+sudo apt install mpv pulseaudio-utils ffmpeg     # mpv required; the other two optional
+curl -fLo poseidon https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases/download/v<ver>/poseidon-<ver>-linux-x86_64
+chmod +x poseidon
+./poseidon doctor        # mpv found? library path? terminfo ok?
+./poseidon               # the TUI; ./poseidon gdarchive ..., ./poseidon radio list
+```
+
+The first run unpacks Python into `~/.cache/nce` (a few seconds, once). Shows fetched
+with `d` land in `~/Music/dead` unless `POSEIDON_LIBRARY` says otherwise (section 2).
+If the screen comes up without colours or with odd glyphs, `./poseidon doctor` shows the
+`terminfo:` line; the build carries its own ncurses and looks for the system's terminfo
+in the usual places, and `TERMINFO_DIRS=/path/to/terminfo` overrides that.
+
+There is also `poseidon-<ver>.pex`, the same program for a machine that already has
+Python 3.11+ with curses: it bundles mutagen and uses the system `python3-numpy` for the
+light show. `python3 poseidon-<ver>.pex` or `chmod +x` and run it.
+
+Or clone and run the scripts, which is what the rest of this page describes.
+
 ## 1. Packages
 
 ```
@@ -28,8 +55,10 @@ git clone git@github.com:originalrexconsulting/may-the-lord-poseidon-convey-you.
 cd may-the-lord-poseidon-convey-you
 ```
 
-Shows fetched with `d` land in `dead/shows/<year>/`, next to the scripts. That folder
-is gitignored. A whole show is 0.7 to 4 GB; plan the disk.
+Shows fetched with `d` land in the library, under `shows/<year>/` (JGB in `jgb/`, LPs in
+`lp/`). The library is `$POSEIDON_LIBRARY` if set, else `dead/` next to `scripts/` in a
+clone (gitignored), else `~/Music/dead` (what a downloaded build uses). A whole show is
+0.7 to 4 GB; plan the disk.
 
 ## 3. Audio
 
@@ -59,6 +88,10 @@ docstring at the top of the script and in `SYSTEM.md`.
 - `$XDG_RUNTIME_DIR/deadtui-mpv.sock`: mpv's control socket. If the TUI dies, mpv keeps
   playing and the next start adopts it.
 - `dead/playlist-*.json`: snapshots from `scripts/restore-playlist.py --snapshot`.
+- `~/.cache/nce/`: where a downloaded `poseidon-<ver>-linux-*` build unpacks its Python
+  (about 120 MB per release, never pruned), and `~/.cache/pex/`: its venv, and the
+  `.pex`'s. Both are rebuilt on the next run; delete them whenever you like.
+  `SCIE_BASE` and `PEX_ROOT` relocate them.
 
 ## 6. Radio
 

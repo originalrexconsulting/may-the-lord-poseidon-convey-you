@@ -1,0 +1,70 @@
+# Tag push v* (vYYYY.MM.DD or vYYYY.MM.DD.N): build the universal pex and the four scie
+# binaries on native runners, smoke-test each, publish a GitHub Release with SHA256SUMS.
+# workflow_dispatch builds and uploads the artifacts without a release (a dry run).
+# See docs/release.md.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     universal: true }
+          - { os: ubuntu-24.04-arm, universal: false }
+          - { os: macos-15,         universal: false }   # arm64
+          - { os: macos-15-intel,   universal: false }   # x86_64; if the label goes away, cross-build on macos-15 (docs/release.md)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }                          # git describe needs the tags
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] || { echo "bad tag $GITHUB_REF_NAME"; exit 1; }
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(git describe --tags --always --dirty | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+          fi
+      - run: make check-src
+      - run: make scie smoke-scie VERSION=${{ steps.ver.outputs.version }}
+      - if: matrix.universal
+        run: make pex smoke-pex VERSION=${{ steps.ver.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          cat > notes.md <<EOF
+          ## Install
+          One file, no Python needed. Linux x86_64 / aarch64, macOS arm64 / x86_64; WSL uses linux-x86_64.
+          \`\`\`
+          curl -fLo poseidon https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/poseidon-${v}-linux-x86_64
+          chmod +x poseidon && ./poseidon doctor && ./poseidon
+          \`\`\`
+          Or \`poseidon-${v}.pex\` for any Python 3.11+ (uses your system numpy for the light show).
+          Needs mpv; ffmpeg optional. Verify: \`sha256sum -c SHA256SUMS --ignore-missing\`.
+          EOF
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --notes-file notes.md dist/*

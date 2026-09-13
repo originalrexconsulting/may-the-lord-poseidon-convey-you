@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """gdarchive.py - search and download Grateful Dead shows from archive.org.
 
-Stock python3 only (urllib, json). No pip installs.
+Stock python3 only (urllib, json). No pip installs. Shows land in the library:
+$POSEIDON_LIBRARY if set, else dead/ beside scripts/ in a checkout, else ~/Music/dead.
 
 Facts about the archive.org Grateful Dead collection that shape this tool:
 
@@ -53,10 +54,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import poseidon  # noqa: E402
+
 API_SEARCH = "https://archive.org/advancedsearch.php"
 API_META = "https://archive.org/metadata/"
 DL_BASE = "https://archive.org/download/"
-DEFAULT_DEST = os.path.expanduser("~/projects/audiophile/dead")
+# The library: $POSEIDON_LIBRARY > dead/ beside scripts/ in a checkout > ~/Music/dead.
+DEFAULT_DEST = poseidon.library_dir()
 # archive.org collection -> subdirectory of DEFAULT_DEST for whole shows.
 # "JGB" is Melvin Seals & JGB (1996 on): the band Jerry left behind. Jerry's own
 # Garcia Band tapes were removed from archive.org at the estate's request.
@@ -72,7 +77,7 @@ def collection_dir(coll):
         if c in COLLECTION_DIRS:
             return COLLECTION_DIRS[c]
     return COLLECTION_DIRS[DEFAULT_COLLECTION]
-UA = "gdarchive.py/1.0 (+https://github.com/; home audio library tool)"
+UA = poseidon.user_agent()
 
 LOSSLESS = (".flac", ".shn")
 LOSSY = (".mp3", ".ogg")
@@ -673,7 +678,7 @@ def add_search_args(p):
 
 
 def add_fetch_args(p):
-    p.add_argument("--dest", default=DEFAULT_DEST)
+    p.add_argument("--dest", default=DEFAULT_DEST, help="library directory (default: %(default)s)")
     p.add_argument("--format", choices=list(FORMAT_ORDER), default="best")
     p.add_argument("--no-verify", action="store_true", help="skip md5 verification")
     p.add_argument("--no-tag", action="store_true", help="leave downloaded files untagged")
@@ -715,7 +720,7 @@ def main():
 
     p = sub.add_parser("convert", help="convert an already-downloaded SHN show to tagged FLAC")
     p.add_argument("identifier", nargs="+")
-    p.add_argument("--dest", default=DEFAULT_DEST)
+    p.add_argument("--dest", default=DEFAULT_DEST, help="library directory (default: %(default)s)")
     p.add_argument("--keep-shn", action="store_true", help="keep the .shn files after conversion")
     p.set_defaults(func=cmd_convert)
 

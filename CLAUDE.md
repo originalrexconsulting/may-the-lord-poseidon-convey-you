@@ -8,15 +8,12 @@ A terminal player for the archive.org Grateful Dead collection and the audio plu
 around it. `README.md` is the tour, `SYSTEM.md` the reference (every script, every key,
 the archive.org facts), `docs/setup-*.md` the per-OS guides.
 
-## Current work: build + release system
+## Build and release
 
-`docs/build-release-plan.md` is a complete, settled plan for a build + release system
-(one `poseidon` dispatcher over the existing scripts, a universal `.pex` plus `pex --scie`
-binaries for Linux and macOS, a Makefile, tag-driven GitHub Actions releases). If you are
-asked to implement the build or release system, read that file first and follow it in the
-order given. Its Decisions section is settled with the owner; do not re-open it. Work on a
-branch, run its Phase E checklist, open a PR. Replace the plan with `docs/release.md`
-when the work lands.
+`docs/release.md` is the procedure: `make dist` / `make check` locally, a `v2026.09.13`-style
+tag drives `.github/workflows/release.yml` (four native runners, GitHub Release with
+`SHA256SUMS`). `scripts/poseidon.py` is the dispatcher and the artifacts' entry point.
+`build/` and `dist/` are gitignored build output.
 
 ## Rules
 
@@ -44,6 +41,7 @@ scripts/gdarchive.py fetch <identifier>                # download a show
 scripts/deadviz.py                                     # light show, standalone
 scripts/radio.py list                                  # classical stations
 scripts/restore-playlist.py --snapshot dead/playlist-$(date +%F).json
-python3 -m py_compile scripts/*.py                     # syntax check
-test -L scripts/deadtui.py                             # the symlink guard
+scripts/poseidon.py doctor                             # what this checkout/build sees
+make check-src                                         # syntax check + the symlink guard
+make dist && make check                                # build both artifacts, smoke-test them
 ```

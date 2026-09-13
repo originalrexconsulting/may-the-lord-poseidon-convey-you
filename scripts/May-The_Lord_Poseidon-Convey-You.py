@@ -42,7 +42,7 @@ Keys:
   f             find a song across all years (one row per show date, best source);
                 there: Enter opens the show at that track, p plays from it,
                 a plays every version in date order as one playlist
-  d             download this show with gdarchive.py (background)
+  d             download this show (poseidon gdarchive fetch <id>, in the background)
   c             classical radio (the lossless FLAC stations from radio.py);
                 also the first entry of the top-level list. i probes a station.
   r             resume the last thing played, at the position it was at
@@ -88,6 +88,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gdarchive as gd  # noqa: E402
+import poseidon  # noqa: E402
 import radio  # noqa: E402
 try:
     import deadviz  # noqa: E402
@@ -1577,12 +1578,11 @@ class App:
     def download(self, doc):
         if os.path.isdir(local_show_dir(doc)) and any(
                 n.endswith((".flac", ".mp3", ".ogg")) for n in os.listdir(local_show_dir(doc))):
-            self.say("already on disk (re-fetch with gdarchive.py fetch to re-tag)")
+            self.say("already on disk (re-fetch with poseidon gdarchive fetch <id> to re-tag)")
             return
         os.makedirs(CACHE, exist_ok=True)
         log = os.path.join(CACHE, f"fetch-{doc['identifier']}.log")
-        p = subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "gdarchive.py"),
-                              "fetch", doc["identifier"]], stdin=subprocess.DEVNULL,
+        p = subprocess.Popen(poseidon.self_command(["gdarchive", "fetch", doc["identifier"]]), stdin=subprocess.DEVNULL,
                              stdout=open(log, "w"), stderr=subprocess.STDOUT, start_new_session=True)
         self.fetches.append((doc["identifier"], p, log))
         self.say(f"fetching {doc['identifier']} (log: {log})", 6)

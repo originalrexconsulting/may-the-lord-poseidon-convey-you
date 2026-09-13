@@ -12,6 +12,8 @@ the mpv this leaves behind). To take a snapshot of what is playing now:
 """
 import json, os, socket, sys, time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or os.path.expanduser("~/.cache/deadtui"), "deadtui-mpv.sock")
 
 
@@ -26,7 +28,8 @@ def main():
         # no TUI and no player: start the same mpv the TUI starts, detached, so the
         # TUI adopts it later
         import subprocess
-        ua = "gdarchive.py/1.0 (+https://github.com/; home audio library tool)"
+        import poseidon
+        ua = poseidon.user_agent()
         subprocess.Popen(["mpv", "--no-video", "--no-terminal", "--idle=yes", "--force-window=no", "--audio-display=no",
                           "--gapless-audio=yes", "--prefetch-playlist=yes", "--cache=yes", "--demuxer-max-bytes=64MiB",
                           "--user-agent=" + ua, "--input-ipc-server=" + SOCK], stdin=subprocess.DEVNULL,
