@@ -238,7 +238,7 @@ Why these choices:
 - Add the same `sys.path.insert(...)`; in the "no player running" branch replace the inline
   UA literal (L29) with `import poseidon; ua = poseidon.user_agent()`.
 
-### A5. `scripts/deadtui.py` back to a symlink
+### A5. `scripts/deadtui.py` back to a symlink (done in commit 10d1408; keep the guard)
 ```
 git rm --quiet scripts/deadtui.py
 ln -s May-The_Lord_Poseidon-Convey-You.py scripts/deadtui.py
