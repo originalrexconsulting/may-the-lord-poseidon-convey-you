@@ -9,7 +9,7 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 17 modes; Poseidon, Enik and Polyphemus among them
+scripts/deadviz.py                            # the light show: 18 modes; Poseidon, Enik, Polyphemus and the voyage home
 scripts/radio.py                              # lossless classical radio stations
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
@@ -37,23 +37,33 @@ Now Playing (w), the Jokes menu, the radio list:
 <img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
-The light show's Poseidon mode (v, then V three times): the bass raises the swell, a
-beat shakes the earth, and the cast drops by.
+In the light show, `v` cycles the modes forward and `V` backward, so from the first
+mode `V` walks through the newest ones: the voyage, Polyphemus, Enik, Poseidon.
+
+The Poseidon mode: the bass raises the swell, a beat shakes the earth, and the cast
+drops by.
 
 <img src="docs/screenshots/poseidon.svg" width="900" alt="Poseidon swims a night sea; a shark, a dolphin and a jellyfish pass">
 
-Enik the Altrusian (v, then V twice), head to foot and moving the way the costume did:
+Enik the Altrusian, head to foot and moving the way the costume did:
 the bass opens the time doorway behind him, the crystal matrix lights one crystal per
 band, and a beat flashes his eyes.
 
 <img src="docs/screenshots/enik.svg" width="900" alt="Enik, mid-step, arms out, the crystal matrix lit in the corner">
 
-Polyphemus at home (v, then V): Poseidon's son, and the reason the Lord Poseidon
-conveys nobody. He breathes with the bass, his eye follows the loudest band, and on a
+Polyphemus at home: Poseidon's son, and the reason the Lord Poseidon conveys nobody. He breathes with the bass, his eye follows the loudest band, and on a
 big beat he picks a man out of the flock. Leave the music off long enough and Nobody
 comes for him.
 
 <img src="docs/screenshots/cyclops.svg" width="900" alt="Polyphemus reclined in his cave, sheep and a man at his feet, one tally mark on the wall">
+
+May the Lord Poseidon convey you: the voyage Polyphemus promised. The black ship rows
+west toward Ithaca, faster the louder the music. On a big beat the Earth Shaker rises
+ahead of it and conveys it his way, a wave that throws it back and takes a companion.
+Lose them all and Odysseus is alone on a raft. Reach Ithaca and the Cyclops sees him
+off again, boulder and all.
+
+<img src="docs/screenshots/convey.svg" width="900" alt="the black ship on the night sea, Poseidon rising ahead of it with the trident">
 
 Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
