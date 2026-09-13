@@ -27,7 +27,9 @@ Modes:
              treble puts stars in the sky and foam on the crests, a real beat shakes
              the earth and lights the trident. He gets bored (or the music goes
              quiet), dives, lurks on the bottom with his eyes burning, and a big
-             beat brings him back up
+             beat brings him back up. Company drops by now and then, never all at
+             once: sharks (more with the bass), a whale that spouts, dolphins that
+             jump on the beat, drifting jellyfish, a crab on the bottom
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 """
@@ -639,13 +641,137 @@ class Viz:
         ["   (ò_ó)     ", "  _/   \\_    ", " /  Ψ==== \\  ", "_|_______|_  "],
         ["   (ò_ó)     ", "  _/   \\_    ", " /  Ψ==== \\  ", "_|_______|_  "],
     ]
-    MIRROR = str.maketrans("/\\()òó", "\\/)(óò")
+    MIRROR = str.maketrans("/\\()òó<>`'", "\\/)(óò><'`")
+    # the cast (all drawn facing right; mirrored when they swim left)
+    FAUNA = {
+        "shark": {"frames": [["        /\\      ", "  ~~^~~/  \\____ ", " <__  o      __>", "    \\/\\/      "]],
+                  "base": "wave", "col": 0.55, "bold": False},
+        "whale": {"frames": [["       _.--~~~~~~~--._    ", "  _.-'`    o           `-.", "   `~~~~~~~~~~~~~~~~~~~~~'"]],
+                  "base": "wave", "col": 0.75, "bold": True},
+        "dolphin": {"frames": [["   __,-.      ", "  (   `-.__/\\ ", "   `-.____)   "]],
+                    "base": "star", "col": 0.95, "bold": True},
+        "jelly": {"frames": [[" .-\"-. ", "(     )", " `|||' ", "  |||  ", "  | |  "],
+                             [" .--.  ", "(    ) ", " `||'  ", "  ||   ", "  ||   "]],
+                  "base": "spiral", "col": 0.7, "bold": False},
+        "crab": {"frames": [["(\\/) (°,,°) (\\/)", "   /\\/\\/\\/\\   "], ["(\\/) (°,,°) (\\/)", "   \\/\\/\\/\\/   "]],
+                 "base": "radial", "col": 0.6, "bold": True},
+    }
+    FAUNA_BASE = {"wave": "WAVE_FG", "star": "STAR_FG", "spiral": "SPIRAL_FG", "radial": "RADIAL_FG"}
+
+    def spawn_fauna(self, st, h, w, surf, an):
+        """Now and then someone else shows up. Never everyone at once: three at most, one of a kind
+        (two jellyfish), and the music has a say: bass brings sharks, beats launch dolphins."""
+        fauna = st["fauna"]
+        if len(fauna) >= 3:
+            return
+        kinds = [f["kind"] for f in fauna]
+        p = self.rng.random()
+        per_s = 1 / FPS
+        sw = len(self.FAUNA["shark"]["frames"][0][0])
+        bottom = h - 2
+        if "dolphin" not in kinds and ((an.beat > 0.4 and p < 0.35) or p < per_s / 60):
+            d = 1 if self.rng.random() < 0.5 else -1
+            fauna.append({"kind": "dolphin", "x": -14.0 if d > 0 else float(w), "dir": d, "prog": 0.0,
+                          "jx": self.rng.random() * (w - 40) + 20})
+        elif "shark" not in kinds and p < per_s / (40 - an.bass * 30):
+            d = 1 if self.rng.random() < 0.5 else -1
+            fauna.append({"kind": "shark", "x": -sw if d > 0 else float(w), "dir": d,
+                          "y": float(self.rng.integers(int(surf.max()) + 2, max(int(surf.max()) + 3, bottom - 6)))})
+        elif "whale" not in kinds and p < per_s / 90:
+            d = 1 if self.rng.random() < 0.5 else -1
+            fauna.append({"kind": "whale", "x": -26.0 if d > 0 else float(w), "dir": d, "spout": 0})
+        elif kinds.count("jelly") < 2 and p < per_s / 25:
+            fauna.append({"kind": "jelly", "x": float(self.rng.integers(2, max(3, w - 10))), "dir": 1,
+                          "y": float(self.rng.integers(int(surf.max()) + 2, max(int(surf.max()) + 3, bottom - 5))),
+                          "ph": self.rng.random() * 6.28, "life": 20 + self.rng.random() * 25})
+        elif "crab" not in kinds and p < per_s / 50:
+            d = 1 if self.rng.random() < 0.5 else -1
+            fauna.append({"kind": "crab", "x": -16.0 if d > 0 else float(w), "dir": d, "life": 40 + self.rng.random() * 40,
+                          "pause": 0})
+
+    def draw_fauna(self, st, h, w, surf, an):
+        keep = []
+        for f in st["fauna"]:
+            k = f["kind"]
+            spec = self.FAUNA[k]
+            frames = spec["frames"]
+            frame = frames[(self.frame // 8) % len(frames)]
+            fw, fh = len(frame[0]), len(frame)
+            alive = True
+            if k == "shark":
+                f["x"] += f["dir"] * (0.22 + an.bass * 0.35 + an.beat * 0.3)
+                y = f["y"] + math.sin(self.t * 1.5) * 0.8
+                alive = -fw < f["x"] < w
+            elif k == "whale":
+                f["x"] += f["dir"] * 0.07
+                cx = min(max(int(f["x"]) + fw // 2, 0), w - 2)
+                y = surf[cx] - 1                                  # back just breaking the surface
+                if an.bass > 0.45 and f["spout"] <= 0:
+                    f["spout"] = 18
+                if f["spout"] > 0:                                # the spout, from the blowhole
+                    f["spout"] -= 1
+                    hx = int(f["x"]) + (fw // 2 + 2 if f["dir"] > 0 else fw // 2 - 3)
+                    for r, ch in enumerate(("'", ":", "'", ".", " "[:1])[:min(4, f["spout"] // 4 + 1)]):
+                        self.put(int(y) - 1 - r, hx + (r % 2) * (1 if r % 3 else -1), ch, self.fg(0.9, True, base=WAVE_FG))
+                alive = -fw < f["x"] < w
+            elif k == "dolphin":
+                f["x"] += f["dir"] * 0.55
+                cx = min(max(int(f["x"]) + fw // 2, 0), w - 2)
+                dist = abs(f["x"] + fw / 2 - f["jx"])
+                jump = max(0.0, 1 - (dist / 14) ** 2)             # a parabola over the jump point
+                y = surf[cx] - 1 - jump * (5 + an.beat * 4)
+                if 0 < dist < 2 and jump > 0.9 and self.frame % 2 == 0:
+                    self.put(int(surf[cx]), cx, "*", self.fg(1.0, True, base=WAVE_FG))   # the splash
+                alive = -fw < f["x"] < w
+            elif k == "jelly":
+                f["life"] -= 1 / FPS
+                f["x"] += math.sin(self.t * 0.4 + f["ph"]) * 0.06
+                f["y"] += math.cos(self.t * 0.25 + f["ph"]) * 0.05 - an.beat * 0.2
+                y = min(max(f["y"], surf.max() + 1), h - 2 - fh)
+                alive = f["life"] > 0 and 0 <= f["x"] < w - fw
+            elif k == "crab":
+                f["life"] -= 1 / FPS
+                if f["pause"] > 0:
+                    f["pause"] -= 1
+                else:
+                    f["x"] += f["dir"] * (0.12 + an.beat * 0.5)
+                    if self.rng.random() < 0.004:
+                        f["pause"] = int(FPS * (1 + self.rng.random() * 2))
+                    if self.rng.random() < 0.003 and 0 < f["x"] < w - fw:
+                        f["dir"] *= -1
+                y = h - 1 - fh
+                alive = -fw < f["x"] < w and (f["life"] > 0 or (0 <= f["x"] < w - fw))
+                if f["life"] <= 0 and 0 <= f["x"] < w - fw:      # time to go: walk off the nearest edge
+                    f["dir"] = -1 if f["x"] < w / 2 else 1
+            if not alive:
+                continue
+            keep.append(f)
+            px, py = int(f["x"]), int(y)
+            base = globals()[self.FAUNA_BASE[spec["base"]]]
+            col = spec["col"] + (0.25 * abs(math.sin(self.t * 3)) if k == "jelly" else 0)
+            for i, row in enumerate(frame):
+                if f["dir"] < 0:
+                    row = row[::-1].translate(self.MIRROR)
+                first = len(row) - len(row.lstrip())
+                last = len(row.rstrip())
+                yy = py + i
+                if not (0 <= yy < h - 1):
+                    continue
+                if yy >= surf[min(max(px + fw // 2, 0), w - 2)] - 1:   # a dark halo, but only under water
+                    x0, x1 = max(0, px + first), min(w - 1, px + last)
+                    if x1 > x0:
+                        self.put(yy, x0, " " * (x1 - x0), curses.color_pair(WATER_BG))
+                for j, ch in enumerate(row):
+                    xx = px + j
+                    if ch != " " and 0 <= xx < w - 1:
+                        self.put(yy, xx, ch, self.fg(col, spec["bold"], base=base))
+        st["fauna"] = keep
 
     def draw_poseidon(self, h, w):
         an = self.an
         st = self.state("poseidon", h, w, lambda: {
             "x": 2.0, "y": None, "dir": 1, "phase": "surface", "until": self.t + 8, "quiet": 0.0,
-            "bub": np.zeros((0, 3)), "shake": 0,
+            "bub": np.zeros((0, 3)), "shake": 0, "fauna": [],
             "stars": np.column_stack([self.rng.random(50) * (w - 1), self.rng.random(50) * max(1, h // 3),
                                       self.rng.random(50)])})
         hz = int(h * 0.3)                                        # horizon row
@@ -677,6 +803,9 @@ class Viz:
             yy = int(surf[xx])
             if 0 <= yy < h - 1 and surf[xx] <= surf[max(0, xx - 1)] and surf[xx] <= surf[min(w - 2, xx + 1)]:
                 self.put(yy + dy, xx + dx, "≈" if an.treble > 0.35 else "~", self.fg(0.9, an.treble > 0.35, base=WAVE_FG))
+        # the others: sharks, a whale, dolphins, jellyfish, a crab; behind Poseidon
+        self.spawn_fauna(st, h, w, surf, an)
+        self.draw_fauna(st, h, w, surf, an)
         # ---- where is he: surface -> dive -> lurk -> rise -> surface
         sw, sh = len(self.SWIM[0][0]), len(self.SWIM[0])
         bottom = h - 1 - sh
