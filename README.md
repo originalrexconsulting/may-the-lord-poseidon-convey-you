@@ -9,7 +9,7 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 15 modes, one of them is Poseidon
+scripts/deadviz.py                            # the light show: 16 modes; two of them are Poseidon and Enik
 scripts/radio.py                              # lossless classical radio stations
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```

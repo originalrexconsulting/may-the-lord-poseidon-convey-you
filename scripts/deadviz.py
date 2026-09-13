@@ -30,6 +30,12 @@ Modes:
              beat brings him back up. Company drops by now and then, never all at
              once: sharks (more with the bass), a whale that spouts, dolphins that
              jump on the beat, drifting jellyfish, a crab on the bottom
+  enik       Enik the Altrusian, head to foot, lumbering the way the costume did:
+             the pose only changes four times a second, in angular jolts, and a
+             step lands on the beat. The bass opens the time doorway behind him,
+             the treble lights the crystal matrix (one crystal per band), a beat
+             flashes his eyes and he hisses; quiet music stops him, arms down,
+             and the doorway will not open
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
@@ -55,7 +61,7 @@ WINDOW = 2048         # FFT size
 BANDS = 48
 FPS = 24
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
-         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon"]
+         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -276,13 +282,45 @@ class Canvas:
                 c[0] |= bit
                 c[1] = max(c[1], col)
 
-    def line(self, x0, y0, x1, y1, col=0.5):
+    def line(self, x0, y0, x1, y1, col=0.5, width=1):
         n = int(max(abs(x1 - x0), abs(y1 - y0))) + 1
         if n == 1:
             self.dot(x0, y0, col)
             return
+        if width > 1:                                        # parallel strokes, offset across the line
+            L = math.hypot(x1 - x0, y1 - y0) or 1.0
+            nx, ny = -(y1 - y0) / L, (x1 - x0) / L
+            for k in range(width):
+                o = k - (width - 1) / 2
+                self.line(x0 + nx * o, y0 + ny * o, x1 + nx * o, y1 + ny * o, col)
+            return
         for t in np.linspace(0.0, 1.0, n):
             self.dot(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, col)
+
+    def ellipse(self, cx, cy, rx, ry, col=0.5):
+        """Filled ellipse."""
+        for py in range(int(cy - ry), int(cy + ry) + 1):
+            f = 1 - ((py - cy) / max(ry, 0.5)) ** 2
+            if f < 0:
+                continue
+            half = rx * math.sqrt(f)
+            for px in range(int(cx - half), int(cx + half) + 1):
+                self.dot(px, py, col)
+
+    def poly(self, pts, col=0.5):
+        """Filled polygon, scanline by scanline."""
+        ys = [p[1] for p in pts]
+        n = len(pts)
+        for py in range(int(min(ys)), int(max(ys)) + 1):
+            xs = []
+            for i in range(n):
+                (xa, ya), (xb, yb) = pts[i], pts[(i + 1) % n]
+                if (ya <= py < yb) or (yb <= py < ya):
+                    xs.append(xa + (py - ya) * (xb - xa) / (yb - ya))
+            xs.sort()
+            for xa, xb in zip(xs[0::2], xs[1::2]):
+                for px in range(int(xa), int(xb) + 1):
+                    self.dot(px, py, col)
 
     def circle(self, cx, cy, r, col=0.5, n=None):
         n = n or max(12, int(r * 3))
@@ -919,6 +957,154 @@ class Viz:
             self.put(1, max(0, (w - 12) // 2) + dx, "EARTH SHAKER", self.fg(1.0, True, base=RADIAL_FG))
         self.put(h - 2, 1, {"surface": "", "dive": "diving…", "lurk": "lurking", "rise": "rising!"}[st["phase"]],
                  self.fg(0.5, False, base=WAVE_FG))
+
+    # ---- enik (the Altrusian, head to foot, moving the way the costume did)
+    HISS = ["sss", "Ssssss", "SSSssss", "sssSSS"]
+    ENIK_SAYS = ["the doorway will not open", "you are not my ancestors", "I must return to Altrusia",
+                 "do not touch the crystals", "the Mageti has been moved"]
+
+    def draw_enik(self, h, w):
+        an = self.an
+        t = self.t
+        st = self.state("enik", h, w, lambda: {
+            "x": 0.5, "dir": 1, "phase": 0, "tick": -1, "arm": [70.0, 70.0], "fore": [40.0, 40.0],
+            "lean": 0.0, "look": 0.0, "quiet": 0.0, "hiss": 0, "say": None, "say_until": 0.0,
+            "bob": 0.0, "swing": 0.0, "crystals": np.zeros(BANDS)})
+        cv = Canvas(h, w)
+        gw, gh = cv.gw, cv.gh
+        # the pose changes only on the tick, four times a second, and each change is a jolt
+        tick = int(t * 4)
+        moved = tick != st["tick"]
+        st["quiet"] = st["quiet"] + 1 / FPS if an.rms < 0.05 else 0.0
+        quiet = st["quiet"] > 2
+        if moved:
+            st["tick"] = tick
+            if not quiet:
+                st["phase"] = (st["phase"] + 1 + (1 if an.beat > 0.3 else 0)) % 8   # a beat lands a step early
+                jolt = 8 + an.beat * 25
+                for i in range(2):
+                    st["arm"][i] = float(np.clip(70 + self.rng.integers(-1, 2) * jolt + an.beat * 15, 40, 100))
+                    st["fore"][i] = float(np.clip(40 + self.rng.integers(-1, 2) * jolt - an.beat * 20, -10, 80))
+                st["lean"] = float(self.rng.integers(-1, 2)) * (0.02 + an.beat * 0.04)
+                step = 0.012 + an.rms * 0.03
+                st["x"] += st["dir"] * step
+                if st["x"] > 0.78 or st["x"] < 0.22:
+                    st["dir"] *= -1
+                    st["look"] = 0.0
+                else:
+                    st["look"] = st["dir"] * 0.012
+            else:                                              # nothing to hear: he stops, arms down
+                st["arm"] = [max(20.0, a - 10) for a in st["arm"]]
+                st["fore"] = [max(-20.0, f - 10) for f in st["fore"]]
+                st["lean"] = 0.0
+            if an.beat > 0.4 and st["hiss"] <= 0:
+                st["hiss"] = 10
+            if quiet and t > st["say_until"]:
+                st["say"] = self.ENIK_SAYS[int(self.rng.integers(len(self.ENIK_SAYS)))] if self.rng.random() < 0.5 else None
+                st["say_until"] = t + 6
+        st["hiss"] = max(0, st["hiss"] - 1)
+        # geometry: H is his height in dots; everything is a fraction of it
+        floor = h - 2                                          # the row he stands on
+        H = min(floor * 4 - 8, gw / 1.05)
+        top = floor * 4 - 2 - H
+        cx0 = st["x"] * gw
+        ph = st["phase"]
+        lift_l = (0, 0.5, 1, 0.5, 0, 0, 0, 0)[ph]              # which foot is off the ground, quantised
+        lift_r = (0, 0, 0, 0, 0, 0.5, 1, 0.5)[ph]
+        bob = -(lift_l + lift_r) * 0.015 * H                   # he rises a little on the lifted step
+        sway = (lift_l - lift_r) * 0.035 * H                   # weight over the standing leg
+        lean = st["lean"] * H
+
+        def P(u, v):                                          # figure units -> canvas dots
+            return cx0 + sway + u * H + v * lean, top + bob + v * H
+        # ---- the time doorway behind him: three broken rings that open with the bass
+        door = Canvas(h, w)
+        dcx, dcy = P(0, 0.42)
+        for k in range(3):
+            r = (0.16 + k * 0.10) * H * (0.6 + an.bass * 1.2)
+            spin = t * (0.8 - k * 0.3) * (1 if k % 2 else -1)
+            for a in np.linspace(0, 2 * math.pi, int(r * 3), endpoint=False):
+                if (a + spin) % (math.pi / 2) < math.pi / 2.6:   # four arcs with gaps
+                    door.dot(dcx + math.cos(a) * r * 1.0, dcy + math.sin(a) * r, 0.3 + k * 0.2 + an.bass * 0.3)
+        # ---- the body: green hide, front view
+        body = Canvas(h, w)
+        tunic = Canvas(h, w)
+        eyes = Canvas(h, w)
+        gem = Canvas(h, w)
+        skin = 0.45 + an.mid * 0.3
+        lw = max(2, int(H / 60))                               # limb width in dots
+        # head: dome, then the jaw tapering to the chin
+        hx, hy = P(0, 0.13)
+        body.ellipse(hx, hy, 0.145 * H, 0.13 * H, skin)
+        body.poly([P(-0.12, 0.17), P(0.12, 0.17), P(0.05, 0.30), P(-0.05, 0.30)], skin)
+        # brow ridge, darker
+        body.line(*P(-0.11, 0.105), *P(-0.02, 0.09), skin * 0.5, width=lw)
+        body.line(*P(0.02, 0.09), *P(0.11, 0.105), skin * 0.5, width=lw)
+        # the eyes: huge, dark, and they flash on the beat
+        flash = 0.12 + min(1.0, an.beat * 2.5) * 0.88
+        for sx in (-1, 1):
+            ex, ey = P(sx * 0.065 + st["look"], 0.155)
+            eyes.ellipse(ex, ey, 0.04 * H, 0.05 * H, flash)
+        # mouth: a slit, open when he hisses
+        if st["hiss"] > 0:
+            body.poly([P(-0.045, 0.245), P(0.045, 0.245), P(0.025, 0.275), P(-0.025, 0.275)], 0.1)
+        else:
+            body.line(*P(-0.04, 0.255), *P(0.04, 0.255), skin * 0.4, width=lw)
+        # neck and shoulders
+        body.line(*P(0, 0.29), *P(0, 0.35), skin, width=lw * 2)
+        # the tunic, and the medallion at the collar
+        tunic.poly([P(-0.19, 0.34), P(0.19, 0.34), P(0.16, 0.66), P(-0.16, 0.66)], 0.25 + an.bass * 0.2)
+        tunic.line(*P(-0.19, 0.34), *P(0.19, 0.34), 0.6, width=lw)
+        gx, gy = P(0, 0.405)
+        gem.ellipse(gx, gy, 0.035 * H, 0.035 * H, (self.hue + 0.5) % 1.0)
+        # arms: stiff, out and up, jointed at angles that only change on the tick
+        for i, sx in enumerate((-1, 1)):
+            a1 = math.radians(st["arm"][i])
+            a2 = math.radians(st["arm"][i] + st["fore"][i])
+            s0 = P(sx * 0.19, 0.36)
+            e = (s0[0] + sx * math.sin(a1) * 0.19 * H, s0[1] + math.cos(a1) * 0.19 * H)
+            hnd = (e[0] + sx * math.sin(a2) * 0.18 * H, e[1] + math.cos(a2) * 0.18 * H)
+            body.line(*s0, *e, skin, width=lw + 1)
+            body.line(*e, *hnd, skin, width=lw)
+            for k in (-1, 0, 1):                               # three claws, fanned
+                ca = a2 + k * 0.45
+                body.line(*hnd, hnd[0] + sx * math.sin(ca) * 0.05 * H, hnd[1] + math.cos(ca) * 0.05 * H, skin * 0.8)
+        # legs: the lifted one bends at the knee, out to the side, and the foot comes up
+        for sx, lift in ((-1, lift_l), (1, lift_r)):
+            hip = P(sx * 0.08, 0.64)
+            knee = (hip[0] + sx * (0.02 + lift * 0.07) * H, hip[1] + (0.18 - lift * 0.03) * H)
+            foot = (knee[0] + sx * 0.01 * H, knee[1] + (0.18 - lift * 0.07) * H)
+            body.line(*hip, *knee, skin, width=lw + 1)
+            body.line(*knee, *foot, skin, width=lw + 1)
+            body.line(foot[0] - 0.02 * H, foot[1], foot[0] + sx * 0.07 * H, foot[1], skin * 0.8, width=lw)
+        # ---- paint: floor, the crystal matrix, the doorway, then him in front of it all
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.3 + an.bass * 0.3, False, base=RADIAL_FG))
+        # the crystal matrix: one crystal per band, lit by its level, in the pylon's corner
+        cols, rows = 12, 3
+        st["crystals"] = np.maximum(an.level, st["crystals"] * 0.9)
+        mx = w - 2 - cols * 2
+        for c in range(cols):
+            lvl = st["crystals"][int(c * BANDS / cols)]
+            for r in range(rows):
+                lit = lvl > (r + 0.5) / rows
+                self.put(floor - 1 - r, mx + c * 2, "◆" if lit else "◇",
+                         self.fg(c / cols, lit, base=SPARK_FG) if lit else curses.A_DIM)
+        door.paint(self, bold=an.bass > 0.4, base=SPIRAL_FG)
+        for (cy, cx), _ in body.cells.items():                 # a dark halo so he reads against the doorway
+            self.put(cy, cx, " ")
+        tunic.paint(self, bold=False, base=RADIAL_FG)
+        body.paint(self, bold=True, base=RAIN_FG)
+        eyes.paint(self, bold=an.beat > 0.3, base=STAR_FG)
+        gem.paint(self, bold=True, base=SPARK_FG)
+        # ---- words
+        if st["hiss"] > 0:
+            mxx, myy = P(0.13, 0.25)
+            self.put(int(myy / 4), int(mxx / 2), self.HISS[(self.frame // 3) % len(self.HISS)],
+                     self.fg(0.95, True, base=RAIN_FG))
+        if an.beat > 0.5:
+            self.put(1, max(0, (w - 4) // 2), "ENIK", self.fg(1.0, True, base=RAIN_FG))
+        if quiet and st["say"]:
+            self.put(h - 2, 1, st["say"], self.fg(0.6, False, base=RAIN_FG))
 
     def next_mode(self, step=1):
         self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
