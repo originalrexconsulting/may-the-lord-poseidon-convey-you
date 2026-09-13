@@ -1,0 +1,8 @@
+# the music itself (16 GB+); the playlist snapshots in dead/ are kept
+dead/shows/
+dead/songs/
+dead/jgb/
+dead/lp/
+__pycache__/
+*.pyc
+*.part
