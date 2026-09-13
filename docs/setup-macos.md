@@ -1,8 +1,11 @@
 # Setup on macOS
 
-Written blind from Linux. The TUI, the archive.org tools and playback should work as
-described; the light show's audio tap is the part that most needs a real Mac to
-confirm. If something here is wrong, open an issue with what you saw.
+Written from Linux without a Mac at hand. What the release builds prove on GitHub's
+Mac runners (Apple silicon and Intel, every release): the downloaded build starts,
+curses finds the terminal, numpy and mutagen load, `poseidon doctor` and the gdarchive
+tools run. Playback and the TUI itself should work as described; the light show's
+audio tap (section 5) is the part that most needs a real Mac to confirm. If something
+here is wrong, open an issue with what you saw.
 
 ## 0. Or just download a build
 

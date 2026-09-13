@@ -37,10 +37,16 @@ Now Playing (w), the Jokes menu, the radio list:
 <img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
-The light show's Poseidon mode (v, then V): the bass raises the swell, a beat shakes the
-earth, and the cast drops by.
+The light show's Poseidon mode (v, then V twice): the bass raises the swell, a beat
+shakes the earth, and the cast drops by.
 
 <img src="docs/screenshots/poseidon.svg" width="900" alt="Poseidon swims a night sea; a shark, a dolphin and a jellyfish pass">
+
+Enik the Altrusian (v, then V), head to foot and moving the way the costume did: the
+bass opens the time doorway behind him, the crystal matrix lights one crystal per band,
+and a beat flashes his eyes.
+
+<img src="docs/screenshots/enik.svg" width="900" alt="Enik, mid-step, arms out, the crystal matrix lit in the corner">
 
 Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
@@ -66,7 +72,7 @@ chmod +x poseidon
 ./poseidon               # the TUI; ./poseidon gdarchive ..., ./poseidon radio list, ./poseidon --help
 ```
 
-`<ver>` is the release date, e.g. `2026.09.13`; copy the link from the release page.
+`<ver>` is the release date, e.g. `2026.09.13.2`; copy the link from the release page.
 The first run unpacks its Python into `~/.cache/nce` (macOS: `~/Library/Caches/nce`),
 which takes a few seconds once and is safe to delete. `poseidon-<ver>.pex` is the same
 program for a machine that already has Python 3.11+ on PATH: it uses the system's numpy
