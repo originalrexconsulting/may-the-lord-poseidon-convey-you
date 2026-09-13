@@ -49,9 +49,9 @@ Keys:
   w             what's playing: the whole current playlist (also the first top-level
                 row while something plays); ▶ marks the track, Enter jumps to one
   v             light show (deadviz.py): patterns driven by an FFT of what the
-                Rotel is playing. Inside it v steps to the next of 15 modes
+                Rotel is playing. Inside it v steps to the next of 16 modes
                 (bars, plasma, scope, rings, waterfall, fire, rain, stars, wave,
-                radial, particles, meters, spiral, life, poseidon), V steps back, 1-9/0
+                radial, particles, meters, spiral, life, poseidon, enik), V steps back, 1-9/0
                 pick the first ten, space/n/b/arrows still control playback,
                 Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
