@@ -4,6 +4,34 @@ Written blind from Linux. The TUI, the archive.org tools and playback should wor
 described; the light show's audio tap is the part that most needs a real Mac to
 confirm. If something here is wrong, open an issue with what you saw.
 
+## 0. Or just download a build
+
+Each [release](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases)
+has a self-contained `poseidon-<ver>-macos-aarch64` (Apple silicon) and
+`poseidon-<ver>-macos-x86_64` (Intel) with CPython 3.13, numpy and mutagen inside, so
+`brew install python numpy` and `pip3 install mutagen` below are not needed.
+
+```
+brew install mpv ffmpeg     # mpv required; ffmpeg optional (SHN to FLAC, the light show's tap)
+curl -fLo poseidon https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases/download/v<ver>/poseidon-<ver>-macos-aarch64
+chmod +x poseidon
+./poseidon doctor
+./poseidon
+```
+
+Downloaded with a browser instead of curl, the file carries a quarantine attribute and
+Gatekeeper refuses to run it: `xattr -d com.apple.quarantine poseidon` clears it (curl
+sets no such attribute). The first run unpacks Python into `~/Library/Caches/nce` (a few
+seconds, once; safe to delete). Shows fetched with `d` land in `~/Music/dead` unless
+`POSEIDON_LIBRARY` says otherwise (section 2). `./poseidon doctor` has a `terminfo:`
+line: the build carries its own ncurses and looks for terminfo in `/usr/share/terminfo`
+and Homebrew's; `TERMINFO_DIRS=/path` overrides that if a terminal comes up blank.
+
+`poseidon-<ver>.pex` is the same program for a Python 3.11+ already on PATH (Homebrew's;
+Apple's `/usr/bin/python3` is too old). It uses that Python's numpy for the light show.
+
+Or clone and run the scripts, which is what the rest of this page describes.
+
 ## 1. Homebrew packages
 
 ```
@@ -26,7 +54,9 @@ git clone git@github.com:originalrexconsulting/may-the-lord-poseidon-convey-you.
 cd may-the-lord-poseidon-convey-you
 ```
 
-Fetched shows land in `dead/shows/<year>/` inside the clone. A whole show is 0.7 to 4 GB.
+Fetched shows land in the library, under `shows/<year>/`: `$POSEIDON_LIBRARY` if set,
+else `dead/` inside the clone, else `~/Music/dead` (what a downloaded build uses). A
+whole show is 0.7 to 4 GB.
 
 ## 3. Audio
 
@@ -51,6 +81,10 @@ playlist, v the light show, q quits and leaves the music playing, Q stops it. Th
 control socket lives in `~/.cache/deadtui/` (macOS has no `XDG_RUNTIME_DIR`); if the
 TUI dies mpv keeps playing and the next start adopts it. Terminal.app and iTerm2 both
 do 256 colours; the block and braille glyphs need a font that has them (Menlo does).
+
+Outside the repo: `~/.cache/deadtui/` (state, history, the 7-day metadata cache), and
+for a downloaded build `~/Library/Caches/nce` (its Python, about 120 MB per release) and
+`~/.cache/pex` (its venv). Delete any of them to reset; the next run rebuilds them.
 
 ## 5. The light show
 

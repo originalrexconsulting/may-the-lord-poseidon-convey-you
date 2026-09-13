@@ -1,9 +1,12 @@
 # May The Lord Poseidon Convey You
 
 A terminal player for the archive.org Grateful Dead collection, and the audio
-plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip.
+plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip: run the scripts
+from a clone, or download one self-contained build from Releases.
 
 ```
+scripts/poseidon.py                           # one door to every tool: bare = the TUI,
+                                              # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
 scripts/deadviz.py                            # the light show: 15 modes, one of them is Poseidon
@@ -43,8 +46,37 @@ Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
 ## Running it
 
-Per-OS guides: [Linux](docs/setup-linux.md), [macOS](docs/setup-macos.md),
-[Windows](docs/setup-windows.md) (WSL; guide to come). The short version:
+**Download.** Each [release](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases)
+has one self-contained file per machine, Python and the light show's numpy included.
+The machine needs only mpv (`apt install mpv`, `brew install mpv`); ffmpeg is optional
+(SHN tapes to FLAC, the station probe) and on Linux `pulseaudio-utils` gives the light
+show its audio tap.
+
+| Machine | File |
+|---|---|
+| Linux x86_64, and Windows under WSL 2 | `poseidon-<ver>-linux-x86_64` |
+| Linux aarch64 (Raspberry Pi 4/5 and up, Graviton) | `poseidon-<ver>-linux-aarch64` |
+| Mac, Apple silicon | `poseidon-<ver>-macos-aarch64` |
+| Mac, Intel | `poseidon-<ver>-macos-x86_64` |
+
+```
+curl -fLo poseidon https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases/download/v<ver>/poseidon-<ver>-linux-x86_64
+chmod +x poseidon
+./poseidon doctor        # what this build is and what it found: mpv, ffmpeg, library, terminfo
+./poseidon               # the TUI; ./poseidon gdarchive ..., ./poseidon radio list, ./poseidon --help
+```
+
+`<ver>` is the release date, e.g. `2026.09.13`; copy the link from the release page.
+The first run unpacks its Python into `~/.cache/nce` (macOS: `~/Library/Caches/nce`),
+which takes a few seconds once and is safe to delete. `poseidon-<ver>.pex` is the same
+program for a machine that already has Python 3.11+ on PATH: it uses the system's numpy
+(`python3-numpy`) for the light show and is a tenth the size.
+
+Shows fetched with `d` land in `~/Music/dead`; `POSEIDON_LIBRARY=/path/to/dead` moves
+the library. From a clone the library is `dead/` next to `scripts/`.
+
+**Or clone.** Per-OS guides: [Linux](docs/setup-linux.md), [macOS](docs/setup-macos.md),
+[Windows](docs/setup-windows.md) (WSL 2). The short version:
 
 Linux (Debian): `apt install mpv python3-numpy python3-mutagen pulseaudio-utils ffmpeg`
 (numpy is the light show, mutagen tags fetched shows, parec is the light show's audio
@@ -60,8 +92,9 @@ yours is not "BlackHole 2ch"). The status line's DAC rate readout is Linux-only 
 stays blank. `radio.py`'s own commands (`play`, `now`) drive Strawberry over D-Bus and
 are Linux-only; the station list itself is used by the TUI everywhere.
 
-Windows: run it under WSL as Linux. Native Windows would need `windows-curses` and a
-named pipe for mpv; not done.
+Windows: run it under WSL 2 as Linux, with the linux-x86_64 download or the Debian
+recipe above. Native Windows would need `windows-curses` and a named pipe for mpv; not
+done.
 
 `SYSTEM.md` is the reference: the setup, every key, every script, and the
 facts about archive.org that shape what you get (soundboards stream only,

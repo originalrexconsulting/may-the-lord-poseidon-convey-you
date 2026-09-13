@@ -1,0 +1,18 @@
+# Push to main and pull requests: syntax check, symlink guard, build and smoke-test the
+# universal pex. Releases are release.yml.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: make check-src
+      - run: make pex smoke-pex
+      - uses: actions/upload-artifact@v4
+        with: { name: poseidon-pex, path: dist/*.pex, retention-days: 7 }

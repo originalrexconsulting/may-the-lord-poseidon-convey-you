@@ -9,3 +9,5 @@ __pycache__/
 # house-specific notes and the owner's manuals stay off GitHub
 PRIVATE.md
 manuals/
+build/
+dist/
