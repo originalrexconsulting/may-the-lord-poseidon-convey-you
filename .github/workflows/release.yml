@@ -67,4 +67,4 @@ jobs:
           Or \`poseidon-${v}.pex\` for any Python 3.11+ (uses your system numpy for the light show).
           Needs mpv; ffmpeg optional. Verify: \`sha256sum -c SHA256SUMS --ignore-missing\`.
           EOF
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --notes-file notes.md dist/*
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --notes-file notes.md dist/*
