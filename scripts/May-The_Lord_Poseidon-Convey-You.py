@@ -748,8 +748,15 @@ class App:
                 attr = {len(art) + 1: curses.color_pair(1) | curses.A_BOLD, len(art) + 2: gold}.get(i, curses.A_DIM)
                 self.put(y, x, row[:w - 1], attr)
         self.scr.refresh()
-        self.scr.timeout(int(SPLASH_SECS * 1000))
-        self.scr.getch()
+        end = time.time() + SPLASH_SECS
+        while True:                      # terminals send a KEY_RESIZE right after start; it must not cut the splash short
+            left = end - time.time()
+            if left <= 0:
+                break
+            self.scr.timeout(int(left * 1000))
+            ch = self.scr.getch()
+            if ch == -1 or ch != curses.KEY_RESIZE:
+                break
         self.scr.timeout(500)
 
     # ---- state
