@@ -9,7 +9,7 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 16 modes; two of them are Poseidon and Enik
+scripts/deadviz.py                            # the light show: 17 modes; Poseidon, Enik and Polyphemus among them
 scripts/radio.py                              # lossless classical radio stations
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
@@ -37,16 +37,23 @@ Now Playing (w), the Jokes menu, the radio list:
 <img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
-The light show's Poseidon mode (v, then V twice): the bass raises the swell, a beat
-shakes the earth, and the cast drops by.
+The light show's Poseidon mode (v, then V three times): the bass raises the swell, a
+beat shakes the earth, and the cast drops by.
 
 <img src="docs/screenshots/poseidon.svg" width="900" alt="Poseidon swims a night sea; a shark, a dolphin and a jellyfish pass">
 
-Enik the Altrusian (v, then V), head to foot and moving the way the costume did: the
-bass opens the time doorway behind him, the crystal matrix lights one crystal per band,
-and a beat flashes his eyes.
+Enik the Altrusian (v, then V twice), head to foot and moving the way the costume did:
+the bass opens the time doorway behind him, the crystal matrix lights one crystal per
+band, and a beat flashes his eyes.
 
 <img src="docs/screenshots/enik.svg" width="900" alt="Enik, mid-step, arms out, the crystal matrix lit in the corner">
+
+Polyphemus at home (v, then V): Poseidon's son, and the reason the Lord Poseidon
+conveys nobody. He breathes with the bass, his eye follows the loudest band, and on a
+big beat he picks a man out of the flock. Leave the music off long enough and Nobody
+comes for him.
+
+<img src="docs/screenshots/cyclops.svg" width="900" alt="Polyphemus reclined in his cave, sheep and a man at his feet, one tally mark on the wall">
 
 Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
