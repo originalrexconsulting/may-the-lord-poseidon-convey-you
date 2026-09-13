@@ -4,15 +4,21 @@
 Stock python3 (curses) + mpv. No pip installs. Search/metadata code is reused
 from gdarchive.py in the same directory.
 
-Levels:  years  >  dates in a year  >  sources for a date  >  tracks
-The top level also holds `♪ Classical radio`, `Firesign Theatre` and `Jokes` (LPs,
-one 24-bit FLAC per side, from library vinyl transfers), `Tears` (the weepers:
-↵ on a song runs the song search across every show), one row per MEMORIES entry
-(an evening kept as a set list; a plays it through), `History` (every track
-played, newest first, from ~/.cache/deadtui/history.jsonl; ↵ plays it again) and `JGB`: Melvin Seals & JGB, the
+Levels:  home  >  years  >  dates in a year  >  sources for a date  >  tracks
+The home screen is sectioned: Now (▶ Now playing, 🎲 Random show), The Dead
+(the years, Tears, JGB), Memories, Not Dead (classical radio, Firesign, Jokes),
+Everything (History). Section headers are skipped by the cursor.
+Home rows in detail: `♪ Classical radio` (radio.py's lossless stations);
+`Firesign Theatre` and `Jokes` (LPs, one 24-bit FLAC per side, from library vinyl
+transfers); `Tears` (the weepers: ↵ on a song runs the song search across every
+show); one ✦ row per MEMORIES entry (an evening kept as a set list; a plays it
+through); `History` (every track played, newest first, from
+~/.cache/deadtui/history.jsonl; ↵ plays it again); `JGB`: Melvin Seals & JGB, the
 band Jerry left behind, 1996 on (archive.org collection JGB; Jerry's own Garcia
 Band tapes were removed from archive.org at the estate's request). JGB shows
 fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
+`🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
+opens it, and plays the best source.
 Playback goes through mpv (JSON IPC over a unix socket), which plays through
 PipeWire like everything else on the laptop. Shows already fetched into
 dead/shows/ are played from the local lossless files instead of the stream.
@@ -58,6 +64,7 @@ re-visiting a year is instant. Delete that directory to refresh.
 
 import concurrent.futures as cf
 import curses
+import random
 import json
 import os
 import socket
@@ -88,6 +95,9 @@ TEARS = "tears"        # sentinel: the weepers, each row a song search
 MEMORY = "memory"      # sentinel: set lists of evenings worth keeping
 HIST = "history"       # sentinel: everything played, newest first
 QUEUE = "queue"        # sentinel: the playlist mpv is playing right now
+RANDOM = "random"      # sentinel: a random Dead show, best source, straight into play
+YEARS_GD = ("years", "GratefulDead")   # home row that opens the Dead years
+HDR = "hdr"            # (HDR, text): a section header on the home screen, not selectable
 # LP menus. archive.org library vinyl transfers: one 24-bit FLAC per side, titled from
 # the mp3 cut list. Stream-only items (post-1972 mostly) play cut by cut as mp3.
 # Fetched with d they land in dead/lp/<year>/.  (identifier, year, artist, title)
@@ -705,8 +715,9 @@ class App:
         self.pending_seek = None
         self.last_key = time.time()
         self.viz_mode = self.load_state().get("viz_mode", "bars")
+        self.rng = random.Random()
         self.splash()
-        self.push_years()
+        self.push_home()
         self.restore_view()
 
     def splash(self):
@@ -808,8 +819,7 @@ class App:
                 return
             year = int(st["year"])
             coll = st.get("collection") or gd.DEFAULT_COLLECTION
-            if coll != gd.DEFAULT_COLLECTION:
-                self.push_years(coll)
+            self.push_years(coll)
             self.push_dates(year, st["date"], coll)
             lvl = self.stack[-1]
             if lvl.kind != "dates":
@@ -841,39 +851,90 @@ class App:
             level.cursor = max(0, min(select, len(level.items) - 1))
         self.stack.append(level)
 
+    HOME = [
+        (HDR, "Now"),
+        QUEUE, RANDOM,
+        (HDR, "The Dead"),
+        YEARS_GD, TEARS, JGB,
+        (HDR, "Memories"),
+        # one row per MEMORIES entry goes here
+        (HDR, "Not Dead"),
+        RADIO, FIRESIGN, JOKES,
+        (HDR, "Everything"),
+        HIST,
+    ]
+    HOME_TEXT = {
+        QUEUE: "▶ Now playing        the current playlist",
+        RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
+        YEARS_GD: "Grateful Dead        1965-1995, by year",
+        TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
+        JGB: "JGB                  Melvin Seals & Jerry Garcia Band, 1996 on, after Jerry",
+        RADIO: "♪ Classical radio    lossless FLAC stations",
+        FIRESIGN: "Firesign Theatre     the LPs, 24-bit vinyl transfers",
+        JOKES: "Jokes                comedy LPs: Buckley, Bruce, Sahl, Newhart, Pryor, the Goons, Python...",
+        HIST: "History              everything played, newest first",
+    }
+
+    def home_items(self):
+        items = []
+        for it in self.HOME:
+            items.append(it)
+            if it == (HDR, "Memories"):
+                items.extend((MEMORY, m) for m in MEMORIES)
+        return items
+
+    def push_home(self):
+        def render(it, w):
+            if isinstance(it, tuple) and it[0] == HDR:
+                return f"{it[1]}"
+            if isinstance(it, tuple) and it[0] == MEMORY:
+                return f"    ✦ {it[1]}"
+            return "    " + self.HOME_TEXT[it]
+        items = self.home_items()
+        lvl = Level("home", "Poseidon", items, render, {"home": True})
+        st = self.state
+        want = RADIO if st.get("last") == "radio" else (
+            (st.get("lp") if st.get("lp") in ALBUMS else FIRESIGN) if st.get("lp") else (
+                JGB if st.get("collection") == "JGB" else YEARS_GD))
+        self.push(lvl, items.index(want) if want in items else items.index(YEARS_GD))
+
     def push_years(self, collection=gd.DEFAULT_COLLECTION):
         subdir = gd.collection_dir(collection)
 
         def render(y, w):
-            if y == RADIO:
-                return "  ♪ Classical radio"
-            if y == QUEUE:
-                return "  ▶ Now playing  (the current playlist)"
-            if y == JGB:
-                return "  " + COLLECTIONS["JGB"]["title"] + "  (1996 on, after Jerry)"
-            if y == FIRESIGN:
-                return "  Firesign Theatre  (the LPs, 24-bit vinyl transfers)"
-            if y == JOKES:
-                return "  Jokes  (comedy LPs: Buckley, Bruce, Sahl, Newhart, Pryor, the Goons, Python...)"
-            if y == TEARS:
-                return "  Tears  (the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...)"
-            if isinstance(y, tuple) and y[0] == MEMORY:
-                return f"  ✦ {y[1]}"
-            if y == HIST:
-                return "  History  (everything played, newest first)"
             n = 0
             d = os.path.join(gd.DEFAULT_DEST, subdir, str(y))
             if os.path.isdir(d):
                 n = len(os.listdir(d))
             return f"  {y}" + (f"    {n} on disk" if n else "")
         items = list(COLLECTIONS[collection]["years"])
-        if collection == gd.DEFAULT_COLLECTION:
-            items = [QUEUE, RADIO] + items + [JGB, FIRESIGN, JOKES, TEARS] + [(MEMORY, m) for m in MEMORIES] + [HIST]
         lvl = Level("years", COLLECTIONS[collection]["title"], items, render, {"collection": collection})
         year = int(self.state["year"]) if self.state.get("year") else None
         same = (self.state.get("collection") or gd.DEFAULT_COLLECTION) == collection
-        sel = items.index(year) if same and year in items else (2 if collection == gd.DEFAULT_COLLECTION else 0)
-        self.push(lvl, sel)
+        self.push(lvl, items.index(year) if same and year in items else 0)
+
+    def random_show(self):
+        """Any night: a random year, a random date in it (rated 4+ when the year has such), best source."""
+        year = self.rng.choice(YEARS)
+        self.loading(f"rolling the dice... {year}")
+        try:
+            dates = group_dates(year_docs(year))
+        except Exception as e:
+            self.say(f"archive.org: {e}")
+            return
+        if not dates:
+            self.say(f"nothing in {year}, roll again")
+            return
+        good = [d for d in dates if d["rating"] >= 4.0] or dates
+        entry = self.rng.choice(good)
+        doc = self.best_source(entry)
+        del self.stack[1:]
+        self.push_years(gd.DEFAULT_COLLECTION)
+        self.stack[-1].cursor = self.stack[-1].items.index(year)
+        self.push_dates(year, entry["date"], gd.DEFAULT_COLLECTION)
+        self.push_sources(entry, doc["identifier"])
+        self.play_doc(doc)
+        self.push_tracks(doc, 0)
 
     def push_albums(self, menu=FIRESIGN, select_id=None):
         def render(d, w):
@@ -1354,7 +1415,8 @@ class App:
                 break
             i, item = vis[idx]
             text = lvl.render(item, w - 2)
-            attr = curses.A_REVERSE if idx == lvl.cursor else 0
+            hdr = isinstance(item, tuple) and item[0] == HDR
+            attr = (curses.color_pair(1) | curses.A_BOLD) if hdr else (curses.A_REVERSE if idx == lvl.cursor else 0)
             if self.now and ((lvl.kind == "tracks" and self.now.get("doc") is lvl.ctx["doc"])
                              or (lvl.kind == "queue" and lvl.ctx.get("now") is self.now)):
                 st = self.last_status
@@ -1413,6 +1475,8 @@ class App:
                 keys = " ↵/p play this part  a play the whole evening in order  ␣ pause  n/b trk  h back  q quit (music stays)"
             elif lvl.kind == "history":
                 keys = " ↵/p play it again  / filter  ␣ pause  h back  q quit (music stays)"
+            elif lvl.kind == "home":
+                keys = " ↵ open  p play  w now playing  c radio  f song  g goto  r resume  v show  q quit (music stays)  Q stop & quit"
             elif lvl.kind == "queue":
                 keys = " ↵/p jump to track  ␣ pause  n/b trk  ←→ seek  / filter  h back  q quit (music stays)  Q quit and stop"
             else:
@@ -1457,24 +1521,30 @@ class App:
         i, item = self.current()
         if item is None:
             return
-        if lvl.kind == "years" and item == RADIO:
+        if lvl.kind == "home" and isinstance(item, tuple) and item[0] == HDR:
+            return
+        elif lvl.kind == "home" and item == RADIO:
             self.push_radio(self.state.get("radio"))
-        elif lvl.kind == "years" and item == JGB:
+        elif lvl.kind == "home" and item == YEARS_GD:
+            self.push_years(gd.DEFAULT_COLLECTION)
+        elif lvl.kind == "home" and item == JGB:
             self.push_years("JGB")
-        elif lvl.kind == "years" and item in ALBUMS:
+        elif lvl.kind == "home" and item in ALBUMS:
             self.push_albums(item)
-        elif lvl.kind == "years" and item == TEARS:
+        elif lvl.kind == "home" and item == TEARS:
             self.push_tears()
-        elif lvl.kind == "years" and isinstance(item, tuple) and item[0] == MEMORY:
+        elif lvl.kind == "home" and isinstance(item, tuple) and item[0] == MEMORY:
             self.push_memory(item[1])
         elif lvl.kind == "memory":
             self.play_memory(lvl, item)
-        elif lvl.kind == "years" and item == HIST:
+        elif lvl.kind == "home" and item == HIST:
             self.push_history()
         elif lvl.kind == "history":
             self.play_history(item)
-        elif lvl.kind == "years" and item == QUEUE:
+        elif lvl.kind == "home" and item == QUEUE:
             self.push_queue()
+        elif lvl.kind == "home" and item == RANDOM:
+            self.random_show()
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1508,24 +1578,30 @@ class App:
         i, item = self.current()
         if item is None:
             return
-        if lvl.kind == "years" and item == RADIO:
+        if lvl.kind == "home" and isinstance(item, tuple) and item[0] == HDR:
+            return
+        elif lvl.kind == "home" and item == RADIO:
             self.push_radio(self.state.get("radio"))
-        elif lvl.kind == "years" and item == JGB:
+        elif lvl.kind == "home" and item == YEARS_GD:
+            self.push_years(gd.DEFAULT_COLLECTION)
+        elif lvl.kind == "home" and item == JGB:
             self.push_years("JGB")
-        elif lvl.kind == "years" and item in ALBUMS:
+        elif lvl.kind == "home" and item in ALBUMS:
             self.push_albums(item)
-        elif lvl.kind == "years" and item == TEARS:
+        elif lvl.kind == "home" and item == TEARS:
             self.push_tears()
-        elif lvl.kind == "years" and isinstance(item, tuple) and item[0] == MEMORY:
+        elif lvl.kind == "home" and isinstance(item, tuple) and item[0] == MEMORY:
             self.push_memory(item[1])
         elif lvl.kind == "memory":
             self.play_memory(lvl, item)
-        elif lvl.kind == "years" and item == HIST:
+        elif lvl.kind == "home" and item == HIST:
             self.push_history()
         elif lvl.kind == "history":
             self.play_history(item)
-        elif lvl.kind == "years" and item == QUEUE:
+        elif lvl.kind == "home" and item == QUEUE:
             self.push_queue()
+        elif lvl.kind == "home" and item == RANDOM:
+            self.random_show()
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1567,11 +1643,17 @@ class App:
             self.say("year must be 1965-1995 (Dead) or 1996 on (JGB)")
             return
         del self.stack[1:]
-        if coll != gd.DEFAULT_COLLECTION:
-            self.stack[0].cursor = self.stack[0].items.index(JGB)
-            self.push_years(coll)
+        self.stack[0].cursor = self.stack[0].items.index(JGB if coll != gd.DEFAULT_COLLECTION else YEARS_GD)
+        self.push_years(coll)
         self.stack[-1].cursor = self.stack[-1].items.index(int(year))
         self.push_dates(int(year), s if len(s) == 10 else None, coll)
+
+    @staticmethod
+    def skip_headers(lvl, cur, step):
+        vis = lvl.visible()
+        while 0 <= cur < len(vis) and isinstance(vis[cur][1], tuple) and vis[cur][1][0] == HDR:
+            cur += step
+        return min(max(cur, 0), max(0, len(vis) - 1)) if not (0 <= cur < len(vis)) else cur
 
     def collection(self):
         """The archive.org collection the current view belongs to."""
@@ -1590,9 +1672,9 @@ class App:
         if ch == ord("Q"):
             return False
         if ch in (curses.KEY_DOWN, ord("j")):
-            lvl.cursor = min(lvl.cursor + 1, max(0, vis_n - 1))
+            lvl.cursor = self.skip_headers(lvl, min(lvl.cursor + 1, max(0, vis_n - 1)), 1)
         elif ch in (curses.KEY_UP, ord("k")):
-            lvl.cursor = max(lvl.cursor - 1, 0)
+            lvl.cursor = self.skip_headers(lvl, max(lvl.cursor - 1, 0), -1)
         elif ch == curses.KEY_NPAGE:
             lvl.cursor = min(lvl.cursor + 20, max(0, vis_n - 1))
         elif ch == curses.KEY_PPAGE:
