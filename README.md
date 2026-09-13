@@ -17,6 +17,30 @@ Tears, Rain and Snow, Random show, a memory set list, History and Now Playing;
 adopts an mpv it finds already running (q keeps the music, Q stops it); and
 starts with Poseidon, trident raised.
 
+## Screenshots
+
+The splash, two seconds of the Earth Shaker:
+
+<img src="docs/screenshots/splash.svg" width="420" alt="splash screen: Poseidon, crowned, trident raised">
+
+The home screen, and a show:
+
+<img src="docs/screenshots/home.svg" width="900" alt="home screen">
+<img src="docs/screenshots/tracks.svg" width="900" alt="5/8/77 Barton Hall, Loser playing">
+
+Now Playing (w), the Jokes menu, the radio list:
+
+<img src="docs/screenshots/queue.svg" width="900" alt="the current playlist">
+<img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
+<img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
+
+The light show's Poseidon mode (v, then V): the bass raises the swell, a beat shakes the
+earth, and the cast drops by.
+
+<img src="docs/screenshots/poseidon.svg" width="900" alt="Poseidon swims a night sea; a shark, a dolphin and a jellyfish pass">
+
+Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
+
 `SYSTEM.md` is the reference: the setup, every key, every script, and the
 facts about archive.org that shape what you get (soundboards stream only,
 audience tapes download lossless). `AUDIO-ANSIBLE.md` is the spec for the

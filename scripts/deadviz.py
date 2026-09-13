@@ -175,6 +175,14 @@ RAMPS = {   # name: (first pair, kind, cube corners (r, g, b in 0..5), 8-colour 
     "plasma_bg": (380, "bg", [(0, 0, 3), (0, 1, 5), (0, 3, 4), (0, 5, 3), (2, 5, 1), (0, 3, 4)],
                  ["BLUE", "CYAN", "GREEN", "CYAN"]),               # blue -> azure -> teal -> green and back, so it wraps smoothly
 }
+# curses attributes carry the pair number in 8 bits, so every pair must stay below 256
+# whatever the terminal claims. 13 ramps x 16 steps from pair 8 ends at 215. The "first
+# pair" written above is only a label; the real bases are assigned here in order.
+STEPS_PER_SEGMENT = 3
+RAMP_LEN = 5 * STEPS_PER_SEGMENT + 1
+for _i, _k in enumerate(RAMPS):
+    RAMPS[_k] = (8 + _i * RAMP_LEN,) + tuple(RAMPS[_k][1:])
+assert 8 + len(RAMPS) * RAMP_LEN <= 256
 ALIAS = {}  # pair base -> substitute base, for ramps the terminal has no room for
 MAIN_FG = RAMPS["main_fg"][0]
 MAIN_BG = RAMPS["main_bg"][0]
@@ -192,10 +200,10 @@ PLASMA_BG = RAMPS["plasma_bg"][0]
 
 
 def _ramp(steps):
-    """Interpolate a list of (r, g, b) 0..5 cube corners into 6 colours per segment plus the last one."""
+    """Interpolate a list of (r, g, b) 0..5 cube corners into STEPS_PER_SEGMENT colours per segment plus the last one."""
     ramp = []
     for a, b in zip(steps[:-1], steps[1:]):
-        for t in np.linspace(0, 1, 7)[:-1]:
+        for t in np.linspace(0, 1, STEPS_PER_SEGMENT + 1)[:-1]:
             r, g, bl = (round(a[i] + (b[i] - a[i]) * t) for i in range(3))
             ramp.append(16 + 36 * r + 6 * g + bl)
     e = steps[-1]
