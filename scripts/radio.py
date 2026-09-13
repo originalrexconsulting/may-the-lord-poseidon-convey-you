@@ -9,9 +9,12 @@ later runs switch to it and replace its contents with the new station.
 PipeWire follows the stream's rate, so a 48 kHz station (CRo D-dur) should
 show rate: 48000 in /proc/asound/R20/pcm0p/sub0/hw_params. `now` checks that.
 
-Stations were verified live with ffprobe on 2026-09-11. Dead ones:
-Mother Earth Klassik (24/192, station closed), AZPM Classical 90.5 KUAT
-(HLS FLAC, connection timed out from Oakland).
+Stations were verified live with ffprobe on 2026-09-11 (the FLAC ones) and
+2026-09-13 (CRo Vltava FLAC and the lossy tier). Dead ones: Mother Earth Klassik
+(24/192, station closed), AZPM Classical 90.5 KUAT (HLS FLAC, connection timed
+out from Oakland), KING FM Seattle (404), Radio Klassik Stephansdom (I/O error),
+BBC Radio 3 HLS (no answer from here). Not worth it: Classic FM UK (48 kbps AAC),
+Radio Swiss Classic (96 kbps AAC).
 
 Examples:
 
@@ -43,6 +46,27 @@ STATIONS = {
               "FLAC 16/44.1", "Rondo's full-works channel."),
     "sector": ("SECTOR Nota", "http://89.223.45.5:8000/nota-flac",
               "FLAC 24/44.1", "Russian. 24-bit container; depth of source unknown."),
+    "vltava": ("CRo Vltava", "http://amp.cesnet.cz:8000/cro3.flac",
+              "FLAC 16/48", "Czech Radio culture channel: classical, opera, spoken word between."),
+    # ---- lossy, but the best of the big classical broadcasters (verified 2026-09-13)
+    "fmusique": ("France Musique", "https://icecast.radiofrance.fr/francemusique-hifi.aac",
+              "AAC 192/48", "Radio France's classical network, live concerts most evenings."),
+    "fmbaroque": ("France Musique Baroque", "https://icecast.radiofrance.fr/francemusiquebaroque-hifi.aac",
+              "AAC 192/48", "All baroque."),
+    "fmconcerts": ("France Musique Concerts", "https://icecast.radiofrance.fr/francemusiqueconcertsradiofrance-hifi.aac",
+              "AAC 192/48", "Radio France's own orchestras and choir, concert recordings only."),
+    "fmopera": ("France Musique Opéra", "https://icecast.radiofrance.fr/francemusiqueopera-hifi.aac",
+              "AAC 192/48", "Opera, whole works."),
+    "linn": ("Linn Classical", "http://radio.linn.co.uk:8004/autodj",
+              "MP3 320/44.1", "Linn Records (Scotland): their own catalogue, so whole movements."),
+    "npo4": ("NPO Radio 4", "https://icecast.omroep.nl/radio4-bb-mp3",
+              "MP3 192/48", "Dutch public classical."),
+    "wqxr": ("WQXR", "https://stream.wqxr.org/wqxr",
+              "MP3 128/48", "New York."),
+    "wfmt": ("WFMT", "https://wfmt.streamguys1.com/main-mp3",
+              "MP3 128/48", "Chicago. Fine presenters."),
+    "venice": ("Venice Classic Radio", "https://uk2.streamingpulse.com/ssl/vcr1",
+              "MP3 128/44.1", "Italian, all-day chamber and baroque, no talk."),
 }
 PLAYLIST = "Radio"
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
