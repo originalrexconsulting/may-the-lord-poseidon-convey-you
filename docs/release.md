@@ -62,9 +62,14 @@ first `make scie` downloads python-build-standalone and the `science` tool into
 runtime never needs pip. `make stage` copies the six shipped scripts into `build/src/`
 and writes `_version.py` there; the checkout never holds a version file.
 
-Once a build is green, pin for reproducible re-releases: `numpy==2.5.3` in the `scie`
-recipe and `--scie-pbs-release YYYYMMDD` (the python-build-standalone release the first
-build used; `pex --scie-pbs-release` in the build log).
+The builds went green on all four runners on 2026-09-13 (numpy 2.5.3, CPython 3.13.15
+from python-build-standalone). Still to do for reproducible re-releases: pin
+`numpy==2.5.3` in the `scie` recipe and `--scie-pbs-release YYYYMMDD` (the release the
+build used is in the `make scie` log).
+
+Releases so far: `v2026.09.13` (the publish job failed for want of `-R`, so it was
+published by hand from the run's artifacts), `v2026.09.13.1` (the fix, published by the
+workflow) and `v2026.09.13.2` (the enik light show mode).
 
 ## If CI cannot publish
 

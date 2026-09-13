@@ -44,7 +44,7 @@ chmod +x poseidon
 ./poseidon
 ```
 
-`<ver>` is the release date, e.g. `2026.09.13`; copy the link from the
+`<ver>` is the release date, e.g. `2026.09.13.2`; copy the link from the
 [releases page](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases).
 The first run unpacks its Python into `~/.cache/nce` (a few seconds, once). `doctor`
 should show mpv found and `terminfo: ok`. A clone works too (`sudo apt install python3
