@@ -43,6 +43,9 @@ Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
 ## Running it
 
+Per-OS guides: [Linux](docs/setup-linux.md), [macOS](docs/setup-macos.md),
+[Windows](docs/setup-windows.md) (WSL; guide to come). The short version:
+
 Linux (Debian): `apt install mpv python3-numpy python3-mutagen pulseaudio-utils ffmpeg`
 (numpy is the light show, mutagen tags fetched shows, parec is the light show's audio
 tap, ffmpeg converts SHN tapes). Then `scripts/May-The_Lord_Poseidon-Convey-You.py`.
