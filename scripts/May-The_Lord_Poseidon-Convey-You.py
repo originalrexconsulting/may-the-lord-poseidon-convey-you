@@ -66,7 +66,10 @@ seek and q all work on it as if this instance had started it.
 
 On quit the show, track and position (or the radio station) are saved to
 ~/.cache/deadtui/state.json; the next start re-opens that view with the
-cursor on the track, and r resumes playback from the saved position.
+cursor on the track, and r resumes playback from the saved position. A built
+playlist (Rain and Snow, a Dark Star stream, a memory evening, every version of
+a song, an adopted list) is saved whole, titles and sources and position, and r
+rebuilds it, refilling included.
 Search-index and metadata responses are cached under ~/.cache/deadtui/ so
 re-visiting a year is instant. Delete that directory to refresh.
 """
@@ -838,10 +841,36 @@ class App:
         os.replace(STATE + ".tmp", STATE)
 
     def save_position(self):
-        """Called on quit: remember where in the track we were."""
+        """Called on quit: remember where in the track we were. A built playlist (Rain and Snow,
+        a Dark Star stream, a memory evening, every version of a song, an adopted list) has no
+        single show behind it, so the queue itself is saved: titles, sources, position."""
         st = self.last_status
-        if self.now and self.now.get("doc") and st:
+        if not (self.now and st):
+            return
+        if self.now.get("doc"):
             self.save_state(self.now["doc"], st["pos"], st.get("time"))
+        elif not self.now.get("radio") and self.now.get("tracks"):
+            self.state = {**self.state, "last": "queue",
+                          "queue": {"title": self.now["title"], "pos": st["pos"], "time": st.get("time"),
+                                    "rain": self.now.get("rain"),
+                                    "tracks": [{k: t.get(k) for k in ("title", "src", "how", "length")}
+                                               for t in self.now["tracks"]]}}
+            self.write_state()
+
+    def resume_queue(self):
+        q = self.state.get("queue") or {}
+        tracks = q.get("tracks") or []
+        if not tracks:
+            self.say("nothing to resume")
+            return
+        pos = min(int(q.get("pos") or 0), len(tracks) - 1)
+        self.now = {"doc": None, "tracks": [dict(t) for t in tracks], "title": q.get("title") or "resumed playlist",
+                    "rain": q.get("rain")}
+        self.mpv.play([t["src"] for t in tracks], pos)
+        self.pending_seek = q.get("time") if q.get("time") and q["time"] > 5 else None
+        self.say(f"resuming {self.now['title']} at {pos + 1}/{len(tracks)}"
+                 + (f" from {fmt_time(q['time'])}" if self.pending_seek else ""), 8)
+        self.push_queue()
 
     def restore_view(self):
         """Re-open the view saved by the previous run: the last show at its track, or the radio list."""
@@ -849,6 +878,10 @@ class App:
         try:
             if st.get("last") == "radio":
                 self.push_radio(st.get("radio"))
+                return
+            if st.get("last") == "queue" and st.get("queue"):
+                q = st["queue"]
+                self.say(f"r resumes {q.get('title')} at {int(q.get('pos') or 0) + 1}/{len(q.get('tracks') or [])}", 10)
                 return
             if not st.get("identifier"):
                 return
@@ -1481,6 +1514,9 @@ class App:
             if s_:
                 self.play_station(s_)
                 return
+        if st.get("last") == "queue":
+            self.resume_queue()
+            return
         if not st.get("identifier"):
             self.say("nothing to resume")
             return
