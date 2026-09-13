@@ -9,7 +9,7 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 18 modes; Poseidon, Enik, Polyphemus and the voyage home
+scripts/deadviz.py                            # the light show: 19 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl
 scripts/radio.py                              # lossless classical radio stations
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
@@ -38,7 +38,7 @@ Now Playing (w), the Jokes menu, the radio list:
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
-mode `V` walks through the newest ones: the voyage, Polyphemus, Enik, Poseidon.
+mode `V` walks through the newest ones: Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The Poseidon mode: the bass raises the swell, a beat shakes the earth, and the cast
 drops by.
@@ -64,6 +64,14 @@ Lose them all and Odysseus is alone on a raft. Reach Ithaca and the Cyclops sees
 off again, boulder and all.
 
 <img src="docs/screenshots/convey.svg" width="900" alt="the black ship on the night sea, Poseidon rising ahead of it with the trident">
+
+Athena, grey-eyed, as her owl on an olive branch under the moon over the Parthenon. The
+wings are the spectrum, one feather per band, fanning open as the music gets loud and
+snapping wide on a beat; the eyes dilate with the bass and follow the stereo balance; the
+head snaps toward the loudest band the way an owl's does. Quiet music, and it asks the
+only question an owl asks. The answer here is Nobody.
+
+<img src="docs/screenshots/athena.svg" width="900" alt="Athena's owl, wings spread wide, each feather a band of the spectrum">
 
 Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 

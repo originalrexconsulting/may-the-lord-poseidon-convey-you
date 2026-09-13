@@ -50,6 +50,13 @@ Modes:
              throws the ship back east and takes a companion. Lose them all and
              Odysseus is alone on a raft. Reach Ithaca at last and it starts over
              at the Cyclops's island, boulder and all
+  athena     the grey-eyed goddess, as her owl: the little owl on an olive branch,
+             big as the screen, under the moon over the Parthenon. Its wings are the
+             spectrum, one feather per band, fanning open as the music gets loud and
+             snapping wide on a beat. The eyes dilate with the bass and follow the
+             stereo balance; the head snaps toward the loudest band the way an owl's
+             does. Quiet music and it asks the only question an owl asks; the answer
+             here is Nobody. Long enough and it turns its head all the way round
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
@@ -75,7 +82,8 @@ WINDOW = 2048         # FFT size
 BANDS = 48
 FPS = 24
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
-         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey"]
+         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
+         "athena"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -1553,6 +1561,152 @@ class Viz:
         elif st["text"] and t >= st["text"][1]:
             st["text"] = None
         self.put(h - 2, 1, f"companions {st['n']}  ·  {int(prog * 100)}% of the way home", self.fg(0.5, False, base=WAVE_FG))
+
+    # ---- athena (the grey-eyed goddess, as her owl)
+    def draw_athena(self, h, w):
+        an = self.an
+        t = self.t
+        floor = h - 2
+        st = self.state("athena", h, w, lambda: {
+            "tick": -1, "turn": 0, "quiet": 0.0, "lid": 0.0, "blink": 0, "hoot": 0, "around": 0.0,
+            "spread": 0.2, "said": None, "say_until": 0.0, "olives": []})
+        tick = int(t * 4)
+        moved = tick != st["tick"]
+        st["tick"] = tick
+        st["quiet"] = st["quiet"] + 1 / FPS if an.rms < 0.05 else 0.0
+        quiet = st["quiet"] > 3
+        if moved:                                                  # an owl's head does not glide
+            if an.rms > 0.05:
+                loud = int(np.argmax(an.level)) / BANDS
+                goal = int(round((loud - 0.5) * 6))
+                st["turn"] += int(np.sign(goal - st["turn"])) * (2 if an.beat > 0.3 else 1)
+                st["turn"] = max(-3, min(3, st["turn"]))
+            if self.rng.random() < 0.05:
+                st["blink"] = 2
+            if an.beat > 0.45 and st["hoot"] <= 0:
+                st["hoot"] = 8
+            if st["quiet"] > 10 and st["around"] == 0.0 and self.rng.random() < 0.15:
+                st["around"] = t                                   # all the way round, and back
+            if quiet and t > st["say_until"]:
+                st["said"] = {None: "who?", "who?": "nobody.", "nobody.": None}.get(st["said"])
+                st["say_until"] = t + 2.5
+        if not quiet:
+            st["said"] = None
+        st["blink"] = max(0, st["blink"] - 1)
+        st["hoot"] = max(0, st["hoot"] - 1)
+        if st["around"] and t - st["around"] > 4:
+            st["around"] = 0.0
+            st["quiet"] = 0.0
+        around = bool(st["around"])
+        target = 1.0 if an.beat > 0.45 else min(1.0, 0.1 + an.rms * 2.2)
+        st["spread"] += (target - st["spread"]) * (0.5 if target > st["spread"] else 0.08)
+        spread = st["spread"]
+        lid_goal = 0.55 if quiet else 0.0
+        st["lid"] += (lid_goal - st["lid"]) * 0.1
+        # geometry
+        gw, gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        H = min(floor * 4 - 10, gw * 0.9)
+        cx0 = gw / 2
+        top = floor * 4 - 4 - 0.96 * H
+
+        def P(u, v):
+            return cx0 + u * H, top + v * H
+        # the moon, and the Parthenon along the bottom
+        moon = Canvas(h, w)
+        mx, my = P(0.36, 0.10)
+        moon.ellipse(mx, my, 0.09 * H, 0.09 * H, 0.35 + an.treble * 0.6)
+        moon.paint(self, bold=an.treble > 0.4, base=STAR_FG)
+        cols = max(4, (w - 2) // 6)
+        for c in range(cols):
+            xx = 1 + c * 6
+            for r in range(3):
+                self.put(floor - 1 - r, xx, "┃", self.fg(0.15, False, base=SPIRAL_FG))
+        self.put(floor - 4, 0, "━" * (w - 1), self.fg(0.2, False, base=SPIRAL_FG))
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.2, False, base=SPIRAL_FG))
+        # the wings: one feather per band, fanned from the shoulders, long when the band is loud
+        wings = Canvas(h, w)
+        half = BANDS // 2
+        for side in (-1, 1):
+            sx, sy = P(side * 0.16, 0.50)
+            for i in range(half):
+                band = (half - 1 - i) if side < 0 else (half + i)   # bass at the body, treble at the tips
+                lvl = float(an.level[band])
+                a = math.radians(95 - spread * (95 - 5) * (i + 1) / half)   # from hanging to horizontal
+                L = (0.12 + lvl * 0.45 + spread * 0.10) * H
+                ex, ey = sx + side * math.sin(a) * L, sy + math.cos(a) * L
+                wings.line(sx, sy, ex, ey, 0.25 + lvl * 0.7, width=2)
+                wings.dot(ex, ey, 0.95)
+        wings.paint(self, bold=an.beat > 0.3, base=WAVE_FG)
+        # the owl: body, head, face, eyes, beak, talons, and the olive branch
+        body = Canvas(h, w)
+        face = Canvas(h, w)
+        eyes = Canvas(h, w)
+        dark = Canvas(h, w)
+        bx, by = P(0, 0.64)
+        body.ellipse(bx, by, 0.21 * H, 0.30 * H, 0.22 + an.mid * 0.1)
+        for r in range(5):                                         # the breast: rows of chevrons
+            yy = by - 0.10 * H + r * 0.07 * H
+            for k in range(-3, 4):
+                xx = bx + k * 0.05 * H + (0.025 * H if r % 2 else 0)
+                dark.line(xx - 0.015 * H, yy, xx, yy + 0.02 * H, 0.1)
+                dark.line(xx, yy + 0.02 * H, xx + 0.015 * H, yy, 0.1)
+        turn = st["turn"] * 0.02 * H
+        hx, hy = P(0, 0.28)
+        body.ellipse(hx + turn * 0.5, hy, 0.22 * H, 0.20 * H, 0.28)
+        if not around:
+            for side in (-1, 1):                                   # the facial discs
+                fx, fy = hx + turn + side * 0.095 * H, hy
+                face.ellipse(fx, fy, 0.10 * H, 0.095 * H, 0.55)
+            look = (an.rms_lr[1] - an.rms_lr[0]) * 2.0 if an.rms > 0.02 else 0.0
+            pup = (0.02 + min(1.0, an.bass * 1.6) * 0.03) * H
+            for side in (-1, 1):
+                ex, ey = hx + turn + side * 0.095 * H, hy
+                eyes.ellipse(ex, ey, 0.072 * H, 0.072 * H, 0.9)
+                if st["blink"] > 0:
+                    dark.ellipse(ex, ey, 0.075 * H, 0.075 * H, 0.05)
+                else:
+                    dark.ellipse(ex + look * 0.03 * H, ey, pup, pup, 0.02)
+                    eyes.dot(ex + look * 0.03 * H - pup * 0.4, ey - pup * 0.4, 1.0)
+                    if st["lid"] > 0.05:                           # heavy lids when the music is gone
+                        dark.poly([(ex - 0.08 * H, ey - 0.08 * H), (ex + 0.08 * H, ey - 0.08 * H),
+                                   (ex + 0.08 * H, ey - 0.08 * H + st["lid"] * 0.16 * H),
+                                   (ex - 0.08 * H, ey - 0.08 * H + st["lid"] * 0.16 * H)], 0.28)
+            kx, ky = hx + turn, hy + 0.06 * H
+            dark.poly([(kx - 0.025 * H, ky), (kx + 0.025 * H, ky), (kx, ky + 0.06 * H)], 0.1)
+        else:                                                      # the back of the head: rings of feathers
+            for r in (0.06, 0.12, 0.18):
+                face.circle(hx, hy, r * H, 0.4, n=int(r * H * 3))
+        # olive branch, leaves, olives, talons
+        branch = Canvas(h, w)
+        y0 = floor * 4 - 5
+        for xx in range(0, gw, 2):
+            branch.dot(xx, y0 + 2 * math.sin(xx * 0.05), 0.5)
+            branch.dot(xx, y0 + 1 + 2 * math.sin(xx * 0.05), 0.5)
+            if xx % 24 == 0:
+                yy = y0 + 2 * math.sin(xx * 0.05)
+                branch.line(xx, yy, xx + 9, yy - 8, 0.8, width=2)
+                branch.line(xx, yy, xx - 6, yy - 9, 0.8, width=2)
+            if xx % 40 == 20:
+                branch.ellipse(xx, y0 + 2 * math.sin(xx * 0.05) - 3, 2, 3, 0.15)
+        for side in (-1, 1):
+            tx = bx + side * 0.07 * H
+            for k in (-1, 0, 1):
+                branch.line(tx, by + 0.26 * H, tx + k * 0.03 * H, y0 - 1, 0.3, width=2)
+        for (cy, cx), _ in body.cells.items():
+            self.put(cy, cx, " ")
+        body.paint(self, bold=False, base=RADIAL_FG)
+        face.paint(self, bold=False, base=RADIAL_FG)
+        eyes.paint(self, bold=True, base=STAR_FG)
+        dark.paint(self, bold=False, base=RADIAL_FG)
+        branch.paint(self, bold=True, base=RAIN_FG)
+        # words
+        if st["hoot"] > 0 and not around:
+            self.put(int(hy / 4) + 2, int((hx + turn) / 2) + 8, "hoo" if st["hoot"] > 4 else "hoo-hoo",
+                     self.fg(0.9, True, base=STAR_FG))
+        if an.beat > 0.5:
+            self.put(1, max(0, (w - 6) // 2), "ATHENA", self.fg(1.0, True, base=STAR_FG))
+        if st["said"] and t < st["say_until"] and not around:
+            self.put(int(hy / 4) + 2, int((hx + turn) / 2) + 8, st["said"], self.fg(0.8, False, base=STAR_FG))
 
     def next_mode(self, step=1):
         self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
