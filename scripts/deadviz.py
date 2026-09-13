@@ -36,6 +36,13 @@ Modes:
              the treble lights the crystal matrix (one crystal per band), a beat
              flashes his eyes and he hisses; quiet music stops him, arms down,
              and the doorway will not open
+  cyclops    Polyphemus lounges in his cave, breathing with the bass, his one eye on
+             the loudest band. Sheep graze at his feet (more with the treble); a few
+             are men, some of them hiding underneath. A big beat and he reaches down,
+             picks a man, and eats him: a tally on the wall keeps count. Silence puts
+             him to sleep, and if it lasts, a glowing stake comes in from the mouth of
+             the cave, he wakes up roaring that Nobody did it, the flock runs out with
+             the men under it, and the cave starts over
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
@@ -61,7 +68,7 @@ WINDOW = 2048         # FFT size
 BANDS = 48
 FPS = 24
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
-         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik"]
+         "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -1105,6 +1112,261 @@ class Viz:
             self.put(1, max(0, (w - 4) // 2), "ENIK", self.fg(1.0, True, base=RAIN_FG))
         if quiet and st["say"]:
             self.put(h - 2, 1, st["say"], self.fg(0.6, False, base=RAIN_FG))
+
+    # ---- cyclops (Polyphemus at home)
+    SHEEP = [["  ,ww,  ", "°(wwww) ", "  ll ll "], ["  ,ww,  ", "°(wwww) ", "  ll ll "]]
+    SHEEP_HIDING = [["  ,ww,  ", "°(wwww) ", " ll l ll"], ["  ,ww,  ", "°(wwww) ", "l ll ll "]]
+    MAN = [[" o ", "/|\\", "/ \\"], [" o ", "/|\\", " | "]]
+    GRABBED = [" o ", "\\|/", "/ \\"]
+
+    def draw_cyclops(self, h, w):
+        an = self.an
+        t = self.t
+        floor = h - 2
+        st = self.state("cyclops", h, w, lambda: {
+            "tick": -1, "phase": "lounge", "step": 0, "hand": None, "target": None, "held": None,
+            "eaten": 0, "cool": 0.0, "quiet": 0.0, "asleep": False, "sleep_t": 0.0, "stake": None,
+            "roar": 0.0, "shake": 0, "blink": 0, "flock": [], "zz": [], "reset_at": 0.0})
+        cv_gw, cv_gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        # ---- clock: the giant moves on the tick, four times a second, like Enik
+        tick = int(t * 4)
+        moved = tick != st["tick"]
+        st["tick"] = tick
+        st["quiet"] = st["quiet"] + 1 / FPS if an.rms < 0.05 else 0.0
+        ph = st["phase"]
+        # ---- geometry: H is the cave height in dots; he spans most of the width
+        H = min(floor * 4 - 8, cv_gw * 0.95)
+        ox = 4.0
+        oy = floor * 4 - 2 - 0.92 * H
+        shake = 0
+        if st["shake"] > 0:
+            st["shake"] -= 1
+            shake = int(self.rng.integers(-2, 3))
+
+        def P(u, v):
+            return ox + u * H + shake, oy + v * H
+        # ---- the flock: sheep and men on the floor rows, wandering on the tick
+        flock = st["flock"]
+        want = 3 + int(an.treble * 6)
+        if ph != "roar" and len(flock) < want and self.rng.random() < 0.05:
+            kind = "man" if sum(f["kind"] == "man" for f in flock) < 3 and self.rng.random() < 0.4 else "sheep"
+            flock.append({"kind": kind, "x": float(w - 9), "dir": -1, "hide": kind == "man" and self.rng.random() < 0.5,
+                          "until": t + 4 + self.rng.random() * 8, "run": False})
+        keep = []
+        for f in flock:
+            if f["run"]:                                             # out of the cave, fast
+                f["x"] += 1.6 + an.rms * 2
+                if f["x"] < w:
+                    keep.append(f)
+                continue
+            if moved:
+                if self.rng.random() < 0.3:
+                    f["dir"] = -f["dir"] if self.rng.random() < 0.3 else f["dir"]
+                    f["x"] += f["dir"] * (1 + an.treble * 2)
+                if f["kind"] == "man" and t > f["until"]:            # men slip under a sheep, and back out
+                    f["hide"] = not f["hide"]
+                    f["until"] = t + 4 + self.rng.random() * 10
+            f["x"] = min(max(f["x"], 0.32 * H / 2), w - 9)           # not through the giant
+            for g in keep:                                           # and not through each other
+                if abs(g["x"] - f["x"]) < 7:
+                    f["x"] += 7 if f["x"] >= g["x"] else -7
+                    f["x"] = min(max(f["x"], 0.32 * H / 2), w - 9)
+            if ph != "roar" and len(flock) > want and self.rng.random() < 0.002:
+                continue
+            keep.append(f)
+        st["flock"] = keep
+        # ---- the giant's mood: lounge -> reach -> lift -> chew -> wipe -> lounge; or asleep -> stake -> roar
+        mouth = P(0.30, 0.27)
+        rest = P(0.30, 0.68)
+        if ph == "lounge":
+            if st["quiet"] > 8 and not st["asleep"]:
+                st["asleep"], st["sleep_t"] = True, t
+            if an.rms > 0.08 and st["asleep"] and st["stake"] is None:
+                st["asleep"] = False
+            if st["asleep"] and st["stake"] is None and t - st["sleep_t"] > st.get("nap", 10):
+                st["stake"] = {"x": float(cv_gw), "y": P(0, 0.20)[1], "at": None}
+            if not st["asleep"] and an.beat > 0.5 and t > st["cool"]:
+                men = [f for f in st["flock"] if f["kind"] == "man" and not f["hide"] and not f["run"]]
+                if men:
+                    st["target"] = min(men, key=lambda f: f["x"])
+                    st["phase"], st["step"] = "reach", 0
+            if st["hand"] is None:
+                st["hand"] = rest
+        if moved and ph in ("reach", "lift", "chew", "wipe"):
+            st["step"] += 1
+        if ph == "reach":
+            tf = st["target"]
+            k = min(1.0, st["step"] / 3)
+            goal = (tf["x"] * 2 + 3, (floor - 1) * 4) if tf in st["flock"] else rest
+            st["hand"] = (rest[0] + (goal[0] - rest[0]) * k, rest[1] + (goal[1] - rest[1]) * k)
+            if st["step"] >= 3:
+                if tf in st["flock"]:
+                    st["flock"].remove(tf)
+                    st["held"] = st["hand"]
+                    st["phase"], st["step"], st["grab_from"] = "lift", 0, st["hand"]
+                else:
+                    st["phase"], st["step"] = "wipe", 0
+        elif ph == "lift":
+            k = min(1.0, st["step"] / 3)
+            g = st["grab_from"]
+            st["hand"] = (g[0] + (mouth[0] - g[0]) * k, g[1] + (mouth[1] - g[1]) * k)
+            if st["step"] >= 3:
+                st["phase"], st["step"], st["eaten"] = "chew", 0, st["eaten"] + 1
+        elif ph == "chew":
+            st["hand"] = mouth
+            if st["step"] >= 4:
+                st["phase"], st["step"] = "wipe", 0
+        elif ph == "wipe":
+            k = min(1.0, st["step"] / 3)
+            st["hand"] = (mouth[0] + (rest[0] - mouth[0]) * k + (1 - k) * 6 * math.sin(t * 12),
+                          mouth[1] + (rest[1] - mouth[1]) * k)
+            if st["step"] >= 3:
+                st["phase"], st["cool"] = "lounge", t + 3 + self.rng.random() * 4
+        # the stake, and the roar
+        stake = st["stake"]
+        if stake is not None and ph == "lounge":
+            if stake["at"] is None:
+                stake["x"] -= 3.5
+                if stake["x"] <= P(0.28, 0)[0]:
+                    stake["at"] = t
+            elif t - stake["at"] > 0.6 and (an.beat > 0.3 or t - stake["at"] > 2):
+                st["phase"], st["roar"], st["asleep"] = "roar", t, False
+                for f in st["flock"]:
+                    f["run"], f["hide"] = True, f["kind"] == "man"
+        if ph == "roar":
+            st["shake"] = 2
+            if t - st["roar"] > 5:
+                st["phase"], st["stake"], st["eaten"], st["cool"] = "lounge", None, 0, t + 3
+                st["flock"], st["quiet"], st["nap"] = [], 0.0, 20 + self.rng.random() * 40
+        asleep = st["asleep"]
+        # ---- draw: the cave, the tally, the flock, the giant, his eye
+        wall = Canvas(h, w)
+        prev = None
+        for x in range(0, cv_gw, 2):                               # the ceiling: a jagged edge, stone hanging from it
+            y = 3 + 4 * abs(math.sin(x * 0.11)) + 3 * abs(math.sin(x * 0.037 + 1))
+            if prev is not None:
+                wall.line(x - 2, prev, x, y, 0.2)
+            prev = y
+            if x % 28 == 0:
+                wall.line(x, y, x + 1, y + 6 + 5 * abs(math.sin(x)), 0.15)
+        wall.paint(self, bold=False, base=SPIRAL_FG)
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.25 + an.bass * 0.2, False, base=RADIAL_FG))
+        tally = st["eaten"]
+        marks = "".join("||||/ " if i < tally // 5 else "" for i in range(tally // 5)) + "|" * (tally % 5)
+        if marks:
+            self.put(3, max(1, w - 3 - len(marks)), marks[-(w - 4):], self.fg(0.8, True, base=RADIAL_FG))
+        for f in st["flock"]:
+            if f["kind"] == "sheep" or f["hide"]:
+                frame = (self.SHEEP_HIDING if f["kind"] == "man" else self.SHEEP)[(self.frame // 6) % 2]
+                attr = self.fg(0.9, True, base=STAR_FG)
+            else:
+                frame = self.MAN[(self.frame // 6) % 2]
+                attr = self.fg(0.95, True, base=WAVE_FG)
+            for i, row in enumerate(frame):
+                self.put(floor - len(frame) + i, int(f["x"]) + shake, row, attr)
+        # the giant
+        body = Canvas(h, w)
+        hair = Canvas(h, w)
+        skin = 0.35 + an.mid * 0.15
+        breath = 0.012 * H * (0.5 + math.sin(t * 1.2) * 0.5) + an.bass * 0.03 * H
+        lw = max(3, int(H / 40))
+        # legs first (he lies on them): the far one straight along the floor, the near one bent up
+        hip = P(0.28, 0.72)
+        body.line(*hip, *P(0.90, 0.86), skin * 0.9, width=lw + 4)
+        body.line(*P(0.90, 0.86), *P(0.99, 0.84), skin * 0.9, width=lw + 2)   # a foot
+        knee = P(0.60, 0.50)
+        body.line(*hip, *knee, skin, width=lw + 5)
+        body.line(*knee, *P(0.70, 0.90), skin, width=lw + 4)
+        body.line(*P(0.66, 0.90), *P(0.80, 0.90), skin, width=lw + 2)         # the other foot
+        # torso, reclined against the wall, breathing
+        body.poly([P(0.12, 0.34), P(0.40, 0.36), P(0.44, 0.72), P(0.10, 0.74)], skin)
+        body.poly([(P(0.12, 0.34)[0], P(0.12, 0.34)[1] - breath), (P(0.40, 0.36)[0], P(0.40, 0.36)[1] - breath),
+                   P(0.42, 0.55), P(0.11, 0.55)], skin)
+        # the far arm rests on the knee
+        body.line(*P(0.38, 0.40), *P(0.52, 0.52), skin * 0.9, width=lw + 2)
+        body.line(*P(0.52, 0.52), *knee, skin * 0.9, width=lw + 2)
+        # head, beard, hair
+        hx, hy = P(0.24, 0.20)
+        body.ellipse(hx, hy, 0.115 * H, 0.12 * H, skin)
+        hair.poly([P(0.13, 0.28), P(0.35, 0.28), P(0.32, 0.40), P(0.24, 0.43), P(0.16, 0.40)], 0.12)  # the beard
+        hair.poly([P(0.13, 0.15), P(0.36, 0.15), P(0.30, 0.08), P(0.19, 0.08)], 0.12)                 # the hair
+        # the near arm: shoulder to the hand, wherever the hand is, with an elbow that hangs below the line
+        sh = P(0.16, 0.40)
+        hand = st["hand"] or rest
+        mx, my = (sh[0] + hand[0]) / 2, (sh[1] + hand[1]) / 2
+        dx, dy = hand[0] - sh[0], hand[1] - sh[1]
+        L = math.hypot(dx, dy) or 1.0
+        bend = max(0.0, 0.32 * H - L * 0.5)
+        elbow = (mx + dy / L * bend, my - dx / L * bend)                    # off to the side, away from the body
+        body.line(*sh, *elbow, skin, width=lw + 3)
+        body.line(*elbow, *hand, skin, width=lw + 2)
+        body.ellipse(hand[0], hand[1], 0.035 * H, 0.03 * H, skin)
+        for (cy, cx), _ in body.cells.items():
+            self.put(cy, cx, " ")
+        body.paint(self, bold=False, base=RADIAL_FG)
+        hair.paint(self, bold=True, base=RADIAL_FG)
+        # the mouth: shut, chewing, or roaring
+        mth = Canvas(h, w)
+        if ph == "chew":
+            o = 0.02 * H * (1 if (self.frame // 3) % 2 else 0.4)
+            mth.ellipse(mouth[0], mouth[1], 0.035 * H, o, 0.05)
+        elif ph == "roar":
+            mth.ellipse(mouth[0], mouth[1] + 0.02 * H, 0.05 * H, 0.05 * H, 0.05)
+        else:
+            mth.line(mouth[0] - 0.03 * H, mouth[1], mouth[0] + 0.03 * H, mouth[1], 0.1, width=2)
+        mth.paint(self, bold=False, base=RADIAL_FG)
+        # the eye: one, on the loudest band; blinks; shut asleep; put out after the stake
+        ex, ey = P(0.28, 0.19)
+        eye = Canvas(h, w)
+        if moved and self.rng.random() < 0.06:
+            st["blink"] = 3
+        st["blink"] = max(0, st["blink"] - 1)
+        if ph == "roar" or (stake is not None and stake["at"] is not None and t - stake["at"] > 0.6):
+            eye.line(ex - 0.04 * H, ey - 0.04 * H, ex + 0.04 * H, ey + 0.04 * H, 0.9, width=3)
+            eye.line(ex - 0.04 * H, ey + 0.04 * H, ex + 0.04 * H, ey - 0.04 * H, 0.9, width=3)
+            eye.paint(self, bold=True, base=RADIAL_FG)
+        elif asleep or st["blink"] > 0:
+            eye.line(ex - 0.05 * H, ey, ex + 0.05 * H, ey, 0.2, width=2)
+            eye.paint(self, bold=False, base=RADIAL_FG)
+        else:
+            eye.ellipse(ex, ey, 0.055 * H, 0.035 * H, 0.95)
+            eye.paint(self, bold=True, base=STAR_FG)
+            loud = int(np.argmax(an.level)) / BANDS if an.rms > 0.02 else 0.5
+            pupil = Canvas(h, w)
+            pupil.ellipse(ex + (loud - 0.5) * 0.06 * H, ey, 0.018 * H, 0.02 * H, 0.05)
+            pupil.paint(self, bold=False, base=STAR_FG)
+        # the man in his hand
+        if ph == "lift" or (ph == "chew" and st["step"] < 2):
+            hx2, hy2 = int(hand[0] / 2), int(hand[1] / 4) - 1
+            for i, row in enumerate(self.GRABBED):
+                self.put(hy2 + i - 1, hx2 - 1, row, self.fg(0.95, True, base=WAVE_FG))
+        # words and effects
+        if ph == "chew" and st["step"] < 3:
+            self.put(int(mouth[1] / 4) - 2, int(mouth[0] / 2) + 4 + shake, "CRUNCH", self.fg(0.9, True, base=RADIAL_FG))
+        if asleep:
+            if self.frame % 12 == 0:
+                st["zz"].append([hx + 0.1 * H, hy - 0.1 * H, 0])
+            for z in st["zz"]:
+                z[1] -= 1.0
+                z[2] += 1
+                self.put(int(z[1] / 4), int(z[0] / 2) + (z[2] // 6) % 3, "z" if z[2] < 18 else "Z",
+                         self.fg(0.6, False, base=STAR_FG))
+            st["zz"] = [z for z in st["zz"] if z[1] > 4][-8:]
+        else:
+            st["zz"] = []
+        if stake is not None and ph == "lounge":
+            x1 = stake["x"] if stake["at"] is None else P(0.28, 0)[0]
+            glow = 0.7 + 0.3 * abs(math.sin(t * 20))
+            stk = Canvas(h, w)
+            stk.line(x1, stake["y"], min(cv_gw - 1, x1 + 0.6 * H), stake["y"] + 0.03 * H, glow, width=3)
+            stk.paint(self, bold=True, base=RADIAL_FG)
+            for k in range(3):
+                self.put(int(stake["y"] / 4) - 1 - k // 2, int(x1 / 2) + k * 2, "*", self.fg(1.0, True, base=RADIAL_FG))
+        if ph == "roar":
+            msg = "NOBODY!" if (self.frame // 8) % 2 else "NOBODY HAS BLINDED ME!"
+            self.put(1, max(0, (w - len(msg)) // 2) + shake, msg, self.fg(1.0, True, base=RADIAL_FG))
+        elif an.beat > 0.5 and ph == "lounge" and not asleep:
+            self.put(1, max(0, (w - 10) // 2), "POLYPHEMUS", self.fg(0.9, True, base=RADIAL_FG))
 
     def next_mode(self, step=1):
         self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
