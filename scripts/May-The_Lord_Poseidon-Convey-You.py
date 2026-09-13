@@ -18,7 +18,8 @@ band Jerry left behind, 1996 on (archive.org collection JGB; Jerry's own Garcia
 Band tapes were removed from archive.org at the estate's request). JGB shows
 fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
 `Jokes` starts with CLIPS: moments inside shows played from an offset, such as the
-battery bit at 7:42 of Mission in the Rain, Boston 6/12/76.
+"Penalized for Your Dependence on Batteries (or a Well Deserved Break)" at 7:42 of
+Mission in the Rain, Boston 6/12/76.
 `🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
 opens it, and plays the best source. `☔ Rain and Snow` plays weather and water
 songs (RAIN_SONGS): a random song, a random night's version of it (on-disk shows
@@ -147,7 +148,8 @@ COLLECTIONS = {  # archive.org collection -> title and year span
 MENU_TITLES = {FIRESIGN: "Firesign Theatre", JOKES: "Jokes"}
 # Clips: a moment inside a show, played from an offset. Listed at the top of Jokes.
 CLIPS = [
-    {"clip": True, "title": "The battery bit", "note": "Dead stage banter, Boston Music Hall, at the end of Mission in the Rain",
+    {"clip": True, "title": "Penalized for Your Dependence on Batteries (or a Well Deserved Break)",
+     "note": "Dead stage banter, Boston Music Hall, at the end of Mission in the Rain",
      "identifier": "gd1976-06-12.fm.sbd.moore.berger.100328.flac16", "date": "1976-06-12", "collection": ["GratefulDead"],
      "kind": "sbd", "song": "Mission in the Rain", "start": 7 * 60 + 42},
 ]
@@ -1015,7 +1017,7 @@ class App:
         def render(d, w):
             loc = "*" if os.path.isdir(local_show_dir(d)) else " "
             if d.get("clip"):
-                return f"{loc} ✂ {d['title']:17} {d['date']} at {fmt_time(d['start'])}: {d['note']}"[:w]
+                return f"{loc} ✂ {d['title']}   {d['date']} at {fmt_time(d['start'])}: {d['note']}"[:w]
             who = "" if menu == FIRESIGN else f"{d['artist']:18} "
             return f"{loc} {d['date'][:4]}  {who}{d['title']}"[:w]
         items = (list(CLIPS) if menu == JOKES else []) + album_docs(menu)
