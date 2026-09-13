@@ -101,4 +101,13 @@ facts about archive.org that shape what you get (soundboards stream only,
 audience tapes download lossless). `AUDIO-ANSIBLE.md` is the spec for the
 PipeWire side.
 
+## Endorsement
+
+Enik the Altrusian has examined this project from the fifth dimension, by way of the
+pylon's crystal matrix, and has approved it. He notes that the Sleestak, being
+cold-blooded and slow, prefer the light show's `life` mode; that the time doorway will
+not open until 5/8/77 has finished playing; and that the Marshalls, who fell through a
+similar doorway on a routine expedition, could have used the `r` key. Do not touch the
+crystals in the wrong order.
+
 MIT license.
