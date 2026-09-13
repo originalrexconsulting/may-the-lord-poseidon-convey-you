@@ -23,7 +23,9 @@ fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
 "Penalized for Your Dependence on Batteries (or a Well Deserved Break)" at 7:42 of
 Mission in the Rain, Boston 6/12/76.
 `🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
-opens it, and plays the best source. `☔ Rain and Snow` plays weather and water
+opens it, and plays the best source. `★ Dark Star` lists the famous ones (DARK_STARS: date and why; ↵ plays that night from
+Dark Star on, best source that really has it, on disk first) above a row that plays a
+random Dark Star, then another, and another. `☔ Rain and Snow` plays weather and water
 songs (RAIN_SONGS): a random song, a random night's version of it (on-disk shows
 first some of the time), four to start, and three more each time the last one begins.
 Playback goes through mpv (JSON IPC over a unix socket), which plays through
@@ -112,6 +114,24 @@ RAIN_SONGS = [
     "Ripple", "Estimated Prophet", "Crazy Fingers", "Brokedown Palace",
 ]
 RAIN_BATCH = 4         # versions fetched per roll; more are added as the last one starts
+DARKSTAR = "darkstar"  # sentinel: the Dark Star section
+DARK_STARS = [         # (date, why), oldest first; ↵ plays that night from Dark Star on
+    ("1969-02-27", "Fillmore West. The Live/Dead one."),
+    ("1970-02-13", "Fillmore East, late show. Dark Star > Other One > Lovelight, then goodnight."),
+    ("1971-10-31", "Ohio Theatre, Columbus. Halloween, the Keith Godchaux era begins."),
+    ("1972-04-08", "Wembley. The Europe '72 opener's Dark Star."),
+    ("1972-05-11", "Rotterdam. Forty minutes; the one people mean by 'the long one'."),
+    ("1972-07-18", "Roosevelt Stadium, Jersey City. Dark Star > Comes a Time."),
+    ("1972-08-27", "Veneta, Oregon. The Sunshine Daydream field."),
+    ("1972-09-21", "The Spectrum, Philadelphia. Dark Star > Morning Dew."),
+    ("1973-11-11", "Winterland. Dark Star > Eyes of the World, the 1973 sound at its best."),
+    ("1973-12-06", "Cleveland. The Dark Star > Eyes that ends with the wonderful jam."),
+    ("1974-02-24", "Winterland. Wall of Sound spring."),
+    ("1974-06-23", "Miami. Dark Star > Spanish Jam > U.S. Blues."),
+    ("1974-10-18", "Winterland, the farewell run before the hiatus. Dark Star > Morning Dew."),
+    ("1989-10-09", "Hampton. The Warlocks. Dark Star returns after five years."),
+    ("1990-03-29", "Nassau Coliseum, with Branford Marsalis. The last great one."),
+]
 YEARS_GD = ("years", "GratefulDead")   # home row that opens the Dead years
 HDR = "hdr"            # (HDR, text): a section header on the home screen, not selectable
 # LP menus. archive.org library vinyl transfers: one 24-bit FLAC per side, titled from
@@ -878,7 +898,7 @@ class App:
         (HDR, "Now"),
         QUEUE, RANDOM,
         (HDR, "The Dead"),
-        YEARS_GD, RAIN, TEARS, JGB,
+        YEARS_GD, DARKSTAR, RAIN, TEARS, JGB,
         (HDR, "Memories"),
         # one row per MEMORIES entry goes here
         (HDR, "Not Dead"),
@@ -890,6 +910,7 @@ class App:
         QUEUE: "▶ Now playing        the current playlist",
         RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
         YEARS_GD: "Grateful Dead        1965-1995, by year",
+        DARKSTAR: "★ Dark Star          the famous ones, and a random one after another",
         RAIN: "☔ Rain and Snow      random weather and water songs, a random night's version of each, on and on",
         TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
         JGB: "JGB                  Melvin Seals & Jerry Garcia Band, 1996 on, after Jerry",
@@ -961,36 +982,86 @@ class App:
                 continue
         return None
 
-    def rain_tracks(self, n):
+    def rain_tracks(self, n, songs=RAIN_SONGS, icon="☔", avoid=()):
         out = []
-        for song in self.rng.sample(RAIN_SONGS, min(n, len(RAIN_SONGS))):
-            self.loading(f"☔ looking for a {song}...")
-            hit = self.random_version(song)
-            if not hit:
+        seen = set(avoid)
+        picks = self.rng.sample(songs, min(n, len(songs))) if len(songs) > 1 else [songs[0]] * n
+        for song in picks:
+            self.loading(f"{icon} looking for a {song}...")
+            hit = None
+            for _ in range(4):                       # not one we already have queued
+                hit = self.random_version(song)
+                if not hit or hit[2][hit[1]]["src"] not in seen:
+                    break
+            if not hit or hit[2][hit[1]]["src"] in seen:
                 continue
             doc, idx, tracks, meta = hit
+            seen.add(tracks[idx]["src"])
             t = dict(tracks[idx])
             t["title"] = f"{show_title(doc, meta)}: {t['title']}"
             out.append(t)
         return out
 
-    def rain(self):
-        tracks = self.rain_tracks(RAIN_BATCH)
+    def rain(self, songs=RAIN_SONGS, title="☔ Rain and Snow", icon="☔", batch=RAIN_BATCH, more=3):
+        """A stream of random versions of random songs from `songs`, refilled as it plays."""
+        tracks = self.rain_tracks(batch, songs, icon)
         if not tracks:
-            self.say("no rain today (archive.org?)")
+            self.say("nothing found (archive.org?)")
             return
-        self.now = {"doc": None, "tracks": tracks, "title": "☔ Rain and Snow", "rain": True}
+        self.now = {"doc": None, "tracks": tracks, "title": title, "rain": {"songs": songs, "icon": icon, "more": more}}
         self.mpv.play([t["src"] for t in tracks], 0)
-        self.say(f"☔ {len(tracks)} songs to start; more fall as it goes", 8)
+        self.say(f"{icon} {len(tracks)} to start; more come as it goes", 8)
         self.push_queue()
 
     def rain_more(self):
         """Called from the main loop when the last queued song starts: add a few more."""
-        more = self.rain_tracks(3)
+        r = self.now["rain"]
+        more = self.rain_tracks(r["more"], r["songs"], r["icon"], avoid={t["src"] for t in self.now["tracks"]})
         for t in more:
             self.mpv.cmd("loadfile", t["src"], "append")
         self.now["tracks"].extend(more)
         self.msg_until = 0
+
+    # ---- Dark Star
+
+    def push_darkstar(self):
+        def render(it, w):
+            if it == "random":
+                return "  ★ A random Dark Star, then another, and another"
+            date, why = it
+            loc = "*" if os.path.isdir(os.path.join(gd.DEFAULT_DEST, "shows", date[:4])) and any(
+                n.startswith(date) for n in os.listdir(os.path.join(gd.DEFAULT_DEST, "shows", date[:4]))) else " "
+            return f"{loc} {date}  {why}"[:w]
+        items = ["random"] + list(DARK_STARS)
+        lvl = Level("darkstar", "★ Dark Star", items, render, {"darkstar": True})
+        self.push(lvl, 0)
+
+    def play_dark_star(self, date):
+        """That night, from Dark Star on: the best source that really has it, on disk first."""
+        year = int(date[:4])
+        self.loading(f"★ {date}: finding Dark Star...")
+        try:
+            entry = next((d for d in group_dates(year_docs(year)) if d["date"] == date), None)
+        except Exception as e:
+            self.say(f"archive.org: {e}")
+            return
+        if not entry:
+            self.say(f"{date} is not in the index")
+            return
+        items = sorted(entry["items"], key=source_rank)
+        items.sort(key=lambda d: not os.path.isdir(local_show_dir(d)))
+        for doc in items[:8]:
+            try:
+                files, _, _ = gd.choose_files(item_meta(doc["identifier"]), "best", "Dark Star")
+                if not files:
+                    continue
+                idx, tracks, meta = self.song_track_index(doc, "Dark Star")
+            except Exception:
+                continue
+            self.play_doc(doc, idx)
+            self.push_tracks(doc, idx)
+            return
+        self.say(f"no source of {date} lists Dark Star")
 
     def random_show(self):
         """Any night: a random year, a random date in it (rated 4+ when the year has such), best source."""
@@ -1232,7 +1303,7 @@ class App:
 
         def render(t, w):
             right = f" {fmt_time(t.get('length'))}  {t.get('how') or '':12}"
-            left = f"  {tracks.index(t) + 1:>3}  {t['title']}"
+            left = f"  {next(i for i, x in enumerate(tracks) if x is t) + 1:>3}  {t['title']}"
             return left[:max(0, w - len(right))].ljust(w - len(right)) + right
         lvl = Level("queue", f"▶ {self.now['title']}", tracks, render, {"queue": True, "now": self.now})
         st = self.last_status
@@ -1562,6 +1633,8 @@ class App:
                 keys = " ↵/p tune  i probe (codec, rate, now playing)  ␣ pause  s stop  h back  q quit (music stays)"
             elif lvl.kind == "tears":
                 keys = " ↵/p find every version of this song (one row per show)  h back  q quit (music stays)"
+            elif lvl.kind == "darkstar":
+                keys = " ↵/p play that night from Dark Star on (or a random one after another)  h back  q quit (music stays)"
             elif lvl.kind == "memory":
                 keys = " ↵/p play this part  a play the whole evening in order  ␣ pause  n/b trk  h back  q quit (music stays)"
             elif lvl.kind == "history":
@@ -1638,6 +1711,12 @@ class App:
             self.random_show()
         elif lvl.kind == "home" and item == RAIN:
             self.rain()
+        elif lvl.kind == "home" and item == DARKSTAR:
+            self.push_darkstar()
+        elif lvl.kind == "darkstar" and item == "random":
+            self.rain(["Dark Star"], "★ Dark Star", "★", batch=2, more=1)
+        elif lvl.kind == "darkstar":
+            self.play_dark_star(item[0])
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1699,6 +1778,12 @@ class App:
             self.random_show()
         elif lvl.kind == "home" and item == RAIN:
             self.rain()
+        elif lvl.kind == "home" and item == DARKSTAR:
+            self.push_darkstar()
+        elif lvl.kind == "darkstar" and item == "random":
+            self.rain(["Dark Star"], "★ Dark Star", "★", batch=2, more=1)
+        elif lvl.kind == "darkstar":
+            self.play_dark_star(item[0])
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
