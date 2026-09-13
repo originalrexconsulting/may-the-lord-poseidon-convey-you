@@ -8,6 +8,11 @@
 # The build venv under build/ is the only place pip is used; runtime needs no pip.
 
 PEX_VERSION ?= 2.102.0
+# Pinned for reproducible builds: the python-build-standalone release and CPython patch
+# the scie embeds, and the numpy inside it. Bump all three together after a test build.
+PBS_RELEASE ?= 20260901
+PY_VERSION  ?= 3.13.15
+NUMPY       ?= numpy==2.5.3
 # the scie embeds 3.13; resolve numpy with the same minor
 PYTHON      ?= python3.13
 VENV        := build/venv
@@ -41,10 +46,13 @@ pex: $(PEX) stage
 	  --interpreter-constraint '>=3.11' --inherit-path=fallback --sh-boot -o $(UPEX)
 
 # Self-contained: CPython 3.13 (python-build-standalone) + numpy + mutagen, one file.
+# science (pex's scie builder) asks api.github.com for the release's asset list even when
+# the release is pinned; unauthenticated, GitHub's shared runner IPs hit the rate limit.
+# Export SCIENCE_AUTH_API_GITHUB_COM_BEARER=<token> to authenticate (the workflow does).
 scie: $(PEX) stage
-	$(PEX) numpy mutagen -D $(STAGE) -e poseidon:main --python $(PYTHON) --venv \
-	  --scie eager --scie-only --scie-python-version 3.13 --scie-pbs-stripped \
-	  --scie-platform current --scie-name-style platform-file-suffix -o $(SCIE_NAME)
+	$(PEX) $(NUMPY) mutagen -D $(STAGE) -e poseidon:main --python $(PYTHON) --venv \
+	  --scie eager --scie-only --scie-python-version $(PY_VERSION) --scie-pbs-release $(PBS_RELEASE) \
+	  --scie-pbs-stripped --scie-platform current --scie-name-style platform-file-suffix -o $(SCIE_NAME)
 
 dist: pex scie
 
