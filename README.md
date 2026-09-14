@@ -9,7 +9,7 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 19 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl
+scripts/deadviz.py                            # the light show: 20 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea
 scripts/radio.py                              # lossless classical radio stations
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
@@ -39,7 +39,7 @@ Now Playing (w), the Jokes menu, the radio list:
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
-mode `V` walks through the newest ones: Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
+mode `V` walks through the newest ones: Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The Poseidon mode: the bass raises the swell, a beat shakes the earth, and the cast
 drops by.
@@ -75,6 +75,19 @@ and tilted, curious, now and then. Quiet music, and it asks the
 only question an owl asks. The answer here is Nobody.
 
 <img src="docs/screenshots/athena.svg" width="900" alt="Athena's owl, wings spread wide, each feather a band of the spectrum">
+
+Althea is not Athena. Athena is the grey-eyed goddess of wisdom, the owl above. Althea
+is the healer: the name is the Greek Althaea, from *althainein*, to heal, and the
+marshmallow, Althaea officinalis, is the old healing herb, hollyhock's cousin. In the
+myth she is queen of Calydon and Meleager's mother, who took the half-burnt brand off
+the fire when the Fates said her son would live only as long as it did, and kept it in
+a chest for years. Hunter's Althea is the first kind, the one who tells you to cool
+down, settle back, easy Jim. So the mode has her at the hearth in Calydon with the
+brand. The fire is the spectrum, one flame per band; the log's ember glows with the
+bass, sparks fly on a beat, smoke thickens with the mids, and hollyhocks bloom either
+side on the treble. She dances seated, hair a beat behind her shoulders, one hand
+keeping time on her knee. Music too hot for too long and she draws the brand out and
+raises a palm; when it settles she puts it back. Silence, and she stirs the embers.
 
 Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
 
