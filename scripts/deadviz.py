@@ -1569,7 +1569,9 @@ class Viz:
         floor = h - 2
         st = self.state("athena", h, w, lambda: {
             "tick": -1, "turn": 0, "quiet": 0.0, "lid": 0.0, "blink": 0, "hoot": 0, "around": 0.0,
-            "spread": 0.2, "said": None, "say_until": 0.0, "olives": []})
+            "spread": 0.2, "said": None, "say_until": 0.0, "olives": [],
+            "phase": 0.0, "amp": 0.0, "period": 0.5, "last_beat": -9.0, "y": 0.0, "vy": 0.0,
+            "tilt": 0.0, "tilt_goal": 0.0})
         tick = int(t * 4)
         moved = tick != st["tick"]
         st["tick"] = tick
@@ -1590,6 +1592,10 @@ class Viz:
             if quiet and t > st["say_until"]:
                 st["said"] = {None: "who?", "who?": "nobody.", "nobody.": None}.get(st["said"])
                 st["say_until"] = t + 2.5
+            if quiet:                                              # a puzzled tilt for the question
+                st["tilt_goal"] = 0.045 if st["said"] == "who?" else 0.0
+            elif self.rng.random() < 0.12:                         # now and then, a curious tilt
+                st["tilt_goal"] = float(self.rng.choice((-1, 0, 0, 1))) * (0.03 + an.beat * 0.03)
         if not quiet:
             st["said"] = None
         st["blink"] = max(0, st["blink"] - 1)
@@ -1603,14 +1609,41 @@ class Viz:
         spread = st["spread"]
         lid_goal = 0.55 if quiet else 0.0
         st["lid"] += (lid_goal - st["lid"]) * 0.1
+        # the dance: the head snaps, the body glides.  A sway locked to the beat, weight from foot
+        # to foot; a beat drops her and she springs back up taller; the head lags the shoulders
+        # the way an owl holds its gaze still while the body moves underneath it.
+        dt = 1 / FPS
+        if an.beat > 0.45 and t - st["last_beat"] > 0.2:
+            gap = t - st["last_beat"]
+            if gap < 1.6:
+                st["period"] = st["period"] * 0.7 + gap * 0.3
+            st["last_beat"] = t
+            st["vy"] += 7 * min(1.0, an.beat)
+        st["vy"] += (-90 * st["y"] - 6 * st["vy"]) * dt
+        st["y"] += st["vy"] * dt
+        dancing = t - st["last_beat"] < 2.5 and not quiet
+        amp_goal = min(1.0, 0.25 + an.rms * 2.5) if dancing else 0.0
+        st["amp"] += (amp_goal - st["amp"]) * (0.06 if amp_goal > st["amp"] else 0.03)
+        if st["amp"] > 0.02:
+            st["phase"] += math.pi * dt / max(0.25, st["period"])   # one side per beat, a sway per two
+        st["tilt"] += (st["tilt_goal"] - st["tilt"]) * 0.12
+        sway = math.sin(st["phase"]) * st["amp"] * 0.13             # lateral shift per unit of height
+        bob = st["y"] * 0.10                                        # down on the beat, in units of H
+        stretch = -st["y"] * 0.25                                   # squashed on the dip, tall on the rebound
         # geometry
         gw, gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
         H = min(floor * 4 - 10, gw * 0.9)
         cx0 = gw / 2
         top = floor * 4 - 4 - 0.96 * H
+        feet_v = 0.94                                               # she pivots on her talons
 
         def P(u, v):
             return cx0 + u * H, top + v * H
+
+        def B(u, v, follow=1.0):                                    # the owl: sways, dips, stretches from the feet up
+            lift = feet_v - v
+            return (cx0 + u * H * (1 - 0.35 * stretch) + sway * follow * lift * H,
+                    top + feet_v * H - lift * H * (1 + stretch) + bob * H)
         # the moon, and the Parthenon along the bottom
         moon = Canvas(h, w)
         mx, my = P(0.36, 0.10)
@@ -1627,7 +1660,7 @@ class Viz:
         wings = Canvas(h, w)
         half = BANDS // 2
         for side in (-1, 1):
-            sx, sy = P(side * 0.16, 0.50)
+            sx, sy = B(side * 0.16, 0.50)
             for i in range(half):
                 band = (half - 1 - i) if side < 0 else (half + i)   # bass at the body, treble at the tips
                 lvl = float(an.level[band])
@@ -1642,25 +1675,27 @@ class Viz:
         face = Canvas(h, w)
         eyes = Canvas(h, w)
         dark = Canvas(h, w)
-        bx, by = P(0, 0.64)
-        body.ellipse(bx, by, 0.21 * H, 0.30 * H, 0.22 + an.mid * 0.1)
+        bx, by = B(0, 0.64)
+        tall = 1 + stretch
+        body.ellipse(bx, by, 0.21 * H * (1 - 0.35 * stretch), 0.30 * H * tall, 0.22 + an.mid * 0.1)
         for r in range(5):                                         # the breast: rows of chevrons
-            yy = by - 0.10 * H + r * 0.07 * H
+            yy = by - 0.10 * H * tall + r * 0.07 * H * tall
             for k in range(-3, 4):
                 xx = bx + k * 0.05 * H + (0.025 * H if r % 2 else 0)
                 dark.line(xx - 0.015 * H, yy, xx, yy + 0.02 * H, 0.1)
                 dark.line(xx, yy + 0.02 * H, xx + 0.015 * H, yy, 0.1)
         turn = st["turn"] * 0.02 * H
-        hx, hy = P(0, 0.28)
+        hx, hy = B(0, 0.28, follow=0.6)                            # the head holds steadier than the body
+        tilt = st["tilt"] * H                                      # one eye higher than the other
         body.ellipse(hx + turn * 0.5, hy, 0.22 * H, 0.20 * H, 0.28)
         if not around:
             for side in (-1, 1):                                   # the facial discs
-                fx, fy = hx + turn + side * 0.095 * H, hy
+                fx, fy = hx + turn + side * 0.095 * H, hy + side * tilt
                 face.ellipse(fx, fy, 0.10 * H, 0.095 * H, 0.55)
             look = (an.rms_lr[1] - an.rms_lr[0]) * 2.0 if an.rms > 0.02 else 0.0
             pup = (0.02 + min(1.0, an.bass * 1.6) * 0.03) * H
             for side in (-1, 1):
-                ex, ey = hx + turn + side * 0.095 * H, hy
+                ex, ey = hx + turn + side * 0.095 * H, hy + side * tilt
                 eyes.ellipse(ex, ey, 0.072 * H, 0.072 * H, 0.9)
                 if st["blink"] > 0:
                     dark.ellipse(ex, ey, 0.075 * H, 0.075 * H, 0.05)
@@ -1691,7 +1726,7 @@ class Viz:
         for side in (-1, 1):
             tx = bx + side * 0.07 * H
             for k in (-1, 0, 1):
-                branch.line(tx, by + 0.26 * H, tx + k * 0.03 * H, y0 - 1, 0.3, width=2)
+                branch.line(tx, by + 0.26 * H * tall, tx + k * 0.03 * H, y0 - 1, 0.3, width=2)
         for (cy, cx), _ in body.cells.items():
             self.put(cy, cx, " ")
         body.paint(self, bold=False, base=RADIAL_FG)
