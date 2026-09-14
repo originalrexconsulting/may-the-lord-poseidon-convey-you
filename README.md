@@ -71,6 +71,11 @@ In the light show, `v` cycles the modes forward and `V` backward, so from the fi
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
 Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
+The name on the tin is Polyphemus's line after the blinding: come back, and my father
+the Earth Shaker will convey you home. He said it to Nobody, the name Odysseus gave him,
+which is why no Cyclops came running and why the conveying went the way it did. The
+modes keep circling back to that name.
+
 The Poseidon mode: the bass raises the swell, a beat shakes the earth, and the cast
 drops by.
 
@@ -104,7 +109,7 @@ head snaps toward the loudest band the way an owl's does. The body dances: a swa
 beat from foot to foot, the far wing lifting against the lean like a dancer's arm, a dip
 and a spring back taller, the head held steady above it.
 Quiet music, and it asks the
-only question an owl asks. The answer here is Nobody.
+only question an owl asks. The answer here is nobody.
 
 <img src="docs/screenshots/athena.svg" width="900" alt="Athena's owl, wings spread wide, each feather a band of the spectrum">
 
