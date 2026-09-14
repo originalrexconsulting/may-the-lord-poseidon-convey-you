@@ -1663,6 +1663,7 @@ class Viz:
         half = BANDS // 2
         for side in (-1, 1):
             sx, sy = B(side * 0.16, 0.50)
+            sy += side * sway * 0.35 * H                            # the far wing lifts against the lean, a dancer's arms
             for i in range(half):
                 band = (half - 1 - i) if side < 0 else (half + i)   # bass at the body, treble at the tips
                 lvl = float(an.level[band])
@@ -1677,6 +1678,7 @@ class Viz:
         face = Canvas(h, w)
         eyes = Canvas(h, w)
         dark = Canvas(h, w)
+        gleam = Canvas(h, w)                                       # the catchlight, painted last so the pupil cannot cover it
         bx, by = B(0, 0.64)
         tall = 1 + stretch
         body.ellipse(bx, by, 0.21 * H * (1 - 0.35 * stretch), 0.30 * H * tall, 0.22 + an.mid * 0.1)
@@ -1695,14 +1697,20 @@ class Viz:
                 face.ellipse(fx, fy, 0.10 * H, 0.095 * H, 0.55)
             look = (an.rms_lr[1] - an.rms_lr[0]) * 2.0 if an.rms > 0.02 else 0.0
             pup = (0.02 + min(1.0, an.bass * 1.6) * 0.03) * H
+            # grey-eyed: the irises are grey at rest and give light with the music, brightest on a beat,
+            # and the light falls on the facial discs around them
+            glow = 0.62 + 0.33 * min(1.0, an.rms * 1.5 + an.beat)
             for side in (-1, 1):
                 ex, ey = hx + turn + side * 0.095 * H, hy
-                eyes.ellipse(ex, ey, 0.072 * H, 0.072 * H, 0.9)
+                eyes.ellipse(ex, ey, 0.072 * H, 0.072 * H, glow)
                 if st["blink"] > 0:
                     dark.ellipse(ex, ey, 0.075 * H, 0.075 * H, 0.05)
                 else:
-                    dark.ellipse(ex + look * 0.03 * H, ey, pup, pup, 0.02)
-                    eyes.dot(ex + look * 0.03 * H - pup * 0.4, ey - pup * 0.4, 1.0)
+                    face.circle(ex, ey, 0.085 * H, 0.55 + (glow - 0.62) * 0.9, n=int(0.085 * H * 3))
+                    px = ex + look * 0.03 * H
+                    dark.ellipse(px, ey, pup, pup, 0.02)
+                    d = math.hypot(mx - px, my - ey) or 1.0        # the catchlight is the moon
+                    gleam.dot(px + (mx - px) / d * pup * 0.45, ey + (my - ey) / d * pup * 0.45, 1.0)
                     if st["lid"] > 0.05:                           # heavy lids when the music is gone
                         dark.poly([(ex - 0.08 * H, ey - 0.08 * H), (ex + 0.08 * H, ey - 0.08 * H),
                                    (ex + 0.08 * H, ey - 0.08 * H + st["lid"] * 0.16 * H),
@@ -1734,6 +1742,7 @@ class Viz:
         face.paint(self, bold=False, base=RADIAL_FG)
         eyes.paint(self, bold=True, base=STAR_FG)
         dark.paint(self, bold=False, base=RADIAL_FG)
+        gleam.paint(self, bold=True, base=STAR_FG)
         branch.paint(self, bold=True, base=RAIN_FG)
         # words
         if st["hoot"] > 0 and not around:
