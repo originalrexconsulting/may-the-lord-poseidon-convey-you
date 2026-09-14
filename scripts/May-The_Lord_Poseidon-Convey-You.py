@@ -23,9 +23,10 @@ fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
 "Penalized for Your Dependence on Batteries (or a Well Deserved Break)" at 7:42 of
 Mission in the Rain, Boston 6/12/76.
 `🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
-opens it, and plays the best source. `★ Dark Star` lists the famous ones (DARK_STARS: date and why; ↵ plays that night from
-Dark Star on, best source that really has it, on disk first) above a row that plays a
-random Dark Star, then another, and another. `≋ Seastones` lists every 1974 night archive.org
+opens it, and plays the best source. `★ Dark Star` and `♥ Not Fade Away` (NIGHTS) list the
+famous ones (DARK_STARS, NFA_NIGHTS: date and why; ↵ plays that night from the song on, best
+source that really has it, on disk first) below a row that plays a random one, then another,
+and another, and a row that runs the song search for every version. `≋ Seastones` lists every 1974 night archive.org
 has a Phil Lesh and Ned Lagin set for (SEASTONES_NIGHTS, Miami 6/23 to Winterland 10/20; ↵ plays
 that night from the Seastones set on, whatever the tapers called it: Seastones, Phil & Ned,
 Phil 'n' Ned...), a random-one-after-another row, and the 1975-06-06 Dominican College evening
@@ -140,6 +141,24 @@ DARK_STARS = [         # (date, why), oldest first; ↵ plays that night from Da
     ("1989-10-09", "Hampton. The Warlocks. Dark Star returns after five years."),
     ("1990-03-29", "Nassau Coliseum, with Branford Marsalis. The last great one."),
 ]
+NOTFADE = "notfade"    # sentinel: the Not Fade Away section
+NFA_NIGHTS = [         # (date, why), oldest first; ↵ plays that night from Not Fade Away on
+    ("1970-02-14", "Fillmore East, the night after the Dark Star. Not Fade Away > Mason's Children > Caution."),
+    ("1970-05-15", "Fillmore East, late show. St. Stephen > Not Fade Away > Lovelight."),
+    ("1971-04-06", "Manhattan Center. Not Fade Away > Goin' Down the Road > Not Fade Away, the 1971 shape of it."),
+    ("1971-04-28", "Fillmore East, the closing run. St. Stephen > Not Fade Away > Goin' Down the Road > Not Fade Away."),
+    ("1972-04-14", "Tivoli, Copenhagen. Europe '72's first week. Not Fade Away > Goin' Down the Road > Not Fade Away."),
+    ("1972-05-04", "L'Olympia, Paris. Goin' Down the Road > Not Fade Away, then One More Saturday Night."),
+    ("1972-05-26", "Lyceum, London, the last night of Europe '72. Not Fade Away > Goin' Down the Road > Not Fade Away."),
+    ("1973-06-10", "RFK Stadium, the day with the Allman Brothers. Not Fade Away > Goin' Down the Road > Drums."),
+    ("1974-10-20", "Winterland, the last night before the hiatus. Drums > Not Fade Away > Drums > The Other One."),
+    ("1977-05-08", "Barton Hall, Cornell. St. Stephen > Not Fade Away > St. Stephen > Morning Dew."),
+    ("1978-01-22", "MacArthur Court, Eugene, the Close Encounters night. St. Stephen > Not Fade Away."),
+    ("1979-10-27", "Cape Cod Coliseum. Drums with Phil > Not Fade Away > Black Peter."),
+]
+# The song sections: home row -> (menu title, icon, song, nights). One menu, two songs.
+NIGHTS = {DARKSTAR: ("★ Dark Star", "★", "Dark Star", DARK_STARS),
+          NOTFADE: ("♥ Not Fade Away", "♥", "Not Fade Away", NFA_NIGHTS)}
 SEASTONES = "seastones"  # sentinel: Phil and Ned between sets, 1974, the experiments
 # What the tapers call the set. Any of these marks the track; norm() drops the punctuation.
 SEASTONES_TITLES = ["Seastones", "Phil & Ned", "Phil and Ned", "Phil 'n' Ned", "Ned & Phil", "Phil Lesh and Ned Lagin"]
@@ -981,7 +1000,7 @@ class App:
         (HDR, "Now"),
         QUEUE, RANDOM,
         (HDR, "The Dead"),
-        YEARS_GD, DARKSTAR, SEASTONES, RAIN, TEARS, JGB,
+        YEARS_GD, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
         (HDR, "Memories"),
         # one row per MEMORIES entry goes here
         (HDR, "Not Dead"),
@@ -993,7 +1012,8 @@ class App:
         QUEUE: "▶ Now playing        the current playlist",
         RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
         YEARS_GD: "Grateful Dead        1965-1995, by year",
-        DARKSTAR: "★ Dark Star          the famous ones, and a random one after another",
+        DARKSTAR: "★ Dark Star          the famous ones, a random one after another, every one",
+        NOTFADE: "♥ Not Fade Away      the famous ones, a random one after another, every one",
         SEASTONES: "≋ Seastones          Phil and Ned between sets, 1974: the experiments, night by night",
         RAIN: "☔ Rain and Snow      random weather and water songs, a random night's version of each, on and on",
         TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
@@ -1113,18 +1133,20 @@ class App:
         d = os.path.join(gd.DEFAULT_DEST, "shows", date[:4])
         return os.path.isdir(d) and any(n.startswith(date) for n in os.listdir(d))
 
-    def push_darkstar(self):
+    def push_nights(self, key):
+        """A song's section (NIGHTS): the famous ones, a random one after another, every one."""
+        title, icon, song, nights = NIGHTS[key]
+
         def render(it, w):
             if it == "random":
-                return "  ★ A random Dark Star, then another, and another"
+                return f"  {icon} A random {song}, then another, and another"
+            if it == "every":
+                return f"  ♪ Every {song} archive.org has, one row per show"
             date, why = it
             return f"{'*' if self.night_on_disk(date) else ' '} {date}  {why}"[:w]
-        items = ["random"] + list(DARK_STARS)
-        lvl = Level("darkstar", "★ Dark Star", items, render, {"darkstar": True})
+        items = ["random", "every"] + list(nights)
+        lvl = Level("nights", title, items, render, {"nights": key})
         self.push(lvl, 0)
-
-    def play_dark_star(self, date):
-        self.play_from_song(date, ["Dark Star"], "★")
 
     # ---- Seastones
 
@@ -1745,8 +1767,8 @@ class App:
                 keys = " ↵/p tune  i probe (codec, rate, now playing)  ␣ pause  s stop  h back  q quit (music stays)"
             elif lvl.kind == "tears":
                 keys = " ↵/p find every version of this song (one row per show)  h back  q quit (music stays)"
-            elif lvl.kind == "darkstar":
-                keys = " ↵/p play that night from Dark Star on (or a random one after another)  h back  q quit (music stays)"
+            elif lvl.kind == "nights":
+                keys = " ↵/p play that night from the song on (or a random one after another, or every version)  h back  q quit (music stays)"
             elif lvl.kind == "seastones":
                 keys = " ↵/p play that night from the Seastones set on (or a random one after another)  d fetch  h back  q quit (music stays)"
             elif lvl.kind == "memory":
@@ -1825,12 +1847,16 @@ class App:
             self.random_show()
         elif lvl.kind == "home" and item == RAIN:
             self.rain()
-        elif lvl.kind == "home" and item == DARKSTAR:
-            self.push_darkstar()
-        elif lvl.kind == "darkstar" and item == "random":
-            self.rain(["Dark Star"], "★ Dark Star", "★", batch=2, more=1)
-        elif lvl.kind == "darkstar":
-            self.play_dark_star(item[0])
+        elif lvl.kind == "home" and item in NIGHTS:
+            self.push_nights(item)
+        elif lvl.kind == "nights" and item == "random":
+            title, icon, song, _ = NIGHTS[lvl.ctx["nights"]]
+            self.rain([song], title, icon, batch=2, more=1)
+        elif lvl.kind == "nights" and item == "every":
+            self.push_songs(NIGHTS[lvl.ctx["nights"]][2], gd.DEFAULT_COLLECTION)
+        elif lvl.kind == "nights":
+            title, icon, song, _ = NIGHTS[lvl.ctx["nights"]]
+            self.play_from_song(item[0], [song], icon)
         elif lvl.kind == "home" and item == SEASTONES:
             self.push_seastones()
         elif lvl.kind == "seastones" and item == "random":
@@ -1901,12 +1927,16 @@ class App:
             self.random_show()
         elif lvl.kind == "home" and item == RAIN:
             self.rain()
-        elif lvl.kind == "home" and item == DARKSTAR:
-            self.push_darkstar()
-        elif lvl.kind == "darkstar" and item == "random":
-            self.rain(["Dark Star"], "★ Dark Star", "★", batch=2, more=1)
-        elif lvl.kind == "darkstar":
-            self.play_dark_star(item[0])
+        elif lvl.kind == "home" and item in NIGHTS:
+            self.push_nights(item)
+        elif lvl.kind == "nights" and item == "random":
+            title, icon, song, _ = NIGHTS[lvl.ctx["nights"]]
+            self.rain([song], title, icon, batch=2, more=1)
+        elif lvl.kind == "nights" and item == "every":
+            self.push_songs(NIGHTS[lvl.ctx["nights"]][2], gd.DEFAULT_COLLECTION)
+        elif lvl.kind == "nights":
+            title, icon, song, _ = NIGHTS[lvl.ctx["nights"]]
+            self.play_from_song(item[0], [song], icon)
         elif lvl.kind == "home" and item == SEASTONES:
             self.push_seastones()
         elif lvl.kind == "seastones" and item == "random":
