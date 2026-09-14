@@ -79,7 +79,11 @@ Releases so far: `v2026.09.13` (the publish job failed for want of `-R`, so it w
 published by hand from the run's artifacts), `v2026.09.13.1` (the fix, published by the
 workflow), `v2026.09.13.2` (enik), `v2026.09.13.3` (cyclops), `v2026.09.13.4` (convey
 and athena; the tag's run failed on the API rate limit above, so there is no release
-for it) and `v2026.09.13.5` (the same code with the pin and the token).
+for it), `v2026.09.13.5` (the same code with the pin and the token), `v2026.09.13.6`
+and `.7`, `v2026.09.14` (the owl's dance; the Linux x86_64 job hung in `make scie
+smoke-scie` for a quarter of an hour while the other three runners finished, the run was
+cancelled, and there is no release for it) and `v2026.09.14.1` (the same code plus
+althea, published by the workflow).
 
 ## If CI cannot publish
 
