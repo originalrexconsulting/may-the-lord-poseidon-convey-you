@@ -35,7 +35,12 @@ The tag push runs `.github/workflows/release.yml`:
 2. `release`: downloads the five artifacts, writes `SHA256SUMS`, and runs
    `gh release create` with the tag, install notes and auto-generated notes.
 
-About ten minutes end to end. The release page then has six assets:
+About ten minutes end to end. Each build job has `timeout-minutes: 15`: twice on
+2026-09-14 (the Linux x86_64 job of `v2026.09.14`, the Intel Mac job of `v2026.09.14.2`)
+a runner hung in `make scie smoke-scie` while the same step took minutes elsewhere, and
+without the timeout it would have sat for GitHub's six hours. When one job times out,
+`gh run rerun --job <job-id>` reruns just that job; the other jobs' artifacts are kept and
+the publish job follows. The release page then has six assets:
 `poseidon-<ver>.pex`, the four `poseidon-<ver>-<os>-<arch>` binaries, and `SHA256SUMS`.
 `sha256sum -c SHA256SUMS --ignore-missing` verifies a downloaded pair.
 
