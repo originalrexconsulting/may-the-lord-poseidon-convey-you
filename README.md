@@ -68,9 +68,11 @@ off again, boulder and all.
 
 Athena, grey-eyed, as her owl on an olive branch under the moon over the Parthenon. The
 wings are the spectrum, one feather per band, fanning open as the music gets loud and
-snapping wide on a beat; the eyes dilate with the bass and follow the stereo balance; the
+snapping wide on a beat; the grey eyes give light with the music, brightest on a beat, the
+moon their catchlight; they dilate with the bass and follow the stereo balance; the
 head snaps toward the loudest band the way an owl's does. The body dances: a sway on the
-beat from foot to foot, a dip and a spring back taller, the head held steady above it.
+beat from foot to foot, the far wing lifting against the lean like a dancer's arm, a dip
+and a spring back taller, the head held steady above it.
 Quiet music, and it asks the
 only question an owl asks. The answer here is Nobody.
 
