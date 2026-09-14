@@ -56,7 +56,7 @@ Modes:
              snapping wide on a beat. The eyes dilate with the bass and follow the
              stereo balance; the head snaps toward the loudest band the way an owl's
              does. Quiet music and it asks the only question an owl asks; the answer
-             here is Nobody. Long enough and it turns its head all the way round
+             here is nobody. Long enough and it turns its head all the way round
   althea     the healer, not the goddess: Althaea, at the hearth in Calydon with the
              brand that holds her son's life. The fire is the spectrum, one flame per
              band, the ember of the log glows with the bass, sparks fly on a beat and
