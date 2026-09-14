@@ -57,6 +57,14 @@ Modes:
              stereo balance; the head snaps toward the loudest band the way an owl's
              does. Quiet music and it asks the only question an owl asks; the answer
              here is Nobody. Long enough and it turns its head all the way round
+  althea     the healer, not the goddess: Althaea, at the hearth in Calydon with the
+             brand that holds her son's life. The fire is the spectrum, one flame per
+             band, the ember of the log glows with the bass, sparks fly on a beat and
+             the smoke thickens with the mids. Hollyhocks, her own plant, bloom with
+             the treble. She dances seated, hair a beat behind her shoulders, one hand
+             keeping time on her knee. Music too hot for too long and she draws the
+             brand out and raises a palm: cool down boy. Settled, she puts it back.
+             Silence and she stirs the embers: easy Jim
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
@@ -83,7 +91,7 @@ BANDS = 48
 FPS = 24
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
-         "athena"]
+         "athena", "althea"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -1742,6 +1750,241 @@ class Viz:
             self.put(1, max(0, (w - 6) // 2), "ATHENA", self.fg(1.0, True, base=STAR_FG))
         if st["said"] and t < st["say_until"] and not around:
             self.put(int(hy / 4) + 2, int((hx + turn) / 2) + 8, st["said"], self.fg(0.8, False, base=STAR_FG))
+
+    # ---- althea (the healer, at the hearth in Calydon)
+    def draw_althea(self, h, w):
+        an = self.an
+        t = self.t
+        floor = h - 2
+        st = self.state("althea", h, w, lambda: {
+            "tick": -1, "quiet": 0.0, "heat": 0.0, "mode": "fire", "since": 0.0, "said": None, "say_until": 0.0,
+            "blink": 0, "phase": 0.0, "amp": 0.0, "period": 0.5, "last_beat": -9.0, "y": 0.0, "vy": 0.0,
+            "hair": 0.0, "hand": None, "palm": None, "scale": 1.0, "sparks": [], "smoke": [], "tap": 0.0})
+        dt = 1 / FPS
+        tick = int(t * 4)
+        moved = tick != st["tick"]
+        st["tick"] = tick
+        st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
+        quiet = st["quiet"] > 3
+        # the heat of the music: too much of it and she takes the brand out of the fire
+        st["heat"] = max(0.0, min(1.6, st["heat"] + (0.45 * an.rms + 0.35 * min(1.0, an.beat) - 0.18) * dt
+                                  - (0.35 * dt if st["mode"] == "cool" else 0.0)))
+        mode = st["mode"]
+        if quiet and mode != "easy":
+            mode, st["since"] = "easy", t
+            st["said"], st["say_until"] = "easy Jim", t + 4
+        elif not quiet and mode == "easy":
+            mode, st["since"] = "fire", t
+        elif mode == "fire" and st["heat"] > 1.2:
+            mode, st["since"] = "cool", t
+            st["said"], st["say_until"] = "cool down boy", t + 3
+        elif mode == "cool" and st["heat"] < 0.3 and t - st["since"] > 4:
+            mode, st["since"] = "fire", t
+            st["said"], st["say_until"] = "settle back", t + 2.5
+        st["mode"] = mode
+        if moved and self.rng.random() < 0.04:
+            st["blink"] = 2
+        st["blink"] = max(0, st["blink"] - 1)
+        # the dance, seated: the owl's sway and spring, hair a beat behind the shoulders
+        if an.beat > 0.45 and t - st["last_beat"] > 0.2:
+            gap = t - st["last_beat"]
+            if gap < 1.6:
+                st["period"] = st["period"] * 0.7 + gap * 0.3
+            st["last_beat"] = t
+            st["vy"] += 6 * min(1.0, an.beat)
+            st["tap"] = 1.0
+        st["vy"] += (-90 * st["y"] - 6 * st["vy"]) * dt
+        st["y"] += st["vy"] * dt
+        st["tap"] = max(0.0, st["tap"] - 4 * dt)
+        dancing = t - st["last_beat"] < 2.5 and not quiet
+        amp_goal = min(1.0, 0.25 + an.rms * 2.5) if dancing else 0.0
+        st["amp"] += (amp_goal - st["amp"]) * (0.06 if amp_goal > st["amp"] else 0.03)
+        if st["amp"] > 0.02:
+            st["phase"] += math.pi * dt / max(0.25, st["period"])
+        sway = math.sin(st["phase"]) * st["amp"] * 0.10
+        st["hair"] += (sway - st["hair"]) * 0.18
+        scale_goal = {"fire": 1.0, "cool": 0.45, "easy": 0.15}[mode]
+        st["scale"] += (scale_goal - st["scale"]) * 0.06
+        scale = st["scale"]
+        # geometry: figure units, (0, 0) top centre, v down; she sits left of centre, the hearth right
+        gw, gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        H = min(floor * 4 - 10, gw * 0.9)
+        cx0 = gw / 2
+        top = floor * 4 - 4 - 0.96 * H
+        hips = 0.70
+
+        def P(u, v):
+            return cx0 + u * H, top + v * H
+
+        def B(u, v, follow=1.0):                                    # her: sways and nods from the hips up
+            lift = max(0.0, hips - v) / hips
+            return (cx0 + u * H + sway * follow * lift * hips * H,
+                    top + v * H + st["y"] * 0.03 * lift * H)
+        # ---- the hollyhocks, her own plant, blooming with the treble
+        stalks = Canvas(h, w)
+        blooms = Canvas(h, w)
+        for k, u in enumerate((-0.47, -0.41, 0.42, 0.48)):
+            bend = math.sin(st["phase"] * 0.5 + k) * st["amp"] * 0.03 + math.sin(t * 0.7 + k) * 0.01
+            prev = P(u, 0.94)
+            for j, v in enumerate(np.linspace(0.94, 0.22, 10)):
+                x, y = P(u + bend * (0.94 - v) / 0.72, v)
+                stalks.line(prev[0], prev[1], x, y, 0.35, width=2)
+                if j % 2 == 1 and j < 9:
+                    side = -1 if (j // 2 + k) % 2 else 1
+                    stalks.line(x, y, x + side * 0.04 * H, y + 0.02 * H, 0.5)
+                    r = (0.014 + an.treble * 0.045) * H
+                    bx, by = x + side * 0.025 * H, y - 0.01 * H
+                    blooms.circle(bx, by, r, 0.75 + an.treble * 0.25)
+                    for p in range(5):
+                        pa = p * 2 * math.pi / 5 + t * 0.3
+                        blooms.dot(bx + math.cos(pa) * r * 0.55, by + math.sin(pa) * r * 0.55, 0.9)
+                    blooms.ellipse(bx, by, r * 0.25, r * 0.25, 0.4)
+                prev = (x, y)
+        # ---- the hearth: a ring of stones, the fire above it, the spectrum as flames
+        stones = Canvas(h, w)
+        fire = Canvas(h, w)
+        f0, f1, fv = 0.12, 0.42, 0.88
+        for i in range(9):
+            sx, sy = P(f0 - 0.02 + (f1 - f0 + 0.04) * i / 8, 0.92)
+            stones.ellipse(sx, sy, 0.03 * H, 0.02 * H, 0.2 + 0.1 * (i % 2))
+        for i in range(BANDS):
+            lvl = float(an.level[i])
+            u = f0 + (f1 - f0) * (i + 0.5) / BANDS
+            x0, y0 = P(u, fv)
+            L = (0.03 + lvl * 0.36 + min(1.0, an.beat) * 0.08) * H * scale
+            wob = math.sin(t * 9 + i * 1.7) * 0.02 * H * scale
+            fire.line(x0, y0, x0 + wob, y0 - L, 0.45 + lvl * 0.55, width=2)
+            fire.line(x0, y0, x0 + wob * 0.5, y0 - L * 0.55, 0.9, width=2)
+        if mode == "easy":                                          # embers, breathing slowly
+            for i in range(0, BANDS, 3):
+                x0, y0 = P(f0 + (f1 - f0) * (i + 0.5) / BANDS, fv - 0.01)
+                fire.dot(x0, y0, 0.3 + 0.3 * (0.5 + 0.5 * math.sin(t * 1.5 + i)))
+        # sparks on the beat, smoke with the mids
+        if an.beat > 0.4 and mode == "fire":
+            for _ in range(int(3 + an.beat * 8)):
+                x0, y0 = P(f0 + (f1 - f0) * self.rng.random(), fv - 0.2 - an.bass * 0.2)
+                st["sparks"].append([x0, y0, (self.rng.random() - 0.5) * 1.5, -(1.0 + self.rng.random() * 2.5), 20])
+        for s in st["sparks"]:
+            s[0] += s[2]
+            s[1] += s[3]
+            s[3] += 0.03
+            s[4] -= 1
+            fire.dot(s[0], s[1], 0.6 + 0.4 * s[4] / 20)
+        st["sparks"] = [s for s in st["sparks"] if s[4] > 0 and s[1] > 0]
+        smoke = Canvas(h, w)
+        if len(st["smoke"]) < 14 and self.rng.random() < 0.15 + an.mid * 0.4:
+            x0, y0 = P(f0 + (f1 - f0) * (0.3 + 0.4 * self.rng.random()), fv - 0.25 * scale)
+            st["smoke"].append([x0, y0, self.rng.random() * 6.3])
+        for p in st["smoke"]:
+            p[1] -= 0.6 + an.mid * 1.2
+            p[0] += math.sin(t * 1.3 + p[2]) * 0.4
+            smoke.dot(p[0], p[1], 0.12)
+            smoke.dot(p[0] + 1, p[1], 0.12)
+        st["smoke"] = [p for p in st["smoke"] if p[1] > 2]
+        # ---- Althea: seated, in a long dress, hair down, facing the fire
+        skin = Canvas(h, w)
+        dress = Canvas(h, w)
+        hair = Canvas(h, w)
+        dark = Canvas(h, w)
+        lw = max(2, int(H / 60))
+        hx, hy = B(-0.15, 0.30, follow=0.75)                      # the head, a little steadier than the shoulders
+        skin.ellipse(hx, hy, 0.072 * H, 0.085 * H, 0.75)
+        hs = (st["hair"] - sway) * 0.7 * H                          # the hair lags the body
+        for k in range(-3, 4):                                      # hair: strands over the crown, falling to the shoulders
+            a = math.radians(-90 + k * 22)
+            x1, y1 = hx + math.cos(a) * 0.085 * H, hy + math.sin(a) * 0.095 * H
+            side = -1 if k <= 0 else 1
+            hair.line(x1, y1, x1 + side * 0.03 * H + hs, hy + 0.20 * H, 0.35 + abs(k) * 0.06, width=2)
+        hair.ellipse(hx, hy - 0.05 * H, 0.085 * H, 0.05 * H, 0.4)
+        ex, ey = hx + 0.035 * H, hy - 0.005 * H                    # eyes on the fire (or closed for a blink)
+        for dx in (-0.045 * H, 0.0):
+            if st["blink"] > 0:
+                dark.line(ex + dx - 0.012 * H, ey, ex + dx + 0.012 * H, ey, 0.1)
+            else:
+                dark.ellipse(ex + dx, ey, 0.011 * H, 0.011 * H, 0.05)
+        dark.line(hx + 0.005 * H, hy + 0.045 * H, hx + 0.035 * H, hy + 0.04 * H, 0.1)   # a mouth, turned to the fire
+        nx, ny = B(-0.15, 0.38, follow=0.85)
+        sx2, sy2 = B(-0.15, 0.44)
+        skin.line(nx, ny, sx2, sy2, 0.7, width=lw * 2)
+        dress.poly([B(-0.27, 0.44), B(-0.03, 0.44), B(-0.06, 0.60), B(0.05, 0.75), P(0.07, 0.94),
+                    P(-0.37, 0.94), B(-0.35, 0.75), B(-0.24, 0.60)], 0.35 + an.mid * 0.15)
+        dress.line(*B(-0.27, 0.44), *B(-0.03, 0.44), 0.7, width=lw)   # the neckline
+        for k in range(1, 4):                                       # folds in the skirt
+            fx0, fy0 = B(-0.15 + (k - 2) * 0.06, 0.62)
+            fx1, fy1 = P(-0.15 + (k - 2) * 0.11, 0.94)
+            dark.line(fx0, fy0, fx1, fy1, 0.15)
+        # the right arm holds the brand: in the fire, drawn back to her lap, or stirring the embers
+        shoulder = B(-0.05, 0.47)
+        if mode == "cool":
+            goal = B(-0.10, 0.66)
+        elif mode == "easy":
+            goal = (P(f0 + 0.02, 0.66)[0] + math.sin(t * 1.4) * 0.05 * H, P(0, 0.64)[1])
+        else:
+            goal = P(f0 + 0.03, 0.64)
+        if st["hand"] is None:
+            st["hand"] = list(goal)
+        st["hand"][0] += (goal[0] - st["hand"][0]) * 0.1
+        st["hand"][1] += (goal[1] - st["hand"][1]) * 0.1
+        hand = tuple(st["hand"])
+        mid = ((shoulder[0] + hand[0]) / 2, (shoulder[1] + hand[1]) / 2)
+        elbow = (mid[0] - 0.02 * H, mid[1] + 0.08 * H)
+        skin.line(*shoulder, *elbow, 0.7, width=lw + 1)
+        skin.line(*elbow, *hand, 0.7, width=lw)
+        skin.ellipse(hand[0], hand[1], 0.018 * H, 0.018 * H, 0.8)
+        # the brand: the half-burnt log, its ember end in the fire, or across her lap
+        brand = Canvas(h, w)
+        if mode == "cool":
+            tip = (hand[0] - 0.20 * H, hand[1] - 0.02 * H)
+        else:
+            tip = (hand[0] + 0.22 * H, hand[1] + 0.20 * H * (1 if mode == "fire" else 1.02))
+        brand.line(*hand, *tip, 0.2, width=lw + 2)
+        ember = Canvas(h, w)
+        glow = 0.5 + min(1.0, an.bass * 1.6) * 0.5
+        ember.ellipse(tip[0], tip[1], 0.03 * H, 0.02 * H, glow)
+        # the left hand: keeps time on her knee, or comes up, palm out, the healer's hand
+        shoulder2 = B(-0.26, 0.47)
+        if mode == "cool":
+            goal2 = B(-0.36, 0.40)
+        else:
+            k = B(-0.30, 0.74)
+            goal2 = (k[0], k[1] - st["tap"] * 0.05 * H)
+        if st["palm"] is None:
+            st["palm"] = list(goal2)
+        st["palm"][0] += (goal2[0] - st["palm"][0]) * 0.15
+        st["palm"][1] += (goal2[1] - st["palm"][1]) * 0.15
+        palm = tuple(st["palm"])
+        mid2 = ((shoulder2[0] + palm[0]) / 2, (shoulder2[1] + palm[1]) / 2)
+        elbow2 = (mid2[0] - 0.06 * H, mid2[1] + (0.02 if mode == "cool" else 0.06) * H)
+        skin.line(*shoulder2, *elbow2, 0.7, width=lw + 1)
+        skin.line(*elbow2, *palm, 0.7, width=lw)
+        skin.ellipse(palm[0], palm[1], 0.02 * H, 0.022 * H, 0.8)
+        rings = Canvas(h, w)
+        if mode == "cool":                                          # the calm going out from the palm
+            for k in range(3):
+                r = ((t - st["since"]) * 0.12 + k * 0.08) % 0.24 * H
+                rings.circle(palm[0], palm[1], r, 0.9 - r / (0.24 * H) * 0.7)
+        # ---- paint: floor, hollyhocks, smoke, hearth and fire, then her in front of the glow
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.25, False, base=RADIAL_FG))
+        stalks.paint(self, bold=False, base=RAIN_FG)
+        blooms.paint(self, bold=an.treble > 0.35, base=SPIRAL_FG)
+        smoke.paint(self, bold=False, base=STAR_FG)
+        stones.paint(self, bold=False, base=RADIAL_FG)
+        fire.paint(self, bold=an.beat > 0.3 or an.bass > 0.4, base=MAIN_FG)
+        for cv in (skin, dress, hair):
+            for (cy, cx), _ in cv.cells.items():
+                self.put(cy, cx, " ")
+        dress.paint(self, bold=False, base=SPIRAL_FG)
+        hair.paint(self, bold=False, base=RADIAL_FG)
+        skin.paint(self, bold=True, base=RADIAL_FG)
+        dark.paint(self, bold=False, base=RADIAL_FG)
+        brand.paint(self, bold=False, base=RADIAL_FG)
+        ember.paint(self, bold=True, base=MAIN_FG)
+        rings.paint(self, bold=True, base=STAR_FG)
+        # ---- words
+        if an.beat > 0.5:
+            self.put(1, max(0, (w - 6) // 2), "ALTHEA", self.fg(1.0, True, base=SPIRAL_FG))
+        if st["said"] and t < st["say_until"]:
+            self.put(max(2, int(hy / 4) - 1), int(hx / 2) + 6, st["said"], self.fg(0.85, True, base=STAR_FG))
 
     def next_mode(self, step=1):
         self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
