@@ -87,8 +87,11 @@ and athena; the tag's run failed on the API rate limit above, so there is no rel
 for it), `v2026.09.13.5` (the same code with the pin and the token), `v2026.09.13.6`
 and `.7`, `v2026.09.14` (the owl's dance; the Linux x86_64 job hung in `make scie
 smoke-scie` for a quarter of an hour while the other three runners finished, the run was
-cancelled, and there is no release for it) and `v2026.09.14.1` (the same code plus
-althea, published by the workflow).
+cancelled, and there is no release for it), `v2026.09.14.1` (the same code plus
+althea, published by the workflow), `v2026.09.14.2` (the owl's level gaze; the Intel
+Mac job hung the same way and was rerun on its own), `v2026.09.14.3` (the 15-minute
+timeout on the build jobs) and `v2026.09.14.4` (the owl's grey eyes give light, the
+far wing lifts against the lean; all four runners in about ninety seconds).
 
 ## If CI cannot publish
 
