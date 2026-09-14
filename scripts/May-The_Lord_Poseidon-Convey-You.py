@@ -25,7 +25,11 @@ Mission in the Rain, Boston 6/12/76.
 `🎲 Random show` picks a year and a night in it (rated 4+ when the year has such),
 opens it, and plays the best source. `★ Dark Star` lists the famous ones (DARK_STARS: date and why; ↵ plays that night from
 Dark Star on, best source that really has it, on disk first) above a row that plays a
-random Dark Star, then another, and another. `☔ Rain and Snow` plays weather and water
+random Dark Star, then another, and another. `≋ Seastones` lists every 1974 night archive.org
+has a Phil Lesh and Ned Lagin set for (SEASTONES_NIGHTS, Miami 6/23 to Winterland 10/20; ↵ plays
+that night from the Seastones set on, whatever the tapers called it: Seastones, Phil & Ned,
+Phil 'n' Ned...), a random-one-after-another row, and the 1975-06-06 Dominican College evening
+of it with Jerry and Mickey (SEASTONES_DOCS). `☔ Rain and Snow` plays weather and water
 songs (RAIN_SONGS): a random song, a random night's version of it (on-disk shows
 first some of the time), four to start, and three more each time the last one begins.
 Playback goes through mpv (JSON IPC over a unix socket), which plays through
@@ -135,6 +139,38 @@ DARK_STARS = [         # (date, why), oldest first; ↵ plays that night from Da
     ("1974-10-18", "Winterland, the farewell run before the hiatus. Dark Star > Morning Dew."),
     ("1989-10-09", "Hampton. The Warlocks. Dark Star returns after five years."),
     ("1990-03-29", "Nassau Coliseum, with Branford Marsalis. The last great one."),
+]
+SEASTONES = "seastones"  # sentinel: Phil and Ned between sets, 1974, the experiments
+# What the tapers call the set. Any of these marks the track; norm() drops the punctuation.
+SEASTONES_TITLES = ["Seastones", "Phil & Ned", "Phil and Ned", "Phil 'n' Ned", "Ned & Phil", "Phil Lesh and Ned Lagin"]
+SEASTONES_NIGHTS = [  # (date, where), oldest first: every 1974 night archive.org has the set for
+    ("1974-06-23", "Jai-Alai Fronton, Miami. The first one: Phil and Ned alone with the Wall of Sound."),
+    ("1974-06-26", "Providence Civic Center."),
+    ("1974-06-28", "Boston Garden."),
+    ("1974-06-30", "Springfield Civic Center."),
+    ("1974-07-19", "Selland Arena, Fresno."),
+    ("1974-07-21", "Hollywood Bowl."),
+    ("1974-07-27", "Roanoke Civic Center."),
+    ("1974-07-31", "Dillon Stadium, Hartford."),
+    ("1974-08-04", "Philadelphia Civic Center, night one."),
+    ("1974-08-05", "Philadelphia Civic Center, night two."),
+    ("1974-08-06", "Roosevelt Stadium, Jersey City."),
+    ("1974-09-10", "Alexandra Palace, London, night one."),
+    ("1974-09-11", "Alexandra Palace, London. Jerry and Billy join in and it becomes a jam."),
+    ("1974-09-14", "Olympiahalle, Munich."),
+    ("1974-09-18", "Parc des Expositions, Dijon."),
+    ("1974-09-21", "Palais des Sports, Paris. The last night in Europe."),
+    ("1974-10-16", "Winterland, the farewell run, night one. Jerry joins and it opens into space."),
+    ("1974-10-17", "Winterland, night two."),
+    ("1974-10-18", "Winterland, night three."),
+    ("1974-10-19", "Winterland, night four."),
+    ("1974-10-20", "Winterland, the last night before the hiatus, and of The Grateful Dead Movie."),
+]
+SEASTONES_DOCS = [  # whole evenings of it, outside the Dead collection; ↵ plays the item
+    {"identifier": "jg75-06-06.013994.seastones.sbd.jim.sbeok.t-flac16", "date": "1975-06-06",
+     "collection": ["taperssection"], "kind": "sbd", "seastones": True,
+     "venue": "Angelico Hall, Dominican College, San Rafael",
+     "note": "Jerry, Mickey, Phil and Ned, an hour of it in nine pieces. Soundboard."},
 ]
 YEARS_GD = ("years", "GratefulDead")   # home row that opens the Dead years
 HDR = "hdr"            # (HDR, text): a section header on the home screen, not selectable
@@ -453,7 +489,11 @@ def show_title(doc, meta):
     md = meta.get("metadata", {})
     if doc.get("lp"):
         return f"{doc.get('artist')}: {doc.get('title') or md.get('title')} ({doc['date'][:4]})"
-    return f"{doc['date']} {md.get('venue') or md.get('coverage') or ''}".strip()
+    return f"{doc['date']} {md.get('venue') or md.get('coverage') or doc.get('venue') or ''}".strip()
+
+
+def seastones_doc(identifier):
+    return next((d for d in SEASTONES_DOCS if d["identifier"] == identifier), None)
 
 
 def album_docs(menu=None):
@@ -828,7 +868,8 @@ class App:
 
     def save_state(self, doc, track_i, time_pos=None):
         self.state = {"last": "show", "year": doc["date"][:4], "date": doc["date"], "identifier": doc["identifier"],
-                      "track": track_i, "time": time_pos, "collection": doc_collection(doc), "lp": doc.get("lp", False)}
+                      "track": track_i, "time": time_pos, "collection": doc_collection(doc), "lp": doc.get("lp", False),
+                      "seastones": doc.get("seastones", False)}
         self.write_state()
 
     def save_radio_state(self, key):
@@ -894,6 +935,14 @@ class App:
                     if st.get("time"):
                         self.say(f"r resumes at {fmt_time(st['time'])}", 8)
                 return
+            if st.get("seastones"):
+                doc = seastones_doc(st["identifier"])
+                if doc:
+                    self.push_seastones(doc)
+                    self.push_tracks(doc, int(st.get("track") or 0))
+                    if st.get("time"):
+                        self.say(f"r resumes at {fmt_time(st['time'])}", 8)
+                return
             year = int(st["year"])
             coll = st.get("collection") or gd.DEFAULT_COLLECTION
             self.push_years(coll)
@@ -932,7 +981,7 @@ class App:
         (HDR, "Now"),
         QUEUE, RANDOM,
         (HDR, "The Dead"),
-        YEARS_GD, DARKSTAR, RAIN, TEARS, JGB,
+        YEARS_GD, DARKSTAR, SEASTONES, RAIN, TEARS, JGB,
         (HDR, "Memories"),
         # one row per MEMORIES entry goes here
         (HDR, "Not Dead"),
@@ -945,6 +994,7 @@ class App:
         RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
         YEARS_GD: "Grateful Dead        1965-1995, by year",
         DARKSTAR: "★ Dark Star          the famous ones, and a random one after another",
+        SEASTONES: "≋ Seastones          Phil and Ned between sets, 1974: the experiments, night by night",
         RAIN: "☔ Rain and Snow      random weather and water songs, a random night's version of each, on and on",
         TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
         JGB: "JGB                  Melvin Seals & Jerry Garcia Band, 1996 on, after Jerry",
@@ -972,7 +1022,7 @@ class App:
         items = self.home_items()
         lvl = Level("home", "Poseidon", items, render, {"home": True})
         st = self.state
-        want = RADIO if st.get("last") == "radio" else (
+        want = RADIO if st.get("last") == "radio" else SEASTONES if st.get("seastones") else (
             (st.get("lp") if st.get("lp") in ALBUMS else FIRESIGN) if st.get("lp") else (
                 JGB if st.get("collection") == "JGB" else YEARS_GD))
         self.push(lvl, items.index(want) if want in items else items.index(YEARS_GD))
@@ -1058,22 +1108,44 @@ class App:
 
     # ---- Dark Star
 
+    @staticmethod
+    def night_on_disk(date):
+        d = os.path.join(gd.DEFAULT_DEST, "shows", date[:4])
+        return os.path.isdir(d) and any(n.startswith(date) for n in os.listdir(d))
+
     def push_darkstar(self):
         def render(it, w):
             if it == "random":
                 return "  ★ A random Dark Star, then another, and another"
             date, why = it
-            loc = "*" if os.path.isdir(os.path.join(gd.DEFAULT_DEST, "shows", date[:4])) and any(
-                n.startswith(date) for n in os.listdir(os.path.join(gd.DEFAULT_DEST, "shows", date[:4]))) else " "
-            return f"{loc} {date}  {why}"[:w]
+            return f"{'*' if self.night_on_disk(date) else ' '} {date}  {why}"[:w]
         items = ["random"] + list(DARK_STARS)
         lvl = Level("darkstar", "★ Dark Star", items, render, {"darkstar": True})
         self.push(lvl, 0)
 
     def play_dark_star(self, date):
-        """That night, from Dark Star on: the best source that really has it, on disk first."""
+        self.play_from_song(date, ["Dark Star"], "★")
+
+    # ---- Seastones
+
+    def push_seastones(self, select=None):
+        def render(it, w):
+            if it == "random":
+                return "  ≋ A random Seastones, then another, and another"
+            if isinstance(it, dict):
+                loc = "*" if os.path.isdir(local_show_dir(it)) else " "
+                return f"{loc} {it['date']}  {it['venue']}. {it['note']}"[:w]
+            date, why = it
+            return f"{'*' if self.night_on_disk(date) else ' '} {date}  {why}"[:w]
+        items = ["random"] + list(SEASTONES_NIGHTS) + list(SEASTONES_DOCS)
+        lvl = Level("seastones", "≋ Seastones", items, render, {"seastones": True})
+        self.push(lvl, items.index(select) if select in items else 0)
+
+    def play_from_song(self, date, songs, icon):
+        """That night, from the first track titled like any of `songs` on: the best source
+        that really has it, on disk first."""
         year = int(date[:4])
-        self.loading(f"★ {date}: finding Dark Star...")
+        self.loading(f"{icon} {date}: finding {songs[0]}...")
         try:
             entry = next((d for d in group_dates(year_docs(year)) if d["date"] == date), None)
         except Exception as e:
@@ -1086,16 +1158,16 @@ class App:
         items.sort(key=lambda d: not os.path.isdir(local_show_dir(d)))
         for doc in items[:8]:
             try:
-                files, _, _ = gd.choose_files(item_meta(doc["identifier"]), "best", "Dark Star")
-                if not files:
+                meta = item_meta(doc["identifier"])
+                if not any(gd.choose_files(meta, "best", s)[0] for s in songs):
                     continue
-                idx, tracks, meta = self.song_track_index(doc, "Dark Star")
+                idx, tracks, meta = self.song_track_index(doc, songs)
             except Exception:
                 continue
             self.play_doc(doc, idx)
             self.push_tracks(doc, idx)
             return
-        self.say(f"no source of {date} lists Dark Star")
+        self.say(f"no source of {date} lists {songs[0]}")
 
     def random_show(self):
         """Any night: a random year, a random date in it (rated 4+ when the year has such), best source."""
@@ -1449,9 +1521,11 @@ class App:
         self.push(lvl)
 
     def song_track_index(self, doc, song):
+        """Index of the first track titled like `song` (one title or a list of them), else 0."""
+        songs = [song] if isinstance(song, str) else list(song)
         tracks, meta = tracks_for(doc)
         for i, t in enumerate(tracks):
-            if gd.song_matches(song, t["title"]) or gd.song_matches(song, os.path.basename(t["src"])):
+            if any(gd.song_matches(s, t["title"]) or gd.song_matches(s, os.path.basename(t["src"])) for s in songs):
                 return i, tracks, meta
         return 0, tracks, meta
 
@@ -1524,6 +1598,8 @@ class App:
         doc = None
         if st.get("lp"):
             doc = next((d for d in album_docs() if d["identifier"] == st["identifier"]), None)
+        elif st.get("seastones"):
+            doc = seastones_doc(st["identifier"])
         try:
             for d in ([] if doc else year_docs(int(st["year"]), st.get("collection") or gd.DEFAULT_COLLECTION)):
                 if d["identifier"] == st["identifier"]:
@@ -1671,6 +1747,8 @@ class App:
                 keys = " ↵/p find every version of this song (one row per show)  h back  q quit (music stays)"
             elif lvl.kind == "darkstar":
                 keys = " ↵/p play that night from Dark Star on (or a random one after another)  h back  q quit (music stays)"
+            elif lvl.kind == "seastones":
+                keys = " ↵/p play that night from the Seastones set on (or a random one after another)  d fetch  h back  q quit (music stays)"
             elif lvl.kind == "memory":
                 keys = " ↵/p play this part  a play the whole evening in order  ␣ pause  n/b trk  h back  q quit (music stays)"
             elif lvl.kind == "history":
@@ -1753,6 +1831,15 @@ class App:
             self.rain(["Dark Star"], "★ Dark Star", "★", batch=2, more=1)
         elif lvl.kind == "darkstar":
             self.play_dark_star(item[0])
+        elif lvl.kind == "home" and item == SEASTONES:
+            self.push_seastones()
+        elif lvl.kind == "seastones" and item == "random":
+            self.rain(["Seastones"], "≋ Seastones", "≋", batch=2, more=1)
+        elif lvl.kind == "seastones" and isinstance(item, dict):
+            self.play_doc(item)
+            self.push_tracks(item)
+        elif lvl.kind == "seastones":
+            self.play_from_song(item[0], SEASTONES_TITLES, "≋")
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1820,6 +1907,15 @@ class App:
             self.rain(["Dark Star"], "★ Dark Star", "★", batch=2, more=1)
         elif lvl.kind == "darkstar":
             self.play_dark_star(item[0])
+        elif lvl.kind == "home" and item == SEASTONES:
+            self.push_seastones()
+        elif lvl.kind == "seastones" and item == "random":
+            self.rain(["Seastones"], "≋ Seastones", "≋", batch=2, more=1)
+        elif lvl.kind == "seastones" and isinstance(item, dict):
+            self.play_doc(item)
+            self.push_tracks(item)
+        elif lvl.kind == "seastones":
+            self.play_from_song(item[0], SEASTONES_TITLES, "≋")
         elif lvl.kind == "queue":
             self.mpv.cmd("playlist-play-index", i)
         elif lvl.kind == "tears":
@@ -1962,6 +2058,8 @@ class App:
         elif ch == ord("d"):
             i, item = self.current()
             if lvl.kind in ("sources", "songs", "albums") and item:
+                self.download(item)
+            elif lvl.kind == "seastones" and isinstance(item, dict):
                 self.download(item)
             elif lvl.kind == "tracks":
                 self.download(lvl.ctx["doc"])

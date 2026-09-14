@@ -16,7 +16,8 @@ scripts/restore-playlist.py                   # snapshot / restore the mpv playl
 
 The TUI browses years, dates, sources and tracks; plays local FLAC when a show
 has been fetched and streams otherwise; has JGB, Firesign Theatre, Jokes,
-Tears, Rain and Snow, Random show, a memory set list, History and Now Playing;
+Tears, Dark Star, Seastones (Phil and Ned's 1974 experiments), Rain and Snow,
+Random show, a memory set list, History and Now Playing;
 adopts an mpv it finds already running (q keeps the music, Q stops it); and
 starts with Poseidon, trident raised.
 
