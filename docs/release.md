@@ -96,7 +96,7 @@ far wing lifts against the lean; all four runners in about ninety seconds) and
 the taperssection tapes under creator Jerry Garcia, since archive.org's `JGB`
 collection is Melvin Seals' band after him) and `v2026.09.14.6` (volume control: +/-
 step mpv's software gain by 5 within 0-100, m mutes, the level is remembered in
-state.json; all four runners in under two minutes).
+state.json; all four runners in under two minutes) and `v2026.09.14.7` (the day's big one, three merged PRs: This day, Tours, On the air, Bookmarks, Stats and the taper's notes in the TUI; the scylla, sleestak, stealie and wall light show modes, 24 in all; the sleep timer with a fade, the phone remote on port 8402, and `poseidon play` / `poseidon remote` for a player without the TUI; all four runners and the publish job in about a minute and a half).
 
 ## If CI cannot publish
 
