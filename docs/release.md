@@ -90,8 +90,11 @@ smoke-scie` for a quarter of an hour while the other three runners finished, the
 cancelled, and there is no release for it), `v2026.09.14.1` (the same code plus
 althea, published by the workflow), `v2026.09.14.2` (the owl's level gaze; the Intel
 Mac job hung the same way and was rerun on its own), `v2026.09.14.3` (the 15-minute
-timeout on the build jobs) and `v2026.09.14.4` (the owl's grey eyes give light, the
-far wing lifts against the lean; all four runners in about ninety seconds).
+timeout on the build jobs), `v2026.09.14.4` (the owl's grey eyes give light, the
+far wing lifts against the lean; all four runners in about ninety seconds) and
+`v2026.09.14.5` (the Memories section is gone, and JGB is Jerry's own band, 1970-1995:
+the taperssection tapes under creator Jerry Garcia, since archive.org's `JGB`
+collection is Melvin Seals' band after him).
 
 ## If CI cannot publish
 
