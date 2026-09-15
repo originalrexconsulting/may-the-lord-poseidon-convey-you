@@ -63,14 +63,46 @@ DL_BASE = "https://archive.org/download/"
 # The library: $POSEIDON_LIBRARY > dead/ beside scripts/ in a checkout > ~/Music/dead.
 DEFAULT_DEST = poseidon.library_dir()
 # archive.org collection -> subdirectory of DEFAULT_DEST for whole shows.
-# "JGB" is Melvin Seals & JGB (1996 on): the band Jerry left behind. Jerry's own
-# Garcia Band tapes were removed from archive.org at the estate's request.
-COLLECTION_DIRS = {"GratefulDead": "shows", "JGB": "jgb", "album_recordings": "lp"}
+# "JerryGarcia" is not an archive.org collection. Jerry's own bands (Garcia Band, Legion of
+# Mary, Garcia/Saunders, Reconstruction, the acoustic band), 1970-1995, lost their collection
+# at the estate's request; the tapes sit in taperssection as items with creator "Jerry Garcia"
+# (about 1,650 of them, every year, FLAC, unrated, the venue in the item title), so
+# COLLECTION_QUERIES spells out that search and collection_of() knows them by creator.
+# archive.org's "JGB" collection is Melvin Seals' band, 1996 on, without Jerry: not here.
+COLLECTION_DIRS = {"GratefulDead": "shows", "JerryGarcia": "jgb", "album_recordings": "lp"}
+COLLECTION_QUERIES = {"JerryGarcia": 'creator:"Jerry Garcia" AND collection:taperssection'
+                                     ' AND date:[1970-01-01 TO 1995-12-31]'}
+# ...and what to leave out of it: interviews, rehearsals, studio outtakes (44 of about 1,650).
+COLLECTION_SKIP = {"JerryGarcia": re.compile(r"interview|rehears|studio|outtake|demo", re.I)}
 DEFAULT_COLLECTION = "GratefulDead"
 
 
+def collection_of(doc):
+    """Which of COLLECTION_DIRS a search doc or an item's metadata belongs to."""
+    coll = doc.get("collection") or []
+    if isinstance(coll, str):
+        coll = [coll]
+    creator = doc.get("creator") or []
+    if isinstance(creator, str):
+        creator = [creator]
+    if "Jerry Garcia" in creator and "taperssection" in coll:
+        return "JerryGarcia"
+    return next((c for c in coll if c in COLLECTION_DIRS), DEFAULT_COLLECTION)
+
+
+def venue_of(md):
+    """venue/coverage, or the venue out of a taperssection title ("... live at <venue> on <date>")."""
+    v = md.get("venue") or md.get("coverage")
+    if not v:
+        m = re.search(r"\blive at (.+?) on \d{4}-\d{2}-\d{2}", str(md.get("title") or ""), re.I)
+        v = m.group(1) if m else ""
+    return v
+
+
 def collection_dir(coll):
-    """Subdirectory for an item's collection list (or a single collection name)."""
+    """Subdirectory for a doc or item metadata, a collection list, or a single collection name."""
+    if isinstance(coll, dict):
+        return COLLECTION_DIRS[collection_of(coll)]
     if isinstance(coll, str):
         coll = [coll]
     for c in coll or []:
@@ -197,7 +229,8 @@ def choose_files(meta, fmt="best", song=None):
 # --------------------------------------------------------------------------- search
 
 def build_query(args):
-    q = [f"collection:{getattr(args, 'collection', None) or DEFAULT_COLLECTION}", "mediatype:etree"]
+    coll = getattr(args, "collection", None) or DEFAULT_COLLECTION
+    q = [f"({COLLECTION_QUERIES[coll]})" if coll in COLLECTION_QUERIES else f"collection:{coll} AND mediatype:etree"]
     if getattr(args, "year", None):
         q.append(f"date:[{args.year}-01-01 TO {args.year}-12-31]")
     if getattr(args, "date", None):
@@ -222,16 +255,21 @@ def search(args):
     docs, page = [], 1
     while len(docs) < args.limit:
         params = {"q": q, "fl[]": ["identifier", "date", "title", "avg_rating", "num_reviews", "downloads",
-                                   "source", "collection", "venue", "coverage", "format"],
+                                   "source", "collection", "creator", "venue", "coverage", "format"],
                   "rows": min(1000, args.limit - len(docs)), "page": page, "output": "json", "sort[]": args.sort}
         resp = _json(API_SEARCH + "?" + urllib.parse.urlencode(params, doseq=True))["response"]
         docs.extend(resp["docs"])
         if len(docs) >= resp["numFound"] or not resp["docs"]:
             break
         page += 1
+    skip = COLLECTION_SKIP.get(getattr(args, "collection", None) or DEFAULT_COLLECTION)
+    if skip:
+        docs = [d for d in docs if not (skip.search(d["identifier"]) or skip.search(d.get("title") or ""))]
     for d in docs:
         d["kind"] = source_kind(d)
         d["date"] = (d.get("date") or "")[:10]
+        if not d.get("venue") and not d.get("coverage"):
+            d["venue"] = venue_of(d)   # taperssection items carry the venue in the title only
     if getattr(args, "source", None) and args.source != "any":
         docs = [d for d in docs if d["kind"] == args.source]
     return q, docs
@@ -293,7 +331,7 @@ def cmd_show(args):
     print(f"identifier : {args.identifier}")
     print(f"title      : {md.get('title')}")
     print(f"date       : {md.get('date')}")
-    print(f"venue      : {md.get('venue') or md.get('coverage')}")
+    print(f"venue      : {venue_of(md)}")
     print(f"source     : {md.get('source')}")
     print(f"lineage    : {md.get('lineage')}")
     print(f"taper      : {md.get('taper')}")
@@ -440,7 +478,7 @@ def stored_md5(path):
 def show_tags(md, f, index, total):
     """Vorbis-style tag dict for track `f` of the item described by `md`."""
     date = (md.get("date") or "")[:10]
-    venue = md.get("venue") or md.get("coverage") or ""
+    venue = venue_of(md)
     return {"title": f["title"], "artist": ARTIST, "albumartist": ARTIST,
             "album": f"{date} {venue}".strip(), "date": date,
             "tracknumber": str(index), "tracktotal": str(total),
@@ -527,7 +565,7 @@ def convert_show(outdir, m, keep=False):
 def show_dir(dest, meta):
     md = meta["metadata"]
     date = (md.get("date") or "0000-00-00")[:10]
-    return os.path.join(dest, collection_dir(md.get("collection")), date[:4], f"{date}.{md['identifier']}")
+    return os.path.join(dest, collection_dir(md), date[:4], f"{date}.{md['identifier']}")
 
 
 def fetch_item(identifier, dest, fmt="best", song=None, verify=True, dry_run=False, tag=True, keep_shn=False):
@@ -535,7 +573,7 @@ def fetch_item(identifier, dest, fmt="best", song=None, verify=True, dry_run=Fal
     md = m["metadata"]
     files, so, ext = choose_files(m, fmt, song)
     date = (md.get("date") or "")[:10]
-    label = f"{date} {md.get('venue') or md.get('coverage') or ''} [{identifier}]"
+    label = f"{date} {venue_of(md)} [{identifier}]"
     if not files:
         why = "stream-only item; only mp3/ogg derivatives are downloadable" if so else "no files match"
         print(f"SKIP {label}: {why} (format={fmt}, song={song})")
@@ -663,8 +701,9 @@ def cmd_urls(args):
 # --------------------------------------------------------------------------- cli
 
 def add_search_args(p):
-    p.add_argument("--collection", default=DEFAULT_COLLECTION, choices=["GratefulDead", "JGB"],
-                   help="archive.org collection: GratefulDead (default) or JGB (Melvin Seals & JGB, 1996 on)")
+    p.add_argument("--collection", default=DEFAULT_COLLECTION, choices=["GratefulDead", "JerryGarcia"],
+                   help="GratefulDead (default, the archive.org collection) or JerryGarcia "
+                        "(Jerry's own bands 1970-1995: the taperssection tapes with creator Jerry Garcia)")
     p.add_argument("--year", type=int)
     p.add_argument("--date", help="YYYY-MM-DD")
     p.add_argument("--song", help="track title to look for, e.g. 'Jack Straw'")

@@ -166,15 +166,13 @@
 <text x="12.0" y="116" fill="#0d1117">    Grateful Dead        1965-1995, by year                                                                                                                  </text>
 <text x="12.0" y="134" fill="#c9d1d9">    ☔ Rain and Snow      random weather and water songs, a random night's version of each, on and on</text>
 <text x="12.0" y="152" fill="#c9d1d9">    Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...</text>
-<text x="12.0" y="170" fill="#c9d1d9">    JGB                  Melvin Seals &amp; Jerry Garcia Band, 1996 on, after Jerry</text>
-<text x="12.0" y="188" fill="#39c5cf" font-weight="bold">Memories</text>
-<text x="12.0" y="206" fill="#c9d1d9">    ✦ crazyPosiedonEarthShakerMemoryof20260913GenesisDay</text>
-<text x="12.0" y="224" fill="#39c5cf" font-weight="bold">Not Dead</text>
-<text x="12.0" y="242" fill="#c9d1d9">    ♪ Classical radio    lossless FLAC stations</text>
-<text x="12.0" y="260" fill="#c9d1d9">    Firesign Theatre     the LPs, 24-bit vinyl transfers</text>
-<text x="12.0" y="278" fill="#c9d1d9">    Jokes                comedy LPs: Buckley, Bruce, Sahl, Newhart, Pryor, the Goons, Python...</text>
-<text x="12.0" y="296" fill="#39c5cf" font-weight="bold">Everything</text>
-<text x="12.0" y="314" fill="#c9d1d9">    History              everything played, newest first</text>
+<text x="12.0" y="170" fill="#c9d1d9">    JGB                  Jerry Garcia Band, 1970-1995, and Legion of Mary, Garcia/Saunders, Reconstruction, the acoustic band</text>
+<text x="12.0" y="188" fill="#39c5cf" font-weight="bold">Not Dead</text>
+<text x="12.0" y="206" fill="#c9d1d9">    ♪ Classical radio    lossless FLAC stations</text>
+<text x="12.0" y="224" fill="#c9d1d9">    Firesign Theatre     the LPs, 24-bit vinyl transfers</text>
+<text x="12.0" y="242" fill="#c9d1d9">    Jokes                comedy LPs: Buckley, Bruce, Sahl, Newhart, Pryor, the Goons, Python...</text>
+<text x="12.0" y="260" fill="#39c5cf" font-weight="bold">Everything</text>
+<text x="12.0" y="278" fill="#c9d1d9">    History              everything played, newest first</text>
 <text x="12.0" y="782" fill="#768390">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
 <text x="12.0" y="800" fill="#768390"> stopped</text>
 <text x="12.0" y="836" fill="#768390"> ↵ open  p play  w now playing  c radio  f song  g goto  r resume  v show  q quit (music stays)  Q stop &amp; quit</text>
