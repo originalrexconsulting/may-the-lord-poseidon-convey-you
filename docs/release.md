@@ -38,7 +38,8 @@ The tag push runs `.github/workflows/release.yml`:
 About ten minutes end to end. Each build job has `timeout-minutes: 15`: twice on
 2026-09-14 (the Linux x86_64 job of `v2026.09.14`, the Intel Mac job of `v2026.09.14.2`)
 a runner hung in `make scie smoke-scie` while the same step took minutes elsewhere, and
-without the timeout it would have sat for GitHub's six hours. When one job times out,
+without the timeout it would have sat for GitHub's six hours. When one job times out, or a download to a runner drops mid-transfer (the Intel Mac job of
+`v2026.09.14.8`),
 `gh run rerun --job <job-id>` reruns just that job; the other jobs' artifacts are kept and
 the publish job follows. The release page then has six assets:
 `poseidon-<ver>.pex`, the four `poseidon-<ver>-<os>-<arch>` binaries, and `SHA256SUMS`.
@@ -96,7 +97,7 @@ far wing lifts against the lean; all four runners in about ninety seconds) and
 the taperssection tapes under creator Jerry Garcia, since archive.org's `JGB`
 collection is Melvin Seals' band after him) and `v2026.09.14.6` (volume control: +/-
 step mpv's software gain by 5 within 0-100, m mutes, the level is remembered in
-state.json; all four runners in under two minutes) and `v2026.09.14.7` (the day's big one, three merged PRs: This day, Tours, On the air, Bookmarks, Stats and the taper's notes in the TUI; the scylla, sleestak, stealie and wall light show modes, 24 in all; the sleep timer with a fade, the phone remote on port 8402, and `poseidon play` / `poseidon remote` for a player without the TUI; all four runners and the publish job in about a minute and a half).
+state.json; all four runners in under two minutes) and `v2026.09.14.7` (the day's big one, three merged PRs: This day, Tours, On the air, Bookmarks, Stats and the taper's notes in the TUI; the scylla, sleestak, stealie and wall light show modes, 24 in all; the sleep timer with a fade, the phone remote on port 8402, and `poseidon play` / `poseidon remote` for a player without the TUI; all four runners and the publish job in about a minute and a half) and `v2026.09.14.8` (README screenshots for the day's menus and modes, the Sleestak warming up at real loudness, Charybdis drinking less often; the Intel Mac job failed in `make scie` when the download of its Python dropped mid-transfer, `httpx.RemoteProtocolError: Server disconnected without sending a response`, and was rerun on its own with `gh run rerun --job`, a minute; the publish job followed).
 
 ## If CI cannot publish
 
