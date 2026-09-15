@@ -2039,7 +2039,7 @@ class Viz:
         st = self.state("scylla", h, w, lambda: {
             "x": float(w - 44), "n": 6, "raft": False, "heads": [{"reach": 0.0, "target": None, "t0": 0.0, "sway": self.rng.random() * 6.28}
                                                                 for _ in range(6)],
-            "taken": 0, "cool": t + 4, "suck": 0.0, "swallowed": None, "spin": 0.0, "text": None, "shake": 0, "spray": [],
+            "taken": 0, "cool": t + 4, "suck": 0.0, "swallowed": None, "grace": 0.0, "spin": 0.0, "text": None, "shake": 0, "spray": [],
             "stars": np.column_stack([self.rng.random(50) * (w - 1), self.rng.random(50) * max(1, h // 3),
                                       self.rng.random(50)])})
         hz = int(h * 0.36)
@@ -2104,7 +2104,8 @@ class Viz:
         if st["swallowed"] is not None:
             if t > st["swallowed"] + 3:                                 # spat back, upstream of the maw
                 st["swallowed"] = None
-                st["x"] = min(float(w - ship_w - 2), st["x"] + 8)
+                st["x"] = min(float(w - ship_w - 2), st["x"] + 20)   # spat back east, and safe for a while
+                st["grace"] = t + 8
                 st["text"] = (self.SCYLLA_SAYS["spit"], t + 3)
                 st["shake"] = 6
                 st["spray"] = [[wx + self.rng.random() * 24 - 12, surf[min(wx, w - 2)] - 4 - self.rng.random() * 8, 1.0]
@@ -2112,10 +2113,10 @@ class Viz:
         else:
             speed = (0.05 + an.rms * 0.4) * (0.5 if st["raft"] else 1.0)
             if near:
-                st["suck"] = min(2.0, st["suck"] + pull * (1 / FPS) * 1.6)
+                st["suck"] = min(2.5, st["suck"] + pull * (1 / FPS) * 1.0)
                 speed *= max(0.1, 1 - pull * 1.1)
                 st["spin"] += pull * 0.4
-                if pull > 0.6 and st["suck"] > 1.5:
+                if pull > 0.72 and st["suck"] > 2.0 and t > st["grace"]:   # only a big, sustained bass drinks the ship
                     st["swallowed"] = t
                     st["suck"] = 0.0
                     st["text"] = (self.SCYLLA_SAYS["drink"], t + 3)
@@ -2243,7 +2244,7 @@ class Viz:
         st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
         quiet = st["quiet"] > 4
         # the warmth of the music: cold-blooded, they only move when it is warm
-        st["warm"] = max(0.0, min(1.0, st["warm"] + (an.rms * 1.6 + an.beat * 0.4 - 0.25) * dt * 2))
+        st["warm"] = max(0.0, min(1.0, st["warm"] + (an.rms * 4.0 + an.beat * 0.5 - 0.25) * dt * 2))   # music at rms 0.1 warms them
         warm = st["warm"]
         # the sky: a few stars over the ruins, twinkling with the treble
         for sx, sy, ph in st["stars"]:
