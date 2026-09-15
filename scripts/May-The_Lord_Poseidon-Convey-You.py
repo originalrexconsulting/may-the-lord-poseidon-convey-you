@@ -71,15 +71,32 @@ Keys:
   w             what's playing: the whole current playlist (also the first top-level
                 row while something plays); ▶ marks the track, Enter jumps to one
   v             light show (deadviz.py): patterns driven by an FFT of what the
-                Rotel is playing. Inside it v steps to the next of 20 modes
+                Rotel is playing. Inside it v steps to the next of 24 modes
                 (bars, plasma, scope, rings, waterfall, fire, rain, stars, wave,
-                radial, particles, meters, spiral, life, poseidon, enik, cyclops, convey, athena, althea), V steps back, 1-9/0
+                radial, particles, meters, spiral, life, poseidon, enik, cyclops, convey, athena, althea,
+                scylla, sleestak, stealie, wall), V steps back, 1-9/0
                 pick the first ten, space/n/b/arrows still control playback,
                 Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
+  t             sleep timer: minutes, or 'track' (the end of this track) or 'show' (the end
+                of the playlist); the gain fades over the last minute, then playback pauses
+                and the gain comes back. 0 cancels. The status line shows 💤 and what is left.
+  R             the phone remote: a page on the LAN (http://<this machine>:8402/) with
+                play, pause, next, seek, volume, mute, sleep, stop and the queue; R again
+                turns it off; the setting is remembered. `poseidon remote` serves the same
+                page for a player started without the TUI.
   s             stop            q         quit; the music keeps playing and the next
                                           start adopts it (see below)
                                 Q         quit and stop the music
+
+The command line, no TUI (`poseidon play ...`, the next TUI start adopts the player):
+  poseidon play 1977-05-08 [--song "Morning Dew"] [--source aud] [--track 3] [--volume 60]
+  poseidon play random                  # a night rated 4+ from a random year, best source
+  poseidon play <identifier>            # any archive.org item
+  poseidon play radio naim              # a station from radio.py
+  poseidon play stop | pause | next | prev | status
+An mpv started this way is in its own session, so cron can run `poseidon play random`
+at 7 and `poseidon play stop` at 8 and the shell that started it may go away.
 
 If an mpv from an earlier run is still on the socket (the TUI died without q: closed
 terminal, hangup, crash), it is adopted rather than replaced: its playlist is read
@@ -96,9 +113,11 @@ Search-index and metadata responses are cached under ~/.cache/deadtui/ so
 re-visiting a year is instant. Delete that directory to refresh.
 """
 
+import argparse
 import concurrent.futures as cf
 import curses
 import html
+import http.server
 import random
 import json
 import os
@@ -109,6 +128,7 @@ import sys
 import textwrap
 import threading
 import time
+import urllib.parse
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -388,6 +408,8 @@ SCREENSAVER_SECS = 180   # idle time (while playing) before the light show start
 VOLUME_STEP = 5          # +/- move mpv's software volume by this much; m mutes. The level is remembered.
 VOLUME_MAX = 100         # unity gain; mpv allows 130 but that only clips before the DAC
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
+SLEEP_FADE = 60          # the sleep timer fades the gain to nothing over its last minute, then pauses
+REMOTE_PORT = 8402       # the phone remote: R in the TUI, or poseidon remote; http://<this machine>:8402/
 
 # Stations beyond radio.py's lossless list go here: key: (name, url, nominal format, notes).
 # KDFC is absent on purpose: every StreamTheWorld mount that used to serve it
@@ -413,6 +435,30 @@ def volume_tag(st):
         return "  muted"
     v = st.get("volume")
     return f"  vol {v:g}%" if v is not None and round(v) != VOLUME_MAX else ""
+
+
+def sleep_tag(sleep, st):
+    """'  💤 12m', '  💤 end of track', '  💤 end of show', or '  💤 fading' for the status line."""
+    if not sleep:
+        return ""
+    if sleep.get("fading"):
+        return "  💤 fading"
+    if sleep["mode"] == "minutes":
+        left = max(0, int(sleep["at"] - time.time()))
+        return f"  💤 {left // 60}m" if left >= 60 else f"  💤 {left}s"
+    return "  💤 end of " + ("track" if sleep["mode"] == "track" else "show")
+
+
+def lan_ip():
+    """The address the phone should use: the interface that routes out, without sending a packet."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return socket.gethostname()
 
 
 def quality(st):
@@ -587,6 +633,49 @@ def song_key(title):
 
 def onair_doc(identifier):
     return next((d for d in ONAIR_DOCS if d["identifier"] == identifier), None)
+
+
+SETTINGS = ("viz_mode", "volume", "remote")   # state keys that outlive what was last played
+
+
+def load_state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def write_state(state):
+    os.makedirs(CACHE, exist_ok=True)
+    with open(STATE + ".tmp", "w") as f:
+        json.dump(state, f)
+    os.replace(STATE + ".tmp", STATE)
+
+
+def show_state(old, doc, track_i, time_pos=None):
+    """The state.json for a show at a track: the settings kept, everything else replaced."""
+    kept = {k: old[k] for k in SETTINGS if k in old}
+    return {**kept, "last": "show", "year": doc["date"][:4], "date": doc["date"],
+            "identifier": doc["identifier"], "track": track_i, "time": time_pos,
+            "collection": doc_collection(doc), "lp": doc.get("lp", False),
+            "seastones": doc.get("seastones", False), "onair": doc.get("onair", False)}
+
+
+def best_source(date_entry):
+    """The source to play for a date: on disk first, then matrix > sbd > aud, rating, reviews."""
+    items = date_entry["items"]
+    local = [d for d in items if os.path.isdir(local_show_dir(d))]
+    return sorted(local or items, key=source_rank)[0]
+
+
+def append_history(rec):
+    try:
+        os.makedirs(CACHE, exist_ok=True)
+        with open(HISTORY, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
 
 
 def doc_collection(doc):
@@ -829,8 +918,11 @@ class Mpv:
         self.rid = 0
         self.buf = b""
         self.adopted = False   # True when we attached to an mpv that was already running on the socket
+        self.lock = threading.RLock()   # the remote's server thread shares the socket with the UI loop
 
-    def start(self):
+    def start(self, detach=False):
+        """Adopt the mpv on the socket, else start one. detach=True (the command line) puts it in its
+        own session so it outlives the shell that started it; the next TUI adopts it."""
         if os.path.exists(self.path) and self.adopt():
             return
         if os.path.exists(self.path):
@@ -839,7 +931,7 @@ class Mpv:
             ["mpv", "--no-video", "--no-terminal", "--idle=yes", "--force-window=no", "--audio-display=no",
              "--gapless-audio=yes", "--prefetch-playlist=yes", "--cache=yes", "--demuxer-max-bytes=64MiB",
              "--user-agent=" + gd.UA, "--input-ipc-server=" + self.path],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=detach)
         for _ in range(100):
             if os.path.exists(self.path):
                 break
@@ -877,31 +969,32 @@ class Mpv:
     def cmd(self, *args):
         if not self.sock:
             return None
-        self.rid += 1
-        rid = self.rid
-        try:
-            self.sock.sendall(json.dumps({"command": list(args), "request_id": rid}).encode() + b"\n")
-        except OSError:
-            return None
-        deadline = time.time() + 3
-        while time.time() < deadline:
-            while b"\n" in self.buf:
-                line, self.buf = self.buf.split(b"\n", 1)
-                try:
-                    msg = json.loads(line)
-                except ValueError:
-                    continue
-                if msg.get("request_id") == rid:
-                    return msg
+        with self.lock:
+            self.rid += 1
+            rid = self.rid
             try:
-                data = self.sock.recv(65536)
-            except socket.timeout:
-                continue
+                self.sock.sendall(json.dumps({"command": list(args), "request_id": rid}).encode() + b"\n")
             except OSError:
                 return None
-            if not data:
-                return None
-            self.buf += data
+            deadline = time.time() + 3
+            while time.time() < deadline:
+                while b"\n" in self.buf:
+                    line, self.buf = self.buf.split(b"\n", 1)
+                    try:
+                        msg = json.loads(line)
+                    except ValueError:
+                        continue
+                    if msg.get("request_id") == rid:
+                        return msg
+                try:
+                    data = self.sock.recv(65536)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    return None
+                if not data:
+                    return None
+                self.buf += data
         return None
 
     def get(self, prop, default=None):
@@ -978,6 +1071,8 @@ class App:
         self.logged = None        # (id(now), pos) last written to history.jsonl
         self.detach = False       # q while playing: quit the TUI, leave mpv playing (Q stops it)
         self.fetches = []         # (identifier, Popen, logpath)
+        self.sleep = None         # the sleep timer: {"mode": "minutes"|"track"|"show", ...}
+        self.remote = None        # the phone remote's server thread, when R has turned it on
         self.state = self.load_state()
         curses.curs_set(0)
         curses.use_default_colors()
@@ -1048,20 +1143,12 @@ class App:
     # ---- state
 
     def load_state(self):
-        try:
-            with open(STATE) as f:
-                return json.load(f)
-        except (OSError, ValueError):
-            return {}
+        return load_state()
 
-    SETTINGS = ("viz_mode", "volume")   # state keys that outlive what was last played
+    SETTINGS = SETTINGS
 
     def save_state(self, doc, track_i, time_pos=None):
-        kept = {k: self.state[k] for k in self.SETTINGS if k in self.state}
-        self.state = {**kept, "last": "show", "year": doc["date"][:4], "date": doc["date"],
-                      "identifier": doc["identifier"], "track": track_i, "time": time_pos,
-                      "collection": doc_collection(doc), "lp": doc.get("lp", False),
-                      "seastones": doc.get("seastones", False), "onair": doc.get("onair", False)}
+        self.state = show_state(self.state, doc, track_i, time_pos)
         self.write_state()
 
     def save_radio_state(self, key):
@@ -1069,10 +1156,7 @@ class App:
         self.write_state()
 
     def write_state(self):
-        os.makedirs(CACHE, exist_ok=True)
-        with open(STATE + ".tmp", "w") as f:
-            json.dump(self.state, f)
-        os.replace(STATE + ".tmp", STATE)
+        write_state(self.state)
 
     def save_position(self):
         """Called on quit: remember where in the track we were. A built playlist (Rain and Snow,
@@ -1194,6 +1278,104 @@ class App:
             return
         self.mpv.cmd("cycle", "mute")
         self.say("muted" if self.mpv.get("mute") else f"volume {self.mpv.get('volume', VOLUME_MAX):g}%", 2)
+
+    # ---- sleep timer
+
+    def set_sleep(self, spec):
+        """t: minutes, 'track' (the end of this track), 'show' (the end of the playlist); empty or 0 cancels.
+        The gain fades over the last SLEEP_FADE seconds, then playback pauses and the gain comes back."""
+        spec = (spec or "").strip().lower()
+        if self.sleep and self.sleep.get("fading"):
+            self.mpv.set_volume(self.sleep["vol"])
+        if spec in ("", "0", "off", "cancel"):
+            self.sleep = None
+            self.say("sleep timer off", 3)
+            return
+        st = self.last_status
+        vol = st["volume"] if st and st.get("volume") is not None else self.state.get("volume", VOLUME_MAX)
+        if spec.startswith("t"):
+            if not st:
+                self.say("nothing is playing")
+                return
+            self.sleep = {"mode": "track", "pos": st["pos"], "vol": vol, "fading": False}
+            self.say("💤 pausing at the end of this track", 4)
+        elif spec.startswith("s"):
+            if not st:
+                self.say("nothing is playing")
+                return
+            self.sleep = {"mode": "show", "vol": vol, "fading": False}
+            self.say("💤 pausing at the end of the playlist", 4)
+        else:
+            try:
+                mins = float(spec.rstrip("m"))
+            except ValueError:
+                self.say("sleep: minutes, 'track' or 'show'")
+                return
+            self.sleep = {"mode": "minutes", "at": time.time() + mins * 60, "vol": vol, "fading": False}
+            self.say(f"💤 pausing in {mins:g} minutes", 4)
+
+    def tick_sleep(self, st):
+        """Called every half second from the main loop with mpv's status (None when nothing is loaded)."""
+        sl = self.sleep
+        if not sl:
+            return
+        if st is None:                                               # the playlist ended, or s: done
+            if sl.get("fading"):
+                self.mpv.set_volume(sl["vol"])
+            self.sleep = None
+            return
+        if sl["mode"] == "minutes":
+            left = sl["at"] - time.time()
+        elif sl["mode"] == "track":
+            if st["pos"] != sl["pos"]:
+                left = 0.0
+            else:
+                left = (st["dur"] - st["time"]) if st.get("dur") and st.get("time") is not None else SLEEP_FADE + 1
+        else:
+            if st["pos"] < st["count"] - 1:
+                left = SLEEP_FADE + 1
+            else:
+                left = (st["dur"] - st["time"]) if st.get("dur") and st.get("time") is not None else SLEEP_FADE + 1
+        if left <= 0:
+            self.mpv.cmd("set_property", "pause", True)
+            self.mpv.set_volume(sl["vol"])
+            self.sleep = None
+            self.say("💤 paused; the volume is back where it was", 8)
+            return
+        if left <= SLEEP_FADE and not st["paused"]:
+            sl["fading"] = True
+            self.mpv.set_volume(sl["vol"] * max(0.0, left / SLEEP_FADE))
+        elif sl.get("fading") and st["paused"]:                      # paused by hand mid-fade: put the gain back
+            sl["fading"] = False
+            self.mpv.set_volume(sl["vol"])
+
+    # ---- the phone remote
+
+    def describe_now(self):
+        sleep = sleep_tag(self.sleep, self.last_status).strip()
+        if not self.now:
+            return {"title": "", "tracks": [], "radio": False, "sleep": sleep}
+        return {"title": self.now.get("title") or "", "radio": bool(self.now.get("radio")), "sleep": sleep,
+                "tracks": [t.get("title") or "" for t in self.now.get("tracks") or []]}
+
+    def toggle_remote(self):
+        if self.remote:
+            self.remote.shutdown()
+            self.remote = None
+            self.state["remote"] = False
+            self.write_state()
+            self.say("remote off", 3)
+            return
+        try:
+            self.remote = Remote(self.mpv, self.describe_now, on_sleep=self.set_sleep)
+            self.remote.start()
+        except OSError as e:
+            self.remote = None
+            self.say(f"remote: {e}", 8)
+            return
+        self.state["remote"] = True
+        self.write_state()
+        self.say(f"remote: {self.remote.url()}  (R again turns it off)", 15)
 
     # ---- levels
 
@@ -1773,12 +1955,7 @@ class App:
             rec["doc"] = {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title",
                                                    "seastones", "onair")}
             rec["track"] = self.last_status["pos"] if self.last_status else 0
-        try:
-            os.makedirs(CACHE, exist_ok=True)
-            with open(HISTORY, "a") as f:
-                f.write(json.dumps(rec) + "\n")
-        except OSError:
-            pass
+        append_history(rec)
 
     def history(self):
         try:
@@ -1993,9 +2170,7 @@ class App:
                  + (f" from {fmt_time(seek_to)}" if self.pending_seek else ""))
 
     def best_source(self, date_entry):
-        items = date_entry["items"]
-        local = [d for d in items if os.path.isdir(local_show_dir(d))]
-        return sorted(local or items, key=source_rank)[0]
+        return best_source(date_entry)
 
     def resume(self):
         st = self.state
@@ -2132,7 +2307,7 @@ class App:
             state = "⏸" if st["paused"] else ("…" if st["buffering"] or st["time"] is None else "▶")
             rate = dac_rate()
             dac = f"  DAC {rate / 1000:g}k" if rate else ""
-            dac += volume_tag(st)
+            dac += volume_tag(st) + sleep_tag(self.sleep, st)
             if self.now.get("radio"):
                 icy = st.get("media_title") or ""
                 if not icy or icy in t["src"]:  # FLAC Icecast streams carry no ICY title; mpv falls back to the filename
@@ -2527,6 +2702,10 @@ class App:
                 self.push_radio(self.state.get("radio"))
         elif ch == ord("v"):
             self.light_show()
+        elif ch == ord("t"):
+            self.set_sleep(self.prompt("sleep: minutes, 'track' (end of this track) or 'show' (end of the playlist); 0 cancels"))
+        elif ch == ord("R"):
+            self.toggle_remote()
         elif ch == ord("i") and lvl.kind == "radio":
             i, item = self.current()
             if item:
@@ -2570,12 +2749,16 @@ class App:
             self.say("mpv is not installed (apt install mpv / brew install mpv)", 60)
         except Exception as e:
             self.say(f"mpv failed to start: {e}", 30)
+        if self.state.get("remote"):
+            self.toggle_remote()               # it was on last time: back on, same port
         while True:
             st = self.mpv.status() if self.mpv.sock else None
             if st and self.now and self.now.get("rain") and st["count"] == len(self.now["tracks"]) \
-                    and st["pos"] >= st["count"] - 1 and not st["paused"]:
+                    and st["pos"] >= st["count"] - 1 and not st["paused"] \
+                    and not (self.sleep and self.sleep["mode"] == "show"):
                 self.rain_more()
                 st = self.mpv.status()
+            self.tick_sleep(st)
             if st and (not self.now or st["count"] != len(self.now["tracks"])):
                 # something else loaded a playlist into our mpv (restore-playlist.py, a hand-typed
                 # loadfile): describe it the same way an adopted mpv is described
@@ -2608,17 +2791,305 @@ class App:
             except Exception as e:  # keep the UI alive on a bad API response
                 self.say(f"error: {e}", 8)
         self.save_position()
+        if self.sleep and self.sleep.get("fading"):
+            self.mpv.set_volume(self.sleep["vol"])
+        if self.remote:
+            self.remote.shutdown()
         if self.detach:
             if self.mpv.sock:
                 self.mpv.sock.close()
             print("music left playing; start again to adopt it, or quit it with:")
             print(f"  echo '{{\"command\":[\"quit\"]}}' | socat - UNIX-CONNECT:{self.mpv.path}")
+            print("  or: poseidon play stop")
         else:
             self.mpv.stop()
         return [f for f in self.fetches if f[1].poll() is None]
 
 
+# --------------------------------------------------------------------------- the phone remote
+
+REMOTE_PAGE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poseidon</title><style>
+:root{color-scheme:dark}body{margin:0;background:#0b1020;color:#e6e9f0;font:17px/1.4 -apple-system,system-ui,sans-serif}
+header{padding:14px 16px 6px}h1{margin:0;font-size:15px;letter-spacing:.08em;color:#8fb3ff}
+#title{font-size:18px;margin-top:6px}#track{color:#ffd166;font-size:20px;margin-top:2px}#time{color:#9aa4b8;font-size:14px;margin-top:4px}
+.bar{height:6px;background:#1c2540;border-radius:3px;margin:8px 16px;overflow:hidden}.bar i{display:block;height:100%;background:#8fb3ff;width:0}
+.row{display:flex;gap:8px;padding:6px 16px}.row button{flex:1;font-size:26px;padding:16px 0;border:0;border-radius:14px;background:#1c2540;color:#e6e9f0}
+.row button.small{font-size:16px;padding:12px 0}.row button:active{background:#33417a}
+#vol{color:#9aa4b8;font-size:14px;text-align:center;padding:2px}
+ul{list-style:none;margin:8px 0 40px;padding:0}li{padding:10px 16px;border-top:1px solid #151c33;color:#c3c9d6}li.now{color:#ffd166;background:#131a33}
+li span{color:#5b6580;margin-right:8px}
+</style></head><body>
+<header><h1>MAY THE LORD POSEIDON CONVEY YOU</h1><div id="title">…</div><div id="track"></div><div id="time"></div></header>
+<div class="bar"><i id="fill"></i></div>
+<div class="row"><button onclick="cmd('prev')">⏮</button><button onclick="cmd('pause')" id="pp">⏯</button><button onclick="cmd('next')">⏭</button></div>
+<div class="row"><button class="small" onclick="cmd('seek&s=-60')">−60s</button><button class="small" onclick="cmd('seek&s=-10')">−10s</button>
+<button class="small" onclick="cmd('seek&s=10')">+10s</button><button class="small" onclick="cmd('seek&s=60')">+60s</button></div>
+<div class="row"><button class="small" onclick="cmd('vol&d=-5')">vol −</button><button class="small" onclick="cmd('mute')">mute</button>
+<button class="small" onclick="cmd('vol&d=5')">vol +</button></div>
+<div class="row"><button class="small" onclick="cmd('sleep&m=30')">💤 30m</button><button class="small" onclick="cmd('sleep&m=60')">💤 60m</button>
+<button class="small" onclick="cmd('sleep&m=show')">💤 end</button><button class="small" onclick="cmd('stop')">stop</button></div>
+<div id="vol"></div><ul id="q"></ul>
+<script>
+function fmt(s){if(s==null)return'--:--';s=Math.floor(s);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
+function show(d){document.getElementById('title').textContent=d.title||'stopped';
+document.getElementById('track').textContent=d.track||'';
+document.getElementById('time').textContent=d.pos>=0?fmt(d.time)+' / '+fmt(d.dur)+'   '+(d.pos+1)+'/'+d.count+(d.paused?'   ⏸':'')+(d.sleep?'   '+d.sleep:''):'';
+document.getElementById('fill').style.width=(d.dur?100*Math.min(1,(d.time||0)/d.dur):0)+'%';
+document.getElementById('vol').textContent=d.mute?'muted':(d.volume!=null?'volume '+Math.round(d.volume)+'%':'');
+var q=document.getElementById('q');if(q.dataset.n!=d.count+':'+d.title){q.innerHTML='';(d.tracks||[]).forEach(function(t,i){var li=document.createElement('li');li.innerHTML='<span>'+(i+1)+'</span>'+t.replace(/&/g,'&amp;').replace(/</g,'&lt;');li.onclick=function(){cmd('play&i='+i)};q.appendChild(li)});q.dataset.n=d.count+':'+d.title}
+Array.from(q.children).forEach(function(li,i){li.className=i==d.pos?'now':''})}
+function poll(){fetch('/status').then(r=>r.json()).then(show).catch(function(){})}
+function cmd(c){fetch('/cmd?do='+c,{method:'POST'}).then(r=>r.json()).then(show).catch(function(){})}
+poll();setInterval(poll,2000);
+</script></body></html>"""
+
+
+class Remote(threading.Thread):
+    """A page on the LAN with play, pause, next, volume, sleep and the queue: the second remote on
+    the same mpv socket. describe() gives the titles (the TUI's `now`; standalone, the filenames)."""
+
+    def __init__(self, mpv, describe, port=REMOTE_PORT, on_sleep=None):
+        super().__init__(daemon=True)
+        self.mpv, self.describe, self.on_sleep, self.port = mpv, describe, on_sleep, port
+        remote = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def send(self, code, body, ctype):
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                path = urllib.parse.urlparse(self.path)
+                if path.path == "/status":
+                    self.send(200, json.dumps(remote.status()).encode(), "application/json")
+                elif path.path == "/":
+                    self.send(200, REMOTE_PAGE.encode(), "text/html; charset=utf-8")
+                else:
+                    self.send(404, b"not here", "text/plain")
+
+            def do_POST(self):
+                path = urllib.parse.urlparse(self.path)
+                if path.path != "/cmd":
+                    self.send(404, b"not here", "text/plain")
+                    return
+                q = urllib.parse.parse_qs(path.query)
+                remote.command(q.get("do", [""])[0], q)
+                self.send(200, json.dumps(remote.status()).encode(), "application/json")
+        self.server = http.server.ThreadingHTTPServer(("0.0.0.0", port), Handler)
+        self.server.daemon_threads = True
+
+    def url(self):
+        return f"http://{lan_ip()}:{self.port}/"
+
+    def run(self):
+        self.server.serve_forever(poll_interval=0.5)
+
+    def shutdown(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def status(self):
+        st = self.mpv.status() if self.mpv.sock else None
+        d = self.describe() or {}
+        tracks = d.get("tracks") or []
+        out = {"title": d.get("title") or "", "pos": -1, "count": 0, "tracks": tracks, "track": "", "time": None,
+               "dur": None, "paused": False, "volume": None, "mute": False, "sleep": d.get("sleep") or ""}
+        if st:
+            pos = st["pos"]
+            track = tracks[pos] if pos < len(tracks) else (st.get("media_title") or "")
+            if d.get("radio") and st.get("media_title"):
+                track = st["media_title"]
+            out.update({"pos": pos, "count": st["count"], "track": track, "time": st["time"], "dur": st["dur"],
+                        "paused": st["paused"], "volume": st.get("volume"), "mute": st.get("mute")})
+        return out
+
+    def command(self, do, q):
+        m = self.mpv
+        if do == "pause":
+            m.cmd("cycle", "pause")
+        elif do == "next":
+            m.cmd("playlist-next")
+        elif do == "prev":
+            m.cmd("playlist-prev")
+        elif do == "stop":
+            m.cmd("stop")
+        elif do == "mute":
+            m.cmd("cycle", "mute")
+        elif do == "seek":
+            try:
+                m.cmd("seek", float(q.get("s", ["10"])[0]))
+            except ValueError:
+                pass
+        elif do == "vol":
+            try:
+                cur = m.get("volume")
+                if cur is not None:
+                    level = m.set_volume(cur + float(q.get("d", ["5"])[0]))
+                    st = load_state()
+                    st["volume"] = level
+                    write_state(st)
+            except ValueError:
+                pass
+        elif do == "play":
+            try:
+                m.cmd("playlist-play-index", int(q.get("i", ["0"])[0]))
+            except ValueError:
+                pass
+        elif do == "sleep" and self.on_sleep:
+            self.on_sleep(q.get("m", [""])[0])
+
+
+# --------------------------------------------------------------------------- the command line
+
+def cli_doc(what, source=None):
+    """A show for `poseidon play`: a date (best source, or the --source kind), an archive.org identifier, or random."""
+    if what == "random":
+        rng = random.Random()
+        for _ in range(4):
+            year = rng.choice(YEARS)
+            dates = group_dates(year_docs(year) or [])
+            if dates:
+                good = [d for d in dates if d["rating"] >= 4.0] or dates
+                entry = rng.choice(good)
+                return best_source(entry), entry
+        sys.exit("archive.org gave nothing to play")
+    if re.match(r"\d{4}-\d{2}-\d{2}$", what):
+        dates = group_dates(year_docs(int(what[:4])) or [])
+        entry = next((d for d in dates if d["date"] == what), None)
+        if not entry:
+            sys.exit(f"{what}: no show in the index")
+        if source:
+            items = [d for d in entry["items"] if d["kind"] == source]
+            if not items:
+                sys.exit(f"{what}: no {source} source")
+            return sorted(items, key=source_rank)[0], entry
+        return best_source(entry), entry
+    md = gd.metadata(what).get("metadata", {})
+    if not md:
+        sys.exit(f"{what}: not on archive.org")
+    doc = {"identifier": what, "date": (md.get("date") or "0000-00-00")[:10], "collection": md.get("collection") or [],
+           "kind": gd.source_kind({"identifier": what, "source": md.get("source")}), "title": md.get("title"),
+           "venue": gd.venue_of(md)}
+    return doc, None
+
+
+def cli_play(argv):
+    p = argparse.ArgumentParser(prog="poseidon play", description="Play without the TUI: the next TUI adopts the player.")
+    p.add_argument("what", help="YYYY-MM-DD, random, an archive.org identifier, radio <station>, "
+                               "or stop | pause | next | prev | status")
+    p.add_argument("rest", nargs="*", help="the station key after radio (poseidon radio list)")
+    p.add_argument("--song", help="start at the first track titled like this")
+    p.add_argument("--track", type=int, default=1, help="start at this track number (1-based)")
+    p.add_argument("--source", choices=["matrix", "sbd", "aud"], help="insist on this kind of source for a date")
+    p.add_argument("--volume", type=int, help="mpv's software gain, 0-100")
+    a = p.parse_args(argv)
+    mpv = Mpv()
+    try:
+        return _cli_play(a, mpv)
+    except FileNotFoundError:
+        sys.exit("mpv is not installed (apt install mpv / brew install mpv)")
+
+
+def _cli_play(a, mpv):
+    if a.what in ("stop", "pause", "next", "prev", "status"):
+        if not (os.path.exists(mpv.path) and mpv.adopt()):
+            sys.exit("nothing is playing")
+        if a.what == "stop":
+            mpv.cmd("quit")
+            print("stopped")
+        elif a.what == "status":
+            st = mpv.status()
+            if not st:
+                print("idle")
+            else:
+                print(f"{'⏸' if st['paused'] else '▶'} {st.get('media_title') or ''}  {fmt_time(st['time'])} / {fmt_time(st['dur'])}"
+                      f"  {st['pos'] + 1}/{st['count']}{volume_tag(st)}")
+        else:
+            mpv.cmd({"pause": "cycle", "next": "playlist-next", "prev": "playlist-prev"}[a.what], *(["pause"] if a.what == "pause" else []))
+            print(a.what)
+        return
+    state = load_state()
+    if a.what == "radio":
+        key = (a.rest or [None])[0]
+        s_ = next((x for x in stations() if x["key"] == key), None)
+        if not s_:
+            sys.exit("radio <station>: one of " + ", ".join(x["key"] for x in stations()))
+        mpv.start(detach=True)
+        mpv.play([s_["url"]], 0)
+        if a.volume is not None:
+            state["volume"] = mpv.set_volume(a.volume)
+        elif not mpv.adopted and state.get("volume") is not None:
+            mpv.set_volume(state["volume"])
+        write_state({**state, "last": "radio", "radio": key})
+        append_history({"ts": time.strftime("%Y-%m-%d %H:%M"), "show": s_["name"], "title": s_["name"], "src": s_["url"],
+                        "how": s_["fmt"], "radio": key})
+        print(f"tuning {s_['name']} ({s_['fmt']})")
+        return
+    doc, entry = cli_doc(a.what, a.source)
+    tracks, meta = tracks_for(doc)
+    if not tracks:
+        sys.exit(f"{doc['identifier']}: no playable files")
+    start = max(0, min(a.track - 1, len(tracks) - 1))
+    if a.song:
+        start = next((i for i, t in enumerate(tracks) if gd.song_matches(a.song, t["title"])
+                      or gd.song_matches(a.song, os.path.basename(t["src"]))), None)
+        if start is None:
+            sys.exit(f"{doc['identifier']}: no track titled like {a.song!r}")
+    mpv.start(detach=True)
+    mpv.play([t["src"] for t in tracks], start)
+    if a.volume is not None:
+        state["volume"] = mpv.set_volume(a.volume)
+    elif not mpv.adopted and state.get("volume") is not None:
+        mpv.set_volume(state["volume"])
+    write_state(show_state(state, doc, start))
+    title = show_title(doc, meta)
+    append_history({"ts": time.strftime("%Y-%m-%d %H:%M"), "show": title, "title": tracks[start]["title"],
+                    "src": tracks[start]["src"], "how": tracks[start]["how"], "length": tracks[start].get("length"),
+                    "doc": {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title")},
+                    "track": start})
+    print(f"playing {KIND_SHORT.get(doc['kind'], doc['kind'])} {doc['identifier']}: {title}, from {start + 1}. {tracks[start]['title']}"
+          f"  ({'adopted the running' if mpv.adopted else 'started an'} mpv; the TUI adopts it, poseidon play stop quits it)")
+
+
+def cli_remote(argv):
+    p = argparse.ArgumentParser(prog="poseidon remote", description="Serve the phone remote for the running mpv until Ctrl-C.")
+    p.add_argument("--port", type=int, default=REMOTE_PORT)
+    a = p.parse_args(argv)
+    mpv = Mpv()
+    mpv.start(detach=True)
+
+    def describe():
+        pl = mpv.get("playlist") or []
+        st = load_state()
+        q = st.get("queue") or {}
+        titles = [t.get("title") or "" for t in q.get("tracks") or []]
+        if len(titles) != len(pl):
+            titles = [os.path.basename(urllib.parse.unquote(e.get("filename") or "")) for e in pl]
+        return {"title": q.get("title") or (st.get("date") or "") + " " + (st.get("identifier") or "") if pl else "",
+                "tracks": titles, "radio": st.get("last") == "radio"}
+    r = Remote(mpv, describe, port=a.port)
+    r.start()
+    print(f"remote at {r.url()}  ({'adopted the running' if mpv.adopted else 'started an idle'} mpv; Ctrl-C stops serving)")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        r.shutdown()
+
+
 def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] == "play":
+        return cli_play(argv[1:])
+    if argv and argv[0] == "remote":
+        return cli_remote(argv[1:])
     if os.environ.get("TERM", "").startswith("tmux"):
         os.environ.setdefault("ESCDELAY", "25")
     still = curses.wrapper(lambda scr: App(scr).run())

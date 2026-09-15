@@ -6,7 +6,9 @@ from a clone, or download one self-contained build from Releases.
 
 ```
 scripts/poseidon.py                           # one door to every tool: bare = the TUI,
-                                              # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
+                                              # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor,
+                                              # poseidon play 1977-05-08 (no TUI; random, an identifier, radio <station>, stop),
+                                              # poseidon remote (the phone remote for a player started that way)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
 scripts/deadviz.py                            # the light show: 24 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
@@ -23,8 +25,11 @@ Rain and Snow, Random show, This day (every show played on today's date, any yea
 run in order), On the air (the Grateful Dead Hour, Dead to the World, the KFOG New Year's
 broadcast), History, Bookmarks (`*` pins a show or the second you are at), Stats (what
 History adds up to) and Now Playing; shows the taper's notes and the reviews of any source
-(`i`); adopts an mpv it finds already running (q keeps the music, Q stops it); and
-starts with Poseidon, trident raised.
+(`i`); has a sleep timer that fades the gain over its last minute (`t`) and a phone
+remote on the LAN (`R`: play, pause, next, seek, volume, sleep and the queue on one page);
+adopts an mpv it finds already running (q keeps the music, Q stops it); and starts with
+Poseidon, trident raised. `poseidon play 1977-05-08` plays without the TUI, so cron can
+run `poseidon play random` at seven and `poseidon play stop` at eight.
 
 ## Screenshots
 
