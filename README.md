@@ -9,7 +9,8 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 20 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea
+scripts/deadviz.py                            # the light show: 24 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
+                                              # the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
 scripts/radio.py                              # lossless classical radio stations
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
@@ -43,7 +44,8 @@ Now Playing (w), the Jokes menu, the radio list:
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
-mode `V` walks through the newest ones: Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
+mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
+Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The Poseidon mode: the bass raises the swell, a beat shakes the earth, and the cast
 drops by.
@@ -95,7 +97,30 @@ side on the treble. She dances seated, hair a beat behind her shoulders, one han
 keeping time on her knee. Music too hot for too long and she draws the brand out and
 raises a palm; when it settles she puts it back. Silence, and she stirs the embers.
 
-Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`.
+The strait is the next chapter of the voyage. Scylla's rock on the left, her cave in it and
+six necks swaying out of it over the water; Charybdis on the right, a whirlpool that dips
+the sea and spins faster and wider with the bass. The ship rows west between them. Near the
+maw the bass drags on the oars and spins the ship, and if it stays high she drinks it down
+and spits it back, one companion fewer. In reach of the rock a big beat sends a head down
+to the deck and Scylla takes one. Through the strait, it starts again from the east.
+
+The Sleestak have the Lost City to themselves: the pylon's crystals lit by the bass, the
+Marshalls' torch in the middle with a flame that is the bass. They come out of the dark on
+either side, but they are cold-blooded and slow: they only step when the music is warm,
+they stop dead when it goes quiet, and the torch's light keeps them back. A beat flashes
+their eyes and they hiss.
+
+The Stealie: the skull in the ring, the thirteen points around it one group of bands each,
+turning faster with the music, the bolt flashing white on a beat. The red half warms with
+the bass, the blue with the treble, and the eye sockets widen with the bass.
+
+The Wall of Sound, 1974, as the PA it was: stacks of cabinets, one per instrument where
+they stood, Bob, Phil's quad bass (four columns, one per string), the vocal cluster in the
+middle and tallest, Jerry, Keith, the drums. Each stack lights from the bottom with its own
+bands, the peak cabinet holds, and a beat shakes the scaffold.
+
+Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`. The four
+newest modes have none yet.
 
 ## Running it
 
