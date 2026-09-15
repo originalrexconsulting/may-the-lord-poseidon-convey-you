@@ -8,17 +8,19 @@ the DAC rate readout is Linux-only and simply stays blank elsewhere).
 
 Levels:  home  >  years  >  dates in a year  >  sources for a date  >  tracks
 The home screen is sectioned: Now (▶ Now playing, 🎲 Random show), The Dead
-(the years, Tears, JGB), Memories, Not Dead (classical radio, Firesign, Jokes),
+(the years, Tears, JGB), Not Dead (classical radio, Firesign, Jokes),
 Everything (History). Section headers are skipped by the cursor.
 Home rows in detail: `♪ Classical radio` (radio.py's lossless stations);
 `Firesign Theatre` and `Jokes` (LPs, one 24-bit FLAC per side, from library vinyl
 transfers); `Tears` (the weepers: ↵ on a song runs the song search across every
-show); one ✦ row per MEMORIES entry (an evening kept as a set list; a plays it
-through); `History` (every track played, newest first, from
-~/.cache/deadtui/history.jsonl; ↵ plays it again); `JGB`: Melvin Seals & JGB, the
-band Jerry left behind, 1996 on (archive.org collection JGB; Jerry's own Garcia
-Band tapes were removed from archive.org at the estate's request). JGB shows
-fetched with d land in dead/jgb/<year>/ and play from disk like Dead shows.
+show); `History` (every track played, newest first, from
+~/.cache/deadtui/history.jsonl; ↵ plays it again); `JGB`: Jerry Garcia Band and
+the rest of Jerry's own bands, 1970-1995 (Legion of Mary, Garcia/Saunders,
+Reconstruction, the acoustic band). archive.org has no collection for them any
+more (the estate had it taken down); the tapes sit in taperssection under creator
+"Jerry Garcia", which gdarchive.py's "JerryGarcia" pseudo-collection searches.
+JGB shows fetched with d land in dead/jgb/<year>/ and play from disk like Dead
+shows. The years overlap the Dead's, so g stays in whichever is open.
 `Jokes` starts with CLIPS: moments inside shows played from an offset, such as the
 "Penalized for Your Dependence on Batteries (or a Well Deserved Break)" at 7:42 of
 Mission in the Rain, Boston 6/12/76.
@@ -43,7 +45,7 @@ Keys:
   Left/h/Bksp   back            p         play this date's best source / this source
   Space         pause           n / b     next / previous track
   Left/Right    (while playing) seek -10 / +10 s      < / >  seek -60 / +60 s
-  /             filter list     g         go to YYYY or YYYY-MM-DD (1996 on jumps into JGB)
+  /             filter list     g         go to YYYY or YYYY-MM-DD (Dead or JGB, whichever is open)
   f             find a song across all years (one row per show date, best source);
                 there: Enter opens the show at that track, p plays from it,
                 a plays every version in date order as one playlist
@@ -72,7 +74,7 @@ seek and q all work on it as if this instance had started it.
 On quit the show, track and position (or the radio station) are saved to
 ~/.cache/deadtui/state.json; the next start re-opens that view with the
 cursor on the track, and r resumes playback from the saved position. A built
-playlist (Rain and Snow, a Dark Star stream, a memory evening, every version of
+playlist (Rain and Snow, a Dark Star stream, every version of
 a song, an adopted list) is saved whole, titles and sources and position, and r
 rebuilds it, refilling included.
 Search-index and metadata responses are cached under ~/.cache/deadtui/ so
@@ -110,7 +112,6 @@ JGB = "jgb"      # sentinel entry at the bottom of the years list
 FIRESIGN = "firesign"  # sentinel below JGB: the Firesign Theatre LPs
 JOKES = "jokes"        # sentinel: other comedy LPs
 TEARS = "tears"        # sentinel: the weepers, each row a song search
-MEMORY = "memory"      # sentinel: set lists of evenings worth keeping
 HIST = "history"       # sentinel: everything played, newest first
 QUEUE = "queue"        # sentinel: the playlist mpv is playing right now
 RANDOM = "random"      # sentinel: a random Dead show, best source, straight into play
@@ -224,7 +225,7 @@ ALBUMS = {
 }
 COLLECTIONS = {  # archive.org collection -> title and year span
     "GratefulDead": {"title": "Grateful Dead", "years": YEARS},
-    "JGB": {"title": "JGB · Melvin Seals & Jerry Garcia Band", "years": list(range(1996, time.gmtime().tm_year + 1))},
+    "JerryGarcia": {"title": "Jerry Garcia Band", "years": list(range(1970, 1996))},
 }
 MENU_TITLES = {FIRESIGN: "Firesign Theatre", JOKES: "Jokes"}
 # Clips: a moment inside a show, played from an offset. Listed at the top of Jokes.
@@ -234,25 +235,10 @@ CLIPS = [
      "identifier": "gd1976-06-12.fm.sbd.moore.berger.100328.flac16", "date": "1976-06-12", "collection": ["GratefulDead"],
      "kind": "sbd", "song": "Mission in the Rain", "start": 7 * 60 + 42},
 ]
-# Memories: an evening as a set list. Each row: (collection, identifier, date, first song,
-# last song or "*" for the rest of the show or None for just that song, note).
-# ↵/p plays a row; a plays the whole evening in order, as one gapless playlist.
-MEMORIES = {
-    "crazyPosiedonEarthShakerMemoryof20260913GenesisDay": [
-        ("GratefulDead", "gd1970-02-13.123814.aud.cooper.flac16", "1970-02-13", "China Cat Sunflower", "I Know You Rider",
-         "Fillmore East late show, 2nd row centre. The classical radio went quiet and this came up."),
-        ("GratefulDead", "gd1976-06-12.fm.sbd.moore.berger.100328.flac16", "1976-06-12", "Mission in the Rain", "*",
-         "Boston Music Hall FM soundboard. Mission, eight minutes in: 'hilarious'. Then the rest of the night."),
-        ("JGB", "jgb2006-01-13.sbd.flac16", "2006-01-13", "Tears of Rage", None,
-         "Melvin Seals & JGB at the Great American Music Hall. The Dead never played it; this is where it lives."),
-        ("GratefulDead", "gd1970-02-13.123814.aud.cooper.flac16", "1970-02-13", "Dark Star", "*",
-         "Dark Star > Cryptical > Drums > The Other One > Cryptical > Lovelight > And We Bid You Goodnight."),
-    ],
-}
 # Tears: the weepers. ↵ runs the song search (same as f) so every version is a row.
-# (song, collection) - Tears of Rage lives only in the Melvin Seals JGB collection.
+# (song, collection) - the Dead never played Tears of Rage; the Garcia Band did, 1990 on.
 TEARS_LIST = [
-    ("Tears of Rage", "JGB"),
+    ("Tears of Rage", "JerryGarcia"),
     ("Stella Blue", "GratefulDead"),
     ("Black Peter", "GratefulDead"),
     ("Wharf Rat", "GratefulDead"),
@@ -428,10 +414,8 @@ def year_docs(year, collection=gd.DEFAULT_COLLECTION):
 
 
 def doc_collection(doc):
-    for c in doc.get("collection") or []:
-        if c in COLLECTIONS:
-            return c
-    return gd.DEFAULT_COLLECTION
+    c = gd.collection_of(doc)
+    return c if c in COLLECTIONS else gd.DEFAULT_COLLECTION
 
 
 def item_meta(identifier):
@@ -454,7 +438,7 @@ def reviews(doc):
 
 def local_show_dir(doc):
     date = doc["date"]
-    return os.path.join(gd.DEFAULT_DEST, gd.collection_dir(doc.get("collection")), date[:4],
+    return os.path.join(gd.DEFAULT_DEST, gd.collection_dir(doc), date[:4],
                         f"{date}.{doc['identifier']}")
 
 
@@ -508,7 +492,7 @@ def show_title(doc, meta):
     md = meta.get("metadata", {})
     if doc.get("lp"):
         return f"{doc.get('artist')}: {doc.get('title') or md.get('title')} ({doc['date'][:4]})"
-    return f"{doc['date']} {md.get('venue') or md.get('coverage') or doc.get('venue') or ''}".strip()
+    return f"{doc['date']} {gd.venue_of(md) or doc.get('venue') or ''}".strip()
 
 
 def seastones_doc(identifier):
@@ -903,7 +887,7 @@ class App:
 
     def save_position(self):
         """Called on quit: remember where in the track we were. A built playlist (Rain and Snow,
-        a Dark Star stream, a memory evening, every version of a song, an adopted list) has no
+        a Dark Star stream, every version of a song, an adopted list) has no
         single show behind it, so the queue itself is saved: titles, sources, position."""
         st = self.last_status
         if not (self.now and st):
@@ -963,7 +947,7 @@ class App:
                         self.say(f"r resumes at {fmt_time(st['time'])}", 8)
                 return
             year = int(st["year"])
-            coll = st.get("collection") or gd.DEFAULT_COLLECTION
+            coll = st.get("collection") if st.get("collection") in COLLECTIONS else gd.DEFAULT_COLLECTION
             self.push_years(coll)
             self.push_dates(year, st["date"], coll)
             lvl = self.stack[-1]
@@ -1001,8 +985,6 @@ class App:
         QUEUE, RANDOM,
         (HDR, "The Dead"),
         YEARS_GD, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
-        (HDR, "Memories"),
-        # one row per MEMORIES entry goes here
         (HDR, "Not Dead"),
         RADIO, FIRESIGN, JOKES,
         (HDR, "Everything"),
@@ -1017,7 +999,7 @@ class App:
         SEASTONES: "≋ Seastones          Phil and Ned between sets, 1974: the experiments, night by night",
         RAIN: "☔ Rain and Snow      random weather and water songs, a random night's version of each, on and on",
         TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
-        JGB: "JGB                  Melvin Seals & Jerry Garcia Band, 1996 on, after Jerry",
+        JGB: "JGB                  Jerry Garcia Band, 1970-1995, and Legion of Mary, Garcia/Saunders, Reconstruction, the acoustic band",
         RADIO: "♪ Classical radio    lossless FLAC stations",
         FIRESIGN: "Firesign Theatre     the LPs, 24-bit vinyl transfers",
         JOKES: "Jokes                comedy LPs: Buckley, Bruce, Sahl, Newhart, Pryor, the Goons, Python...",
@@ -1025,26 +1007,19 @@ class App:
     }
 
     def home_items(self):
-        items = []
-        for it in self.HOME:
-            items.append(it)
-            if it == (HDR, "Memories"):
-                items.extend((MEMORY, m) for m in MEMORIES)
-        return items
+        return list(self.HOME)
 
     def push_home(self):
         def render(it, w):
             if isinstance(it, tuple) and it[0] == HDR:
                 return f"{it[1]}"
-            if isinstance(it, tuple) and it[0] == MEMORY:
-                return f"    ✦ {it[1]}"
             return "    " + self.HOME_TEXT[it]
         items = self.home_items()
         lvl = Level("home", "Poseidon", items, render, {"home": True})
         st = self.state
         want = RADIO if st.get("last") == "radio" else SEASTONES if st.get("seastones") else (
             (st.get("lp") if st.get("lp") in ALBUMS else FIRESIGN) if st.get("lp") else (
-                JGB if st.get("collection") == "JGB" else YEARS_GD))
+                JGB if st.get("collection") == "JerryGarcia" else YEARS_GD))
         self.push(lvl, items.index(want) if want in items else items.index(YEARS_GD))
 
     def push_years(self, collection=gd.DEFAULT_COLLECTION):
@@ -1372,57 +1347,6 @@ class App:
             self.mpv.play([r["src"]], 0)
             self.say(f"playing {r.get('title')}")
 
-    def memory_doc(self, entry):
-        coll, ident, date, first, last, note = entry
-        return {"identifier": ident, "date": date, "collection": [coll], "kind": gd.source_kind({"identifier": ident})}
-
-    def push_memory(self, name):
-        def render(e, w):
-            coll, ident, date, first, last, note = e
-            span = first if not last else (f"{first} > ... (rest of show)" if last == "*" else f"{first} > {last}")
-            who = "" if coll == gd.DEFAULT_COLLECTION else "JGB "
-            left = f"  {who}{date}  {span}"
-            return (left.ljust(46) + "  " + note)[:w]
-        lvl = Level("memory", name, MEMORIES[name], render, {"memory": name})
-        self.push(lvl, 0)
-
-    def memory_tracks(self, entry):
-        """The tracks an entry covers: from its first song through its last (or the show's end)."""
-        coll, ident, date, first, last, note = entry
-        doc = self.memory_doc(entry)
-        i, tracks, meta = self.song_track_index(doc, first)
-        if last is None:
-            j = i
-        elif last == "*":
-            j = len(tracks) - 1
-        else:
-            j = next((k for k in range(i, len(tracks)) if gd.song_matches(last, tracks[k]["title"])), i)
-        return doc, i, tracks[i:j + 1], meta
-
-    def play_memory(self, lvl, entry=None):
-        entries = [entry] if entry else list(lvl.items)
-        self.loading("queueing the evening..." if not entry else f"loading {entry[1]}...")
-        combined = []
-        for e in entries:
-            try:
-                doc, i, tracks, meta = self.memory_tracks(e)
-            except Exception as ex:
-                self.say(f"metadata: {ex}")
-                return
-            for t in tracks:
-                t = dict(t)
-                t["title"] = f"{show_title(doc, meta)}: {t['title']}"
-                combined.append(t)
-        if not combined:
-            self.say("nothing playable")
-            return
-        if entry and len(entries) == 1 and entry[4] == "*":
-            self.play_doc(self.memory_doc(entry), i)   # the whole rest of the show, with state saved
-            return
-        self.now = {"doc": None, "tracks": combined, "title": f"✦ {lvl.ctx['memory']}"}
-        self.mpv.play([t["src"] for t in combined], 0)
-        self.say(f"playing {len(combined)} tracks")
-
     def push_queue(self):
         if not self.now or not self.now.get("tracks"):
             self.say("nothing is playing")
@@ -1473,7 +1397,7 @@ class App:
             self.say(f"{s_['name']}: {radio.fmt_probe(kv)}", 15)
 
     def push_dates(self, year, select_date=None, collection=gd.DEFAULT_COLLECTION):
-        who = "" if collection == gd.DEFAULT_COLLECTION else f"{collection} "
+        who = "" if collection == gd.DEFAULT_COLLECTION else f"{COLLECTIONS[collection]['title']} "
         self.loading(f"loading {who}{year} from archive.org...")
         try:
             docs = year_docs(year, collection)
@@ -1623,7 +1547,8 @@ class App:
         elif st.get("seastones"):
             doc = seastones_doc(st["identifier"])
         try:
-            for d in ([] if doc else year_docs(int(st["year"]), st.get("collection") or gd.DEFAULT_COLLECTION)):
+            for d in ([] if doc else year_docs(int(st["year"]), st.get("collection")
+                                               if st.get("collection") in COLLECTIONS else gd.DEFAULT_COLLECTION)):
                 if d["identifier"] == st["identifier"]:
                     doc = d
         except Exception as e:
@@ -1771,8 +1696,6 @@ class App:
                 keys = " ↵/p play that night from the song on (or a random one after another, or every version)  h back  q quit (music stays)"
             elif lvl.kind == "seastones":
                 keys = " ↵/p play that night from the Seastones set on (or a random one after another)  d fetch  h back  q quit (music stays)"
-            elif lvl.kind == "memory":
-                keys = " ↵/p play this part  a play the whole evening in order  ␣ pause  n/b trk  h back  q quit (music stays)"
             elif lvl.kind == "history":
                 keys = " ↵/p play it again  / filter  ␣ pause  h back  q quit (music stays)"
             elif lvl.kind == "home":
@@ -1828,15 +1751,11 @@ class App:
         elif lvl.kind == "home" and item == YEARS_GD:
             self.push_years(gd.DEFAULT_COLLECTION)
         elif lvl.kind == "home" and item == JGB:
-            self.push_years("JGB")
+            self.push_years("JerryGarcia")
         elif lvl.kind == "home" and item in ALBUMS:
             self.push_albums(item)
         elif lvl.kind == "home" and item == TEARS:
             self.push_tears()
-        elif lvl.kind == "home" and isinstance(item, tuple) and item[0] == MEMORY:
-            self.push_memory(item[1])
-        elif lvl.kind == "memory":
-            self.play_memory(lvl, item)
         elif lvl.kind == "home" and item == HIST:
             self.push_history()
         elif lvl.kind == "history":
@@ -1908,15 +1827,11 @@ class App:
         elif lvl.kind == "home" and item == YEARS_GD:
             self.push_years(gd.DEFAULT_COLLECTION)
         elif lvl.kind == "home" and item == JGB:
-            self.push_years("JGB")
+            self.push_years("JerryGarcia")
         elif lvl.kind == "home" and item in ALBUMS:
             self.push_albums(item)
         elif lvl.kind == "home" and item == TEARS:
             self.push_tears()
-        elif lvl.kind == "home" and isinstance(item, tuple) and item[0] == MEMORY:
-            self.push_memory(item[1])
-        elif lvl.kind == "memory":
-            self.play_memory(lvl, item)
         elif lvl.kind == "home" and item == HIST:
             self.push_history()
         elif lvl.kind == "history":
@@ -1986,7 +1901,7 @@ class App:
         if year.isdigit() and int(year) not in COLLECTIONS[coll]["years"]:
             coll = next((c for c, v in COLLECTIONS.items() if int(year) in v["years"]), None)
         if not year.isdigit() or not coll:
-            self.say("year must be 1965-1995 (Dead) or 1996 on (JGB)")
+            self.say("year must be 1965-1995 (Dead) or 1970-1995 (JGB)")
             return
         del self.stack[1:]
         self.stack[0].cursor = self.stack[0].items.index(JGB if coll != gd.DEFAULT_COLLECTION else YEARS_GD)
@@ -2078,8 +1993,6 @@ class App:
                 self.probe_station(item)
         elif ch == ord("a") and lvl.kind == "songs":
             self.play_all_versions(lvl)
-        elif ch == ord("a") and lvl.kind == "memory":
-            self.play_memory(lvl)
         elif ch == ord("/"):
             lvl.filter = self.prompt("filter")
             lvl.cursor = 0
