@@ -330,6 +330,8 @@ SPLASHES = {
 }
 SPLASH_EYES = {"crowned": (10, 11), "storm": ()}   # rows whose inner blocks are the eyes; ▓ is always an eye
 SCREENSAVER_SECS = 180   # idle time (while playing) before the light show starts; 0 disables
+VOLUME_STEP = 5          # +/- move mpv's software volume by this much; m mutes. The level is remembered.
+VOLUME_MAX = 100         # unity gain; mpv allows 130 but that only clips before the DAC
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
 
 # Stations beyond radio.py's lossless list go here: key: (name, url, nominal format, notes).
@@ -346,6 +348,16 @@ def stations():
     for key, (name, url, fmt, notes) in {**radio.STATIONS, **EXTRA_STATIONS}.items():
         out.append({"key": key, "name": name, "url": url, "fmt": fmt, "notes": notes})
     return out
+
+
+def volume_tag(st):
+    """'  muted' or '  vol 80%' for the status line; nothing at unity, the normal case."""
+    if not st:
+        return ""
+    if st.get("mute"):
+        return "  muted"
+    v = st.get("volume")
+    return f"  vol {v:g}%" if v is not None and round(v) != VOLUME_MAX else ""
 
 
 def quality(st):
@@ -749,7 +761,14 @@ class Mpv:
                 "dur": self.get("duration"), "paused": bool(self.get("pause", False)),
                 "buffering": bool(self.get("paused-for-cache", False)),
                 "media_title": self.get("media-title"), "codec": self.get("audio-codec-name"),
-                "params": self.get("audio-params") or {}, "bitrate": self.get("audio-bitrate")}
+                "params": self.get("audio-params") or {}, "bitrate": self.get("audio-bitrate"),
+                "volume": self.get("volume"), "mute": bool(self.get("mute", False))}
+
+    def set_volume(self, level):
+        """Software gain, 0-100. 100 is unity: mpv would go to 130 but that only clips the DAC."""
+        level = max(0, min(VOLUME_MAX, int(round(level))))
+        self.cmd("set_property", "volume", level)
+        return level
 
     def stop(self):
         if self.sock:
@@ -869,9 +888,13 @@ class App:
         except (OSError, ValueError):
             return {}
 
+    SETTINGS = ("viz_mode", "volume")   # state keys that outlive what was last played
+
     def save_state(self, doc, track_i, time_pos=None):
-        self.state = {"last": "show", "year": doc["date"][:4], "date": doc["date"], "identifier": doc["identifier"],
-                      "track": track_i, "time": time_pos, "collection": doc_collection(doc), "lp": doc.get("lp", False),
+        kept = {k: self.state[k] for k in self.SETTINGS if k in self.state}
+        self.state = {**kept, "last": "show", "year": doc["date"][:4], "date": doc["date"],
+                      "identifier": doc["identifier"], "track": track_i, "time": time_pos,
+                      "collection": doc_collection(doc), "lp": doc.get("lp", False),
                       "seastones": doc.get("seastones", False)}
         self.write_state()
 
@@ -972,6 +995,31 @@ class App:
     def loading(self, text):
         self.msg, self.msg_until = text, time.time() + 60
         self.draw()
+
+    # ---- volume
+
+    def volume(self, delta):
+        """Nudge mpv's software volume by delta and remember the level for the next start."""
+        if not self.mpv.sock:
+            self.say("no player")
+            return
+        cur = self.mpv.get("volume")
+        if cur is None:
+            self.say("no player")
+            return
+        level = self.mpv.set_volume(cur + delta)
+        if self.mpv.get("mute"):
+            self.mpv.cmd("set_property", "mute", False)
+        self.state["volume"] = level
+        self.write_state()
+        self.say(f"volume {level}%", 2)
+
+    def toggle_mute(self):
+        if not self.mpv.sock:
+            self.say("no player")
+            return
+        self.mpv.cmd("cycle", "mute")
+        self.say("muted" if self.mpv.get("mute") else f"volume {self.mpv.get('volume', VOLUME_MAX):g}%", 2)
 
     # ---- levels
 
@@ -1571,7 +1619,8 @@ class App:
             t = self.now["tracks"][st["pos"]] if st["pos"] < len(self.now["tracks"]) else {"title": "?"}
             name = st.get("media_title") if self.now.get("radio") and st.get("media_title") not in (None, "") \
                 and st["media_title"] not in t["src"] else t["title"]
-            return f"{self.now['title']}  ·  {name}  {fmt_time(st['time'])}" + ("  ⏸" if st["paused"] else "")
+            note = f"  {self.msg}" if self.msg and time.time() < self.msg_until else volume_tag(st)
+            return f"{self.now['title']}  ·  {name}  {fmt_time(st['time'])}" + ("  ⏸" if st["paused"] else "") + note
 
         def on_key(ch):
             if ch == ord(" "):
@@ -1584,6 +1633,10 @@ class App:
                 self.mpv.cmd("seek", 10)
             elif ch == curses.KEY_LEFT:
                 self.mpv.cmd("seek", -10)
+            elif ch in (ord("+"), ord("=")):     # m steps the mode in here, so no mute key in the light show
+                self.volume(VOLUME_STEP)
+            elif ch in (ord("-"), ord("_")):
+                self.volume(-VOLUME_STEP)
             else:
                 return False
             return True
@@ -1656,6 +1709,7 @@ class App:
             state = "⏸" if st["paused"] else ("…" if st["buffering"] or st["time"] is None else "▶")
             rate = dac_rate()
             dac = f"  DAC {rate / 1000:g}k" if rate else ""
+            dac += volume_tag(st)
             if self.now.get("radio"):
                 icy = st.get("media_title") or ""
                 if not icy or icy in t["src"]:  # FLAC Icecast streams carry no ICY title; mpv falls back to the filename
@@ -1701,9 +1755,9 @@ class App:
             elif lvl.kind == "home":
                 keys = " ↵ open  p play  w now playing  c radio  f song  g goto  r resume  v show  q quit (music stays)  Q stop & quit"
             elif lvl.kind == "queue":
-                keys = " ↵/p jump to track  ␣ pause  n/b trk  ←→ seek  / filter  h back  q quit (music stays)  Q quit and stop"
+                keys = " ↵/p jump to track  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  / filter  h back  q quit (music stays)  Q quit and stop"
             else:
-                keys = " ↵ open  p play  ␣ pause  n/b trk  ←→ seek  / filter  f song  g goto  v show  d fetch  r resume  q quit (music stays)  Q stop & quit"
+                keys = " ↵ open  p play  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  / filter  f song  g goto  v show  d fetch  r resume  q quit (music stays)  Q stop & quit"
             if active:
                 keys = f" ↓{len(active)} fetching " + keys
             self.put(y + 3, 0, keys[:w - 1], curses.A_DIM)
@@ -1968,6 +2022,12 @@ class App:
             self.mpv.cmd("playlist-next")
         elif ch == ord("b"):
             self.mpv.cmd("playlist-prev")
+        elif ch in (ord("+"), ord("=")):
+            self.volume(VOLUME_STEP)
+        elif ch in (ord("-"), ord("_")):
+            self.volume(-VOLUME_STEP)
+        elif ch == ord("m"):
+            self.toggle_mute()
         elif ch == ord("s"):
             self.mpv.cmd("stop")
             self.now = None
@@ -2018,7 +2078,9 @@ class App:
         try:
             self.mpv.start()
             if self.mpv.adopted:
-                self.adopt_playlist()
+                self.adopt_playlist()          # its volume is whatever it was left at; the status line shows it
+            elif self.state.get("volume") is not None:
+                self.mpv.set_volume(self.state["volume"])
         except FileNotFoundError:
             self.say("mpv is not installed (apt install mpv / brew install mpv)", 60)
         except Exception as e:
