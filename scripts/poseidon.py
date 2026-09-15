@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """poseidon - one door to every tool. Bare `poseidon` is the TUI; `poseidon <tool> ...` runs a tool.
 
-Tools: gdarchive, deadviz, radio, restore-playlist, tui. Also: doctor, --version.
+Tools: gdarchive, deadviz, radio, restore-playlist, tui. Also: play, remote, doctor, --version.
 A symlink named after a tool (gdarchive, deadtui, ...) runs that tool directly.
 
   poseidon                                  # the TUI
   poseidon gdarchive search --song "Jack Straw" --year 1977
   poseidon gdarchive fetch <identifier>
   poseidon radio list
+  poseidon play 1977-05-08 --song "Morning Dew"   # play without the TUI (also random, an identifier,
+  poseidon play random | stop | pause | status    # radio <station>); the next TUI adopts the player
+  poseidon remote                           # the phone remote on the LAN, for a player started without the TUI
   poseidon doctor                           # what this build is, what it found
   POSEIDON_LIBRARY=/path/to/dead poseidon   # where shows are kept (default: dead/ beside
                                             # scripts/ in a checkout, else ~/Music/dead)
@@ -29,6 +32,7 @@ TOOLS = {"tui": TUI, "deadtui": TUI, "may-the_lord_poseidon-convey-you": TUI,
          "gdarchive": "gdarchive.py", "deadviz": "deadviz.py", "radio": "radio.py",
          "restore-playlist": "restore-playlist.py"}
 SUBCOMMANDS = ("gdarchive", "deadviz", "radio", "restore-playlist", "tui")
+TUI_VERBS = ("play", "remote")   # poseidon play ..., poseidon remote: the TUI's own command line
 # python-build-standalone links ncurses statically and may not know the host's terminfo
 # location; these are the usual ones (Debian's /lib/terminfo, Homebrew's, ...).
 TERMINFO_DIRS = ("/usr/share/terminfo", "/lib/terminfo", "/etc/terminfo", "/usr/lib/terminfo",
@@ -188,8 +192,10 @@ def main(argv=None):
         return doctor()
     if argv and argv[0] in SUBCOMMANDS:
         return run(TOOLS[argv[0]], argv[1:])
+    if argv and argv[0] in TUI_VERBS:
+        return run(TUI, argv)
     if argv:
-        sys.exit(f"poseidon: unknown tool {argv[0]!r}; one of {', '.join(SUBCOMMANDS)}, doctor, --version")
+        sys.exit(f"poseidon: unknown tool {argv[0]!r}; one of {', '.join(SUBCOMMANDS + TUI_VERBS)}, doctor, --version")
     return run(TUI, [])
 
 

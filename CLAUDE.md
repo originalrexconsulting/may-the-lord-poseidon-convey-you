@@ -42,6 +42,8 @@ scripts/deadviz.py                                     # light show, standalone
 scripts/radio.py list                                  # classical stations
 scripts/restore-playlist.py --snapshot dead/playlist-$(date +%F).json
 scripts/poseidon.py doctor                             # what this checkout/build sees
+scripts/poseidon.py play 1977-05-08 --song "Morning Dew"   # play without the TUI; play stop | status
+scripts/poseidon.py remote                             # the phone remote, standalone
 make check-src                                         # syntax check + the symlink guard
 make dist && make check                                # build both artifacts, smoke-test them
 ```
