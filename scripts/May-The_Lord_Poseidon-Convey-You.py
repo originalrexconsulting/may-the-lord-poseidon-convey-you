@@ -7,9 +7,21 @@ brew install mpv; numpy for the light show, mutagen for tagging fetched shows;
 the DAC rate readout is Linux-only and simply stays blank elsewhere).
 
 Levels:  home  >  years  >  dates in a year  >  sources for a date  >  tracks
-The home screen is sectioned: Now (▶ Now playing, 🎲 Random show), The Dead
-(the years, Tears, JGB), Not Dead (classical radio, Firesign, Jokes),
-Everything (History). Section headers are skipped by the cursor.
+The home screen is sectioned: Now (▶ Now playing, 🎲 Random show, 📅 This day), The Dead
+(the years, 🚌 Tours, Dark Star, Not Fade Away, Seastones, Rain and Snow, Tears, JGB),
+Not Dead (classical radio, 📻 On the air, Firesign, Jokes), Everything (History,
+★ Bookmarks, Stats). Section headers are skipped by the cursor.
+`📅 This day`: every Dead show played on today's month and day, any year (one query,
+the 31 dates OR'd; TOUR_LIST-style dates list, so ↵ sources, p best source, d fetch).
+`🚌 Tours` (TOUR_LIST): the famous runs; ↵ opens one night by night under a random-night
+row and a whole-run row (every night's best source as one playlist, in order); p on a
+tour plays a random night. `📻 On the air` (ONAIR_DOCS): the one Grateful Dead Hour
+archive.org holds (#242, 1993), the KFOG New Year's Eve 1990 broadcast, two Dead to the
+World nights. `★ Bookmarks`: * anywhere pins what is playing at the second it is at (or,
+stopped, the show under the cursor) to ~/.cache/deadtui/bookmarks.json; ↵ plays from
+there, x unpins. `Stats`: history.jsonl added up (tracks, shows, hours, most played songs
+and years, the longest Dark Star heard). `i` (outside the radio list) shows the taper's
+notes and the reviews of the show under the cursor or the one playing.
 Home rows in detail: `♪ Classical radio` (radio.py's lossless stations);
 `Firesign Theatre` and `Jokes` (LPs, one 24-bit FLAC per side, from library vinyl
 transfers); `Tears` (the weepers: ↵ on a song runs the song search across every
@@ -50,6 +62,9 @@ Keys:
                 there: Enter opens the show at that track, p plays from it,
                 a plays every version in date order as one playlist
   d             download this show (poseidon gdarchive fetch <id>, in the background)
+  i             the taper's notes and the reviews of this show (source, lineage, setlist,
+                every review with its stars); in the radio list, probe the station
+  *             pin a bookmark: what is playing at this second, or the show under the cursor
   c             classical radio (the lossless FLAC stations from radio.py);
                 also the first entry of the top-level list. i probes a station.
   r             resume the last thing played, at the position it was at
@@ -83,12 +98,15 @@ re-visiting a year is instant. Delete that directory to refresh.
 
 import concurrent.futures as cf
 import curses
+import html
 import random
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 from types import SimpleNamespace
@@ -105,7 +123,44 @@ except ImportError:  # python3-numpy missing
 CACHE = os.path.expanduser("~/.cache/deadtui")
 STATE = os.path.join(CACHE, "state.json")
 HISTORY = os.path.join(CACHE, "history.jsonl")   # one line per track played, newest last
+BOOKMARKS_FILE = os.path.join(CACHE, "bookmarks.json")   # a list, newest first
 HISTORY_ROWS = 500
+THISDAY = "thisday"    # sentinel: every show played on today's month and day, 1965-1995
+TOURS = "tours"        # sentinel: the famous runs, night by night, a random night, or the whole run
+TOUR_LIST = [          # (name, first date, last date, why), oldest first
+    ("Fillmore West, Feb-Mar 1969", "1969-02-27", "1969-03-02", "the four nights Live/Dead was cut from"),
+    ("Fillmore East, April 1971", "1971-04-25", "1971-04-29", "the closing run, five nights; Ladies and Gentlemen"),
+    ("Europe '72", "1972-04-07", "1972-05-26", "Wembley to the Lyceum, 22 shows, the Bozos and the Bolos"),
+    ("Wall of Sound, 1974", "1974-03-23", "1974-10-20", "the Cow Palace debut to the Winterland farewell, under the Wall"),
+    ("Winterland, October 1974", "1974-10-16", "1974-10-20", "the five farewell nights before the hiatus, The Grateful Dead Movie"),
+    ("May '77", "1977-05-01", "1977-06-09", "New Haven to Winterland: Barton Hall, Buffalo, Hartford, Chicago, the Palladium"),
+    ("Red Rocks '78", "1978-07-07", "1978-07-08", "two nights in the rocks"),
+    ("Egypt '78", "1978-09-14", "1978-09-16", "three nights at the Sphinx, Hamza El Din, the lunar eclipse"),
+    ("Closing of Winterland", "1978-12-30", "1978-12-31", "the last two nights, New Year's Eve with the Blues Brothers opening"),
+    ("Warfield and Radio City, 1980", "1980-09-25", "1980-10-31", "the fifteenth anniversary: acoustic set, two electric, Reckoning and Dead Set"),
+    ("Greek Theatre '85", "1985-06-14", "1985-06-16", "the twentieth anniversary weekend in Berkeley"),
+    ("Alpine Valley '89", "1989-07-17", "1989-07-19", "three nights in Wisconsin, the summer before Hampton"),
+    ("Hampton '89, the Warlocks", "1989-10-08", "1989-10-09", "billed as Formerly The Warlocks; Dark Star and Attics come back"),
+    ("Spring '90", "1990-03-14", "1990-04-03", "Capital Centre to the Omni, Brent's last spring; Without a Net"),
+    ("Europe '90", "1990-10-13", "1990-11-01", "Stockholm to Wembley, the first tour with Vince and Bruce"),
+]
+ONAIR = "onair"        # sentinel: the Dead on the radio: the Grateful Dead Hour, Dead to the World, the KFOG NYE broadcast
+ONAIR_DOCS = [         # archive.org has one Grateful Dead Hour episode and a few of David Gans's KPFA nights; ↵ plays the item
+    {"identifier": "grateful-dead-hour-242-david-gans-1993-kpfa", "date": "1993-05-01", "collection": ["radioprograms"],
+     "kind": "other", "onair": True, "title": "Grateful Dead Hour #242, May 1993",
+     "note": "David Gans on KPFA. An hour of Dark Stars, in two parts."},
+    {"identifier": "grateful-dead-nye-1990-oakland-coliseum-kfog", "date": "1990-12-31", "collection": ["radioprograms"],
+     "kind": "other", "onair": True, "title": "New Year's Eve 1990, the KFOG broadcast",
+     "note": "Oakland Coliseum live on FM, David Gans and Ken Nordine announcing. Lossless, forty tracks."},
+    {"identifier": "deadtotheworldkpfa", "date": "2020-01-14", "collection": ["radioprograms"],
+     "kind": "other", "onair": True, "title": "Dead to the World, January 2020",
+     "note": "Two Wednesday nights of David Gans's KPFA show, two hours each."},
+    {"identifier": "dead-to-the-world-david-gans-kpfa-feb.-2022", "date": "2022-02-26", "collection": ["radioprograms"],
+     "kind": "other", "onair": True, "title": "Dead to the World marathon, February 2022",
+     "note": "KPFA's annual marathon night with David Gans and Tim Lynch."},
+]
+BOOKMARKS = "bookmarks"  # sentinel: shows and moments pinned with *
+STATS = "stats"          # sentinel: what History adds up to
 CACHE_TTL = 7 * 86400
 YEARS = list(range(1965, 1996))
 JGB = "jgb"      # sentinel entry at the bottom of the years list
@@ -425,6 +480,115 @@ def year_docs(year, collection=gd.DEFAULT_COLLECTION):
     return cached(f"year-{tag}{year}", fetch)
 
 
+def day_docs(month_day):
+    """Every Dead show played on this month and day, any year: one query, 31 dates OR'd together."""
+    def fetch():
+        dates = " OR ".join(f"{y}-{month_day}" for y in YEARS)
+        args = SimpleNamespace(collection=gd.DEFAULT_COLLECTION, year=None, date=None, song=None, min_rating=None,
+                               min_reviews=None, source="any", downloadable=False, query=f"date:({dates})",
+                               sort="date asc", limit=5000)
+        return gd.search(args)[1]
+    return cached(f"day-{month_day}", fetch)
+
+
+def tour_docs(tour):
+    """The shows of a tour: the years' cached docs, cut to the tour's dates."""
+    name, first, last, why = tour
+    docs = []
+    for year in range(int(first[:4]), int(last[:4]) + 1):
+        docs.extend(d for d in (year_docs(year) or []) if first <= d["date"] <= last)
+    return docs
+
+
+def date_row(d, w):
+    """One line for a show date: on-disk star, date, venue, then the source kinds, rating and count."""
+    r = f"{d['rating']:.1f}" if d["rating"] else " - "
+    loc = "*" if d["local"] else " "
+    right = f" {d['kinds']:3} {r:>3} {len(d['items']):>3}"
+    left = f"{loc} {d['date']}  {d['venue']}"
+    return left[:max(0, w - len(right))].ljust(w - len(right)) + right
+
+
+def strip_html(s):
+    s = re.sub(r"<br\s*/?>|</div>|</p>", "\n", str(s or ""))
+    s = re.sub(r"<[^>]+>", "", s)
+    return html.unescape(s).replace("\r", "")
+
+
+def notes_lines(doc, meta, width):
+    """The taper's notes and the reviews of an item, wrapped to the screen: what the item says about itself."""
+    md = meta.get("metadata", {})
+    out = []
+
+    def para(label, text, indent="    "):
+        text = strip_html(text).strip()
+        if not text:
+            return
+        out.append(f"  {label}")
+        for line in text.splitlines():
+            out.extend(textwrap.wrap(line, width - len(indent), initial_indent=indent, subsequent_indent=indent) or [""])
+        out.append("")
+    head = f"{doc.get('date', '')} {gd.venue_of(md) or ''}".strip()
+    cover = md.get("coverage")
+    out.append(f"  {head}" + (f", {cover}" if cover and cover not in head else ""))
+    out.append(f"  {doc['identifier']}")
+    kind = KIND_SHORT.get(doc.get("kind"), doc.get("kind") or "")
+    so = "stream only" if gd.is_stream_only(meta) else "downloadable"
+    r = rating(doc)
+    out.append(f"  {kind}  {so}  " + (f"{r:.2f} from {reviews(doc)} reviews" if r else "unrated"))
+    out.append("")
+    for key in ("source", "lineage", "taper", "transferer", "notes"):
+        if md.get(key):
+            para(key, md[key])
+    if md.get("description"):
+        para("setlist / description", md["description"])
+    revs = meta.get("reviews") or []
+    if revs:
+        out.append(f"  ── {len(revs)} review{'s' if len(revs) != 1 else ''} ──")
+        out.append("")
+        for rv in sorted(revs, key=lambda x: x.get("reviewdate") or "", reverse=True):
+            try:
+                stars = "★" * int(float(rv.get("stars") or 0))
+            except ValueError:
+                stars = ""
+            who = f"{stars} {rv.get('reviewer') or '?'}  {(rv.get('reviewdate') or '')[:10]}"
+            title = strip_html(rv.get("reviewtitle")).strip()
+            para(f"{who}  {title}" if title else who, rv.get("reviewbody"))
+    return out
+
+
+def load_bookmarks():
+    try:
+        with open(BOOKMARKS_FILE) as f:
+            return list(json.load(f))
+    except (OSError, ValueError):
+        return []
+
+
+def save_bookmarks(marks):
+    os.makedirs(CACHE, exist_ok=True)
+    with open(BOOKMARKS_FILE + ".tmp", "w") as f:
+        json.dump(marks, f)
+    os.replace(BOOKMARKS_FILE + ".tmp", BOOKMARKS_FILE)
+
+
+def song_key_title(title):
+    """A track title reduced to the song: the show prefix a built playlist puts in front
+    ("1977-05-08 Barton Hall: Scarlet Begonias ->") and the segue marks come off."""
+    t = str(title or "")
+    if re.match(r"\d{4}-\d{2}-\d{2}.*?: ", t):
+        t = t.split(": ", 1)[1]
+    return re.sub(r"\s*(->|-->|>|~>|\*)\s*$", "", t).strip()
+
+
+def song_key(title):
+    return gd.norm(song_key_title(title))
+
+
+def onair_doc(identifier):
+    return next((d for d in ONAIR_DOCS if d["identifier"] == identifier), None)
+
+
 def doc_collection(doc):
     c = gd.collection_of(doc)
     return c if c in COLLECTIONS else gd.DEFAULT_COLLECTION
@@ -504,6 +668,8 @@ def show_title(doc, meta):
     md = meta.get("metadata", {})
     if doc.get("lp"):
         return f"{doc.get('artist')}: {doc.get('title') or md.get('title')} ({doc['date'][:4]})"
+    if doc.get("onair"):
+        return doc.get("title") or md.get("title") or doc["identifier"]
     return f"{doc['date']} {gd.venue_of(md) or doc.get('venue') or ''}".strip()
 
 
@@ -895,7 +1061,7 @@ class App:
         self.state = {**kept, "last": "show", "year": doc["date"][:4], "date": doc["date"],
                       "identifier": doc["identifier"], "track": track_i, "time": time_pos,
                       "collection": doc_collection(doc), "lp": doc.get("lp", False),
-                      "seastones": doc.get("seastones", False)}
+                      "seastones": doc.get("seastones", False), "onair": doc.get("onair", False)}
         self.write_state()
 
     def save_radio_state(self, key):
@@ -969,6 +1135,14 @@ class App:
                     if st.get("time"):
                         self.say(f"r resumes at {fmt_time(st['time'])}", 8)
                 return
+            if st.get("onair"):
+                doc = onair_doc(st["identifier"])
+                if doc:
+                    self.push_onair(doc["identifier"])
+                    self.push_tracks(doc, int(st.get("track") or 0))
+                    if st.get("time"):
+                        self.say(f"r resumes at {fmt_time(st['time'])}", 8)
+                return
             year = int(st["year"])
             coll = st.get("collection") if st.get("collection") in COLLECTIONS else gd.DEFAULT_COLLECTION
             self.push_years(coll)
@@ -1030,18 +1204,23 @@ class App:
 
     HOME = [
         (HDR, "Now"),
-        QUEUE, RANDOM,
+        QUEUE, RANDOM, THISDAY,
         (HDR, "The Dead"),
-        YEARS_GD, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
+        YEARS_GD, TOURS, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
         (HDR, "Not Dead"),
-        RADIO, FIRESIGN, JOKES,
+        RADIO, ONAIR, FIRESIGN, JOKES,
         (HDR, "Everything"),
-        HIST,
+        HIST, BOOKMARKS, STATS,
     ]
     HOME_TEXT = {
         QUEUE: "▶ Now playing        the current playlist",
         RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
+        THISDAY: "📅 This day          every show played on today's date, 1965-1995",
         YEARS_GD: "Grateful Dead        1965-1995, by year",
+        TOURS: "🚌 Tours             Europe '72, the Wall of Sound, May '77, Egypt, Winterland's last nights... a night, or the whole run",
+        ONAIR: "📻 On the air        the Grateful Dead Hour, Dead to the World, the KFOG New Year's broadcast",
+        BOOKMARKS: "★ Bookmarks          shows and moments pinned with *",
+        STATS: "Stats                what History adds up to: songs, years, shows, hours",
         DARKSTAR: "★ Dark Star          the famous ones, a random one after another, every one",
         NOTFADE: "♥ Not Fade Away      the famous ones, a random one after another, every one",
         SEASTONES: "≋ Seastones          Phil and Ned between sets, 1974: the experiments, night by night",
@@ -1065,7 +1244,7 @@ class App:
         items = self.home_items()
         lvl = Level("home", "Poseidon", items, render, {"home": True})
         st = self.state
-        want = RADIO if st.get("last") == "radio" else SEASTONES if st.get("seastones") else (
+        want = RADIO if st.get("last") == "radio" else SEASTONES if st.get("seastones") else ONAIR if st.get("onair") else (
             (st.get("lp") if st.get("lp") in ALBUMS else FIRESIGN) if st.get("lp") else (
                 JGB if st.get("collection") == "JerryGarcia" else YEARS_GD))
         self.push(lvl, items.index(want) if want in items else items.index(YEARS_GD))
@@ -1257,6 +1436,253 @@ class App:
         lvl = Level("tears", "Tears", TEARS_LIST, render, {"tears": True})
         self.push(lvl, 0)
 
+    # ---- this day
+
+    def push_this_day(self):
+        """Every show played on today's month and day, any year: a dates list like a year's."""
+        today = time.localtime()
+        md = time.strftime("%m-%d", today)
+        title = time.strftime("📅 %B %-d", today)
+        self.loading(f"{title}: every year, from archive.org...")
+        try:
+            dates = group_dates(day_docs(md) or [])
+        except Exception as e:
+            self.say(f"archive.org: {e}")
+            return
+        if not dates:
+            self.say(f"no show on {time.strftime('%B %-d', today)}, any year")
+            return
+        lvl = Level("dates", title, dates, date_row, {"collection": gd.DEFAULT_COLLECTION, "day": md})
+        self.push(lvl, 0)
+        self.msg_until = 0
+
+    # ---- tours
+
+    def push_tours(self):
+        def render(t, w):
+            name, first, last, why = t
+            return f"  {name:32} {first} to {last}   {why}"[:w]
+        lvl = Level("tours", "🚌 Tours", TOUR_LIST, render, {"tours": True})
+        self.push(lvl, 0)
+
+    def push_tour(self, tour):
+        name, first, last, why = tour
+        self.loading(f"🚌 {name}: loading the run from archive.org...")
+        try:
+            dates = group_dates(tour_docs(tour))
+        except Exception as e:
+            self.say(f"archive.org: {e}")
+            return
+        if not dates:
+            self.say(f"nothing in the index for {name}")
+            return
+
+        def render(it, w):
+            if it == "random":
+                return f"  🎲 A random night of {name}, best source, straight into play"
+            if it == "whole":
+                return f"  ♪ The whole run, {len(dates)} shows in order, one playlist"
+            return date_row(it, w)
+        lvl = Level("tour", f"🚌 {name}", ["random", "whole"] + dates, render,
+                    {"tour": tour, "collection": gd.DEFAULT_COLLECTION})
+        self.push(lvl, 0)
+        self.msg_until = 0
+
+    def tour_random(self, lvl):
+        dates = [d for d in lvl.items if isinstance(d, dict)]
+        entry = self.rng.choice(dates)
+        doc = self.best_source(entry)
+        self.push_sources(entry, doc["identifier"])
+        self.play_doc(doc)
+        self.push_tracks(doc, 0)
+
+    def tour_whole(self, lvl):
+        """Every night of the run, best source each, as one playlist in date order."""
+        name = lvl.ctx["tour"][0]
+        dates = [d for d in lvl.items if isinstance(d, dict)]
+        combined = []
+        for k, entry in enumerate(dates):
+            doc = self.best_source(entry)
+            self.loading(f"🚌 {name}: {k + 1}/{len(dates)} {entry['date']}...")
+            try:
+                tracks, meta = tracks_for(doc)
+            except Exception:
+                continue
+            show = show_title(doc, meta)
+            for t in tracks:
+                t = dict(t)
+                t["title"] = f"{show}: {t['title']}"
+                combined.append(t)
+        if not combined:
+            self.say("nothing playable")
+            return
+        self.now = {"doc": None, "tracks": combined, "title": f"🚌 {name}"}
+        self.mpv.play([t["src"] for t in combined], 0)
+        self.say(f"🚌 {name}: {len(dates)} shows, {len(combined)} tracks, in order", 8)
+        self.push_queue()
+
+    # ---- on the air
+
+    def push_onair(self, select_id=None):
+        def render(d, w):
+            loc = "*" if os.path.isdir(local_show_dir(d)) else " "
+            return f"{loc} {d['date'][:4]}  {d['title']:44} {d['note']}"[:w]
+        items = list(ONAIR_DOCS)
+        lvl = Level("onair", "📻 On the air", items, render, {"onair": True})
+        sel = next((i for i, d in enumerate(items) if d["identifier"] == select_id), 0) if select_id else 0
+        self.push(lvl, sel)
+
+    # ---- the taper's notes
+
+    def doc_here(self):
+        """The show the cursor is on, or the one playing: for i (notes), * (bookmark) and d (fetch)."""
+        lvl = self.stack[-1]
+        i, item = self.current()
+        if lvl.kind == "tracks":
+            return lvl.ctx["doc"]
+        if lvl.kind in ("sources", "songs", "albums", "onair") and isinstance(item, dict) and item.get("identifier"):
+            return item
+        if lvl.kind == "seastones" and isinstance(item, dict):
+            return item
+        if lvl.kind in ("dates", "tour") and isinstance(item, dict) and item.get("items"):
+            return self.best_source(item)
+        if lvl.kind in ("history", "bookmarks") and isinstance(item, dict) and (item.get("doc") or {}).get("identifier"):
+            return item["doc"]
+        if lvl.kind in ("queue", "home") and self.now and self.now.get("doc"):
+            return self.now["doc"]
+        return None
+
+    def push_notes(self, doc):
+        """What the item says about itself: source, lineage, the taper's notes, the setlist, the reviews."""
+        self.loading(f"reading the notes on {doc['identifier']}...")
+        try:
+            meta = item_meta(doc["identifier"])
+        except Exception as e:
+            self.say(f"metadata: {e}")
+            return
+        h, w = self.scr.getmaxyx()
+        lines = notes_lines(doc, meta, max(40, w - 4))
+        lvl = Level("notes", f"notes: {doc['identifier']}", lines, lambda s, w_: s[:w_], {"doc": doc})
+        self.push(lvl, 0)
+        self.msg_until = 0
+
+    # ---- bookmarks
+
+    def bookmark_here(self):
+        """* pins what is playing, at the second it is at; with nothing playing, the show under the cursor."""
+        st = self.last_status
+        rec = {"ts": time.strftime("%Y-%m-%d %H:%M")}
+        if self.now and st and not self.now.get("radio") and st["pos"] < len(self.now["tracks"]):
+            t = self.now["tracks"][st["pos"]]
+            rec.update({"show": self.now.get("title"), "title": t.get("title"), "src": t.get("src"),
+                        "how": t.get("how"), "length": t.get("length"), "time": st.get("time") or 0})
+            doc = self.now.get("doc")
+            if doc:
+                rec["doc"] = {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title",
+                                                       "seastones", "onair")}
+                rec["track"] = st["pos"]
+        else:
+            doc = self.doc_here()
+            if not doc:
+                self.say("* pins what is playing, or the show under the cursor")
+                return
+            lvl = self.stack[-1]
+            i, item = self.current()
+            rec.update({"show": f"{doc.get('date', '')} {doc.get('venue') or doc.get('coverage') or doc.get('title') or ''}".strip(),
+                        "title": item.get("title") if lvl.kind == "tracks" else "", "time": 0,
+                        "track": i if lvl.kind == "tracks" else 0,
+                        "doc": {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title",
+                                                         "seastones", "onair")}})
+        marks = load_bookmarks()
+        marks.insert(0, rec)
+        save_bookmarks(marks)
+        where = f" at {fmt_time(rec['time'])}" if rec.get("time") else ""
+        self.say(f"★ pinned {rec.get('show')}{': ' + rec['title'] if rec.get('title') else ''}{where}", 6)
+        lvl = self.stack[-1]
+        if lvl.kind == "bookmarks":
+            lvl.items[:] = marks
+
+    def push_bookmarks(self):
+        def render(r, w):
+            when = f"  at {fmt_time(r['time'])}" if r.get("time") else ""
+            show = r.get("show") or ""
+            title = f"  ·  {r['title']}" if r.get("title") else ""
+            return f"  {r['ts']}  {show}{title}{when}"[:w]
+        lvl = Level("bookmarks", "★ Bookmarks", load_bookmarks(), render, {"bookmarks": True})
+        self.push(lvl, 0)
+
+    def delete_bookmark(self, lvl, i):
+        if i is None or i >= len(lvl.items):
+            return
+        gone = lvl.items.pop(i)
+        save_bookmarks(lvl.items)
+        self.say(f"unpinned {gone.get('show')}", 4)
+
+    # ---- stats
+
+    def stats_lines(self):
+        """What the whole history.jsonl adds up to."""
+        try:
+            with open(HISTORY) as f:
+                recs = [json.loads(l) for l in f if l.strip()]
+        except (OSError, ValueError):
+            recs = []
+        recs = [r for r in recs if isinstance(r, dict)]
+        if not recs:
+            return ["  nothing played yet"]
+        plays = [r for r in recs if not r.get("radio")]
+        tunings = [r for r in recs if r.get("radio")]
+        songs, years, shows, timed = {}, {}, {}, []
+        for r in plays:
+            k = song_key(r.get("title"))
+            if k:
+                songs.setdefault(k, [0, r.get("title")])
+                songs[k][0] += 1
+            show = r.get("show") or ""
+            title = str(r.get("title") or "")
+            if re.match(r"\d{4}-\d{2}-\d{2}.*?: ", title):       # a built playlist: the night is in the track title
+                show = title.split(": ", 1)[0]
+            y = ((r.get("doc") or {}).get("date") or show)[:4]
+            if y.isdigit():
+                years[y] = years.get(y, 0) + 1
+            if show:
+                shows[show] = shows.get(show, 0) + 1
+            if r.get("length"):
+                timed.append((r, show))
+        out = [f"  since {recs[0].get('ts', '?')[:10]}: {len(plays)} tracks from {len(shows)} shows, "
+               f"{len(tunings)} radio tunings"]
+        hours = sum(float(r["length"]) for r, _ in timed) / 3600
+        if timed:
+            out.append(f"  {hours:.1f} hours of music, counting the {len(timed)} tracks whose length was logged")
+        out.append("")
+
+        def top(title, table, fmt, n=10):
+            if not table:
+                return
+            out.append(f"  ── {title} ──")
+            for k, v in sorted(table.items(), key=lambda kv: -(kv[1][0] if isinstance(kv[1], list) else kv[1]))[:n]:
+                out.append(fmt(k, v))
+            out.append("")
+        top("most played songs", songs, lambda k, v: f"  {v[0]:>4}  {song_key_title(v[1])}")
+        top("years", years, lambda k, v: f"  {v:>4}  {k}")
+        top("shows", shows, lambda k, v: f"  {v:>4}  {k}")
+        longest = {}
+        for r, show in timed:
+            k = song_key(r.get("title"))
+            if k in ("dark star", "playing in the band", "the other one", "eyes of the world") and \
+                    float(r["length"]) > longest.get(k, (0, None))[0]:
+                longest[k] = (float(r["length"]), show)
+        if longest:
+            out.append("  ── the longest ones heard ──")
+            for k, (L, show) in sorted(longest.items()):
+                out.append(f"  {fmt_time(L):>8}  {k.title()}  ·  {show}")
+            out.append("")
+        return out
+
+    def push_stats(self):
+        lvl = Level("stats", "Stats", self.stats_lines(), lambda s, w: s[:w], {"stats": True})
+        self.push(lvl, 0)
+
     # ---- adoption
 
     def doc_for_src(self, src):
@@ -1341,9 +1767,11 @@ class App:
         """Append what just started playing. Enough is kept to play it again from History."""
         doc = self.now.get("doc")
         rec = {"ts": time.strftime("%Y-%m-%d %H:%M"), "show": self.now.get("title"), "title": track.get("title"),
-               "src": track.get("src"), "how": track.get("how"), "radio": self.now.get("radio")}
+               "src": track.get("src"), "how": track.get("how"), "radio": self.now.get("radio"),
+               "length": track.get("length")}
         if doc:
-            rec["doc"] = {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title")}
+            rec["doc"] = {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title",
+                                                   "seastones", "onair")}
             rec["track"] = self.last_status["pos"] if self.last_status else 0
         try:
             os.makedirs(CACHE, exist_ok=True)
@@ -1387,12 +1815,13 @@ class App:
             return
         doc = r.get("doc")
         if doc and doc.get("identifier"):
-            self.play_doc(doc, int(r.get("track") or 0))
+            self.play_doc(doc, int(r.get("track") or 0), r.get("time"))
             return
         if r.get("src"):
             self.now = {"doc": None, "title": r.get("show") or "", "tracks": [{"title": r.get("title"), "src": r["src"],
-                        "how": r.get("how") or "", "length": None}]}
+                        "how": r.get("how") or "", "length": r.get("length")}]}
             self.mpv.play([r["src"]], 0)
+            self.pending_seek = r.get("time") if r.get("time") and r["time"] > 5 else None
             self.say(f"playing {r.get('title')}")
 
     def push_queue(self):
@@ -1453,15 +1882,7 @@ class App:
             self.say(f"archive.org: {e}")
             return
         dates = group_dates(docs)
-
-        def render(d, w):
-            venue = d["venue"]
-            r = f"{d['rating']:.1f}" if d["rating"] else " - "
-            loc = "*" if d["local"] else " "
-            right = f" {d['kinds']:3} {r:>3} {len(d['items']):>3}"
-            left = f"{loc} {d['date']}  {venue}"
-            return left[:max(0, w - len(right))].ljust(w - len(right)) + right
-        lvl = Level("dates", str(year), dates, render, {"year": year, "collection": collection})
+        lvl = Level("dates", str(year), dates, date_row, {"year": year, "collection": collection})
         sel = next((i for i, d in enumerate(dates) if d["date"] == select_date), 0) if select_date else 0
         self.push(lvl, sel)
         self.msg_until = 0
@@ -1594,6 +2015,8 @@ class App:
             doc = next((d for d in album_docs() if d["identifier"] == st["identifier"]), None)
         elif st.get("seastones"):
             doc = seastones_doc(st["identifier"])
+        elif st.get("onair"):
+            doc = onair_doc(st["identifier"])
         try:
             for d in ([] if doc else year_docs(int(st["year"]), st.get("collection")
                                                if st.get("collection") in COLLECTIONS else gd.DEFAULT_COLLECTION)):
@@ -1751,13 +2174,23 @@ class App:
             elif lvl.kind == "seastones":
                 keys = " ↵/p play that night from the Seastones set on (or a random one after another)  d fetch  h back  q quit (music stays)"
             elif lvl.kind == "history":
-                keys = " ↵/p play it again  / filter  ␣ pause  h back  q quit (music stays)"
+                keys = " ↵/p play it again  i notes  * pin  / filter  ␣ pause  h back  q quit (music stays)"
+            elif lvl.kind == "bookmarks":
+                keys = " ↵/p play from the pinned second  x unpin  i notes  / filter  ␣ pause  h back  q quit (music stays)"
+            elif lvl.kind == "tours":
+                keys = " ↵ the run, night by night  p a random night of it, straight into play  h back  q quit (music stays)"
+            elif lvl.kind == "tour":
+                keys = " ↵ sources  p play best source (or a random night, or the whole run)  i notes  d fetch  * pin  h back  q quit (music stays)"
+            elif lvl.kind == "onair":
+                keys = " ↵ tracks  p play  i notes  d fetch  h back  q quit (music stays)"
+            elif lvl.kind in ("notes", "stats"):
+                keys = " ↑↓ scroll  / filter  ␣ pause  n/b trk  h back  q quit (music stays)"
             elif lvl.kind == "home":
-                keys = " ↵ open  p play  w now playing  c radio  f song  g goto  r resume  v show  q quit (music stays)  Q stop & quit"
+                keys = " ↵ open  p play  w now playing  c radio  f song  g goto  r resume  v show  * pin  q quit (music stays)  Q stop & quit"
             elif lvl.kind == "queue":
-                keys = " ↵/p jump to track  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  / filter  h back  q quit (music stays)  Q quit and stop"
+                keys = " ↵/p jump to track  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  * pin  i notes  / filter  h back  q quit (music stays)  Q quit and stop"
             else:
-                keys = " ↵ open  p play  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  / filter  f song  g goto  v show  d fetch  r resume  q quit (music stays)  Q stop & quit"
+                keys = " ↵ open  p play  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  / filter  f song  g goto  v show  d fetch  i notes  * pin  r resume  q quit (music stays)  Q stop & quit"
             if active:
                 keys = f" ↓{len(active)} fetching " + keys
             self.put(y + 3, 0, keys[:w - 1], curses.A_DIM)
@@ -1812,12 +2245,34 @@ class App:
             self.push_tears()
         elif lvl.kind == "home" and item == HIST:
             self.push_history()
-        elif lvl.kind == "history":
+        elif lvl.kind in ("history", "bookmarks"):
             self.play_history(item)
         elif lvl.kind == "home" and item == QUEUE:
             self.push_queue()
         elif lvl.kind == "home" and item == RANDOM:
             self.random_show()
+        elif lvl.kind == "home" and item == THISDAY:
+            self.push_this_day()
+        elif lvl.kind == "home" and item == TOURS:
+            self.push_tours()
+        elif lvl.kind == "home" and item == ONAIR:
+            self.push_onair()
+        elif lvl.kind == "home" and item == BOOKMARKS:
+            self.push_bookmarks()
+        elif lvl.kind == "home" and item == STATS:
+            self.push_stats()
+        elif lvl.kind == "tours":
+            self.push_tour(item)
+        elif lvl.kind == "tour" and item == "random":
+            self.tour_random(lvl)
+        elif lvl.kind == "tour" and item == "whole":
+            self.tour_whole(lvl)
+        elif lvl.kind == "tour":
+            self.push_sources(item)
+        elif lvl.kind == "onair":
+            self.push_tracks(item)
+        elif lvl.kind in ("notes", "stats"):
+            pass
         elif lvl.kind == "home" and item == RAIN:
             self.rain()
         elif lvl.kind == "home" and item in NIGHTS:
@@ -1888,12 +2343,37 @@ class App:
             self.push_tears()
         elif lvl.kind == "home" and item == HIST:
             self.push_history()
-        elif lvl.kind == "history":
+        elif lvl.kind in ("history", "bookmarks"):
             self.play_history(item)
         elif lvl.kind == "home" and item == QUEUE:
             self.push_queue()
         elif lvl.kind == "home" and item == RANDOM:
             self.random_show()
+        elif lvl.kind == "home" and item == THISDAY:
+            self.push_this_day()
+        elif lvl.kind == "home" and item == TOURS:
+            self.push_tours()
+        elif lvl.kind == "home" and item == ONAIR:
+            self.push_onair()
+        elif lvl.kind == "home" and item == BOOKMARKS:
+            self.push_bookmarks()
+        elif lvl.kind == "home" and item == STATS:
+            self.push_stats()
+        elif lvl.kind == "tours":
+            self.push_tour(item)
+            if self.stack[-1].kind == "tour":
+                self.tour_random(self.stack[-1])
+        elif lvl.kind == "tour" and item == "random":
+            self.tour_random(lvl)
+        elif lvl.kind == "tour" and item == "whole":
+            self.tour_whole(lvl)
+        elif lvl.kind == "tour":
+            self.play_doc(self.best_source(item))
+        elif lvl.kind == "onair":
+            self.play_doc(item)
+            self.push_tracks(item)
+        elif lvl.kind in ("notes", "stats"):
+            pass
         elif lvl.kind == "home" and item == RAIN:
             self.rain()
         elif lvl.kind == "home" and item in NIGHTS:
@@ -2051,6 +2531,17 @@ class App:
             i, item = self.current()
             if item:
                 self.probe_station(item)
+        elif ch == ord("i"):
+            doc = self.doc_here()
+            if doc:
+                self.push_notes(doc)
+            else:
+                self.say("i shows the taper's notes and the reviews of a show: on a date, source or track list, or while one plays")
+        elif ch == ord("*"):
+            self.bookmark_here()
+        elif ch == ord("x") and lvl.kind == "bookmarks":
+            i, item = self.current()
+            self.delete_bookmark(lvl, i)
         elif ch == ord("a") and lvl.kind == "songs":
             self.play_all_versions(lvl)
         elif ch == ord("/"):
@@ -2059,15 +2550,9 @@ class App:
         elif ch == 27:  # Esc clears filter
             lvl.filter = ""
         elif ch == ord("d"):
-            i, item = self.current()
-            if lvl.kind in ("sources", "songs", "albums") and item:
-                self.download(item)
-            elif lvl.kind == "seastones" and isinstance(item, dict):
-                self.download(item)
-            elif lvl.kind == "tracks":
-                self.download(lvl.ctx["doc"])
-            elif lvl.kind == "dates" and item:
-                self.download(self.best_source(item))
+            doc = self.doc_here() if lvl.kind not in ("queue", "home") else None
+            if doc:
+                self.download(doc)
             else:
                 self.say("d works on a date, source or track list")
         elif ch == curses.KEY_RESIZE:
