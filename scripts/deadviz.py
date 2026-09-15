@@ -65,6 +65,29 @@ Modes:
              keeping time on her knee. Music too hot for too long and she draws the
              brand out and raises a palm: cool down boy. Settled, she puts it back.
              Silence and she stirs the embers: easy Jim
+  scylla     the strait, the next chapter of the voyage: Scylla's rock on the left with
+             her cave and six necks swaying out of it, Charybdis on the right, a whirlpool
+             that dips the sea and spins faster and wider with the bass. The ship rows
+             west between them. Near the whirlpool the bass drags on the oars and spins
+             the ship, and if it stays high she drinks it down and spits it back three
+             seconds later, one companion fewer. In reach of the rock a big beat sends a
+             head down to the deck and Scylla takes one. Through the strait, it starts
+             again from the east with six at the oars
+  sleestak   the Lost City at night: the pylon's crystals lit by the bass, columns in
+             the dark, the Marshalls' torch in the middle whose flame is the bass. The
+             Sleestak come out of the dark on either side, but they are cold-blooded and
+             slow: they only step when the music is warm, they stop dead when it goes
+             quiet, and the torch's light keeps them back. A beat flashes their eyes and
+             they hiss. Long enough in the cold and they go back where they came from
+  stealie    steal your face: the skull in the ring, the thirteen points around it one
+             group of bands each, spinning faster with the music, the lightning bolt
+             flashing white on a beat. The red half warms with the bass, the blue half
+             with the treble, the eye sockets widen with the bass
+  wall       the Wall of Sound, 1974: the PA as stacks of cabinets, one stack per
+             instrument in the places they stood: Bob, Phil's quad bass (four columns,
+             one per string), the vocal cluster in the middle and tallest, Jerry, Keith,
+             the drums. Each stack lights from the bottom with its own bands, the peak
+             cabinet holds, a beat shakes the scaffold
 
 Stock packages only: python3-numpy, pulseaudio-utils (parec via pipewire-pulse).
 On macOS there is no monitor source: install BlackHole (brew install blackhole-2ch),
@@ -91,7 +114,7 @@ BANDS = 48
 FPS = 24
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
-         "athena", "althea"]
+         "athena", "althea", "scylla", "sleestak", "stealie", "wall"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -1987,6 +2010,455 @@ class Viz:
             self.put(1, max(0, (w - 6) // 2), "ALTHEA", self.fg(1.0, True, base=SPIRAL_FG))
         if st["said"] and t < st["say_until"]:
             self.put(max(2, int(hy / 4) - 1), int(hx / 2) + 6, st["said"], self.fg(0.85, True, base=STAR_FG))
+
+    # ---- shared by the new modes: a text sprite drawn char by char, with an optional halo of sea behind it
+    def sprite_at(self, h, w, rows_, px, py, attr_fn, mirror=False, surf=None):
+        for i, row in enumerate(rows_):
+            yy = py + i
+            if not (0 <= yy < h - 1):
+                continue
+            if mirror:
+                row = row[::-1].translate(self.MIRROR)
+            if surf is not None:
+                first, last = len(row) - len(row.lstrip()), len(row.rstrip())
+                x0, x1 = max(0, px + first), min(w - 1, px + last)
+                if x1 > x0 and yy >= surf[min(max(px + len(row) // 2, 0), w - 2)] - 1:
+                    self.put(yy, x0, " " * (x1 - x0), curses.color_pair(WATER_BG))
+            for j, ch in enumerate(row):
+                if ch != " " and 0 <= px + j < w - 1:
+                    self.put(yy, px + j, ch, attr_fn(ch))
+
+    # ---- scylla (the strait: six heads on one side, the whirlpool on the other)
+    ROCK_GRAIN = [0xFF, 0xF7, 0xDF, 0xFE, 0xBF, 0xFB, 0xEF, 0x7F, 0xFD, 0xF6, 0xDB, 0xBE]
+    SCYLLA_SAYS = {"take": "SCYLLA TAKES ONE", "drink": "CHARYBDIS DRINKS THE SEA", "spit": "...AND SPITS IT BACK",
+                   "through": "THROUGH THE STRAIT", "alone": "THE MAST AND THE KEEL, AND THE FIG TREE"}
+
+    def draw_scylla(self, h, w):
+        an = self.an
+        t = self.t
+        st = self.state("scylla", h, w, lambda: {
+            "x": float(w - 44), "n": 6, "raft": False, "heads": [{"reach": 0.0, "target": None, "t0": 0.0, "sway": self.rng.random() * 6.28}
+                                                                for _ in range(6)],
+            "taken": 0, "cool": t + 4, "suck": 0.0, "swallowed": None, "spin": 0.0, "text": None, "shake": 0, "spray": [],
+            "stars": np.column_stack([self.rng.random(50) * (w - 1), self.rng.random(50) * max(1, h // 3),
+                                      self.rng.random(50)])})
+        hz = int(h * 0.36)
+        x = np.arange(w - 1)
+        amp = 0.5 + an.bass * (h * 0.08) + an.beat * 1.2
+        surf = (hz + amp * np.sin(x * 0.16 - t * 1.6) + amp * 0.4 * np.sin(x * 0.37 + t * 2.4)
+                + 0.4 * np.sin(x * 0.06 + t * 0.5))
+        # Charybdis: the whirlpool, right of centre, a dip in the surface that deepens with the bass
+        wx = int(w * 0.68)
+        pull = 0.25 + an.bass * 0.75                                   # 0..1: how hard she drinks
+        rad = 4 + pull * min(14, w * 0.12)
+        surf = surf + pull * 3.0 * np.exp(-((x - wx) / max(3.0, rad)) ** 2)
+        if an.beat > 0.35:
+            st["shake"] = max(st["shake"], 2)
+        dx = dy = 0
+        if st["shake"] > 0:
+            st["shake"] -= 1
+            dx, dy = int(self.rng.integers(-1, 2)), int(self.rng.integers(-1, 2))
+        # sky and sea
+        for sx, sy, ph in st["stars"]:
+            band = int(sx / max(1, w - 1) * (BANDS // 2)) + BANDS // 2
+            tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
+            if sy + dy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45 and sx > w * 0.26:
+                self.put(int(sy) + dy, int(sx) + dx, "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        rows = np.arange(h - 1)[:, None]
+        depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
+        under = rows >= surf[None, :]
+        self.field(np.clip(0.5 - depth * 0.9 + an.bass * 0.1, 0.0, 0.999), mask=under, base=WATER_BG)
+        for xx in range(0, w - 1):
+            yy = int(surf[xx])
+            if 0 <= yy < h - 1 and surf[xx] <= surf[max(0, xx - 1)] and surf[xx] <= surf[min(w - 2, xx + 1)]:
+                self.put(yy + dy, xx + dx, "≈" if an.treble > 0.35 else "~", self.fg(0.9, an.treble > 0.35, base=WAVE_FG))
+        # the whirlpool: rings of water turning under the dip, faster and wider the harder she drinks
+        wy = int(surf[min(wx, w - 2)])
+        spin = t * (1.5 + pull * 6)
+        for k in range(1, int(rad / 2) + 2):
+            rr = k * 2.0
+            for a in np.linspace(0, 2 * math.pi, int(rr * 4) + 8, endpoint=False):
+                if (a + spin * (1 + k * 0.15)) % (math.pi / 2) < math.pi / 3:
+                    px, py = wx + math.cos(a) * rr * 1.0 + dx, wy + 1 + math.sin(a) * rr * 0.35 + k * 0.5 + dy
+                    if 0 <= px < w - 1 and 0 <= py < h - 1 and py >= surf[min(max(int(px), 0), w - 2)]:
+                        self.put(int(py), int(px), "≈" if k % 2 else "~", self.fg(0.35 + pull * 0.5 - k * 0.05, k < 3, base=WAVE_FG))
+        self.put(wy + 1 + dy, wx + dx, "◎", self.fg(0.99, True, base=WAVE_FG))
+        # Scylla's rock: the cliff on the left, from the sky down into the sea, her cave in it
+        cw = int(w * 0.24)
+        cliff = Canvas(h, w)
+        edge = [(cw * 2 + int(math.sin(k * 0.9) * 4), k * 4) for k in range(0, int(surf[:cw].max()) + 2)]
+        cliff.poly([(0, 0)] + edge + [(0, edge[-1][1] + 4)], 0.45)
+        for (ry, rx), cell in cliff.cells.items():                     # rock, not a slab: a fixed grain in the dots
+            cell[0] &= self.ROCK_GRAIN[(ry * 3 + rx * 5) % len(self.ROCK_GRAIN)]
+            cell[1] = 0.3 + ((ry * 7 + rx * 3) % 5) * 0.06
+        cliff.paint(self, bold=False, base=RADIAL_FG)
+        for k in range(0, min(h - 2, int(surf[:cw].max()) + 1)):
+            self.put(k, max(0, cw - 6 + int(math.sin(k * 0.9))), "▐", self.fg(0.25, False, base=RADIAL_FG))
+        cave_y = max(2, int(h * 0.12))
+        self.put(cave_y, max(0, cw - 12), "▄▄▟████▙▄▄", self.fg(0.05, False, base=RADIAL_FG))
+        self.put(cave_y + 1, max(0, cw - 12), "▀▀▜████▛▀▀", self.fg(0.05, False, base=RADIAL_FG))
+        # the ship, rowing west through the strait; Charybdis slows and spins it when the bass is high
+        ship_w = 42
+        cx = int(st["x"]) + (4 if st["raft"] else ship_w // 2)
+        near = abs(cx - wx) < rad * 2.2
+        if st["swallowed"] is not None:
+            if t > st["swallowed"] + 3:                                 # spat back, upstream of the maw
+                st["swallowed"] = None
+                st["x"] = min(float(w - ship_w - 2), st["x"] + 8)
+                st["text"] = (self.SCYLLA_SAYS["spit"], t + 3)
+                st["shake"] = 6
+                st["spray"] = [[wx + self.rng.random() * 24 - 12, surf[min(wx, w - 2)] - 4 - self.rng.random() * 8, 1.0]
+                               for _ in range(30)]
+        else:
+            speed = (0.05 + an.rms * 0.4) * (0.5 if st["raft"] else 1.0)
+            if near:
+                st["suck"] = min(2.0, st["suck"] + pull * (1 / FPS) * 1.6)
+                speed *= max(0.1, 1 - pull * 1.1)
+                st["spin"] += pull * 0.4
+                if pull > 0.6 and st["suck"] > 1.5:
+                    st["swallowed"] = t
+                    st["suck"] = 0.0
+                    st["text"] = (self.SCYLLA_SAYS["drink"], t + 3)
+                    st["spray"] = [[wx + self.rng.random() * 16 - 8, surf[min(wx, w - 2)] - 2 - self.rng.random() * 6, 1.0]
+                                   for _ in range(24)]
+                    if st["n"] > 0:
+                        st["n"] -= 1
+                        if st["n"] == 0:
+                            st["raft"] = True
+                            st["text"] = (self.SCYLLA_SAYS["alone"], t + 4)
+            else:
+                st["suck"] = max(0.0, st["suck"] - 1 / FPS)
+            st["x"] -= speed
+        # the heads: six necks out of the cave, swaying; in reach of the ship a big beat sends one down
+        heads = st["heads"]
+        anchor = (max(0, cw - 8) * 2, cave_y * 4 + 4)
+        in_reach = st["swallowed"] is None and cw - 4 < cx < w * 0.55
+        if in_reach and an.beat > 0.5 and t > st["cool"]:
+            idle = [hd for hd in heads if hd["target"] is None]
+            if idle:
+                hd = idle[int(self.rng.integers(len(idle)))]
+                hd["target"], hd["t0"] = (cx, int(surf[min(cx, w - 2)]) - (2 if st["raft"] else 5)), t
+                st["cool"] = t + 3 + self.rng.random() * 3
+        necks = Canvas(h, w)
+        jaws = []
+        cv_gw, cv_gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        for i, hd in enumerate(heads):
+            base_a = 0.05 + i * 0.17                                     # a fan of resting angles below the horizontal, in radians
+            L = min(cv_gw * 0.2, cv_gh * 0.35) * (0.75 + 0.05 * i) * (0.8 + an.mid * 0.4)   # neck length in dots
+            sway = math.sin(t * 1.3 + hd["sway"]) * 0.12 + an.treble * 0.1 * math.sin(t * 4 + i)
+            rest = (anchor[0] + math.cos(base_a + sway) * L, anchor[1] + math.sin(base_a + sway) * L * 0.6)
+            k = 0.0
+            if hd["target"] is not None:
+                k = (t - hd["t0"]) / 0.9
+                if k >= 1:                                            # back in the cave
+                    hd["target"], hd["bit"], k = None, False, 0.0
+                elif k >= 0.45 and not hd.get("bit"):                 # the jaws reach the deck
+                    hd["bit"] = True
+                    if st["n"] > 0 and not st["raft"]:
+                        st["n"] -= 1
+                        st["taken"] += 1
+                        st["text"] = (self.SCYLLA_SAYS["take"], t + 2)
+                        st["shake"] = 4
+                        if st["n"] == 0:
+                            st["raft"] = True
+                            st["text"] = (self.SCYLLA_SAYS["alone"], t + 4)
+            if hd["target"] is not None and k > 0:
+                reach = math.sin(min(1.0, k * 2) * math.pi / 2) if k < 0.5 else math.cos((k - 0.5) * math.pi)
+                tx, ty = hd["target"][0] * 2, hd["target"][1] * 4
+                end = (rest[0] + (tx - rest[0]) * reach, rest[1] + (ty - rest[1]) * reach)
+            else:
+                end = rest
+            # a bowed neck: quadratic curve through a control point above the chord
+            ctrl = ((anchor[0] + end[0]) / 2 + 10, min(anchor[1], end[1]) - 12)
+            prev = anchor
+            for s in np.linspace(0, 1, 14)[1:]:
+                px = (1 - s) ** 2 * anchor[0] + 2 * (1 - s) * s * ctrl[0] + s ** 2 * end[0]
+                py = (1 - s) ** 2 * anchor[1] + 2 * (1 - s) * s * ctrl[1] + s ** 2 * end[1]
+                necks.line(prev[0], prev[1], px, py, 0.5 + (0.45 if hd["target"] is not None else 0.0), width=2)
+                prev = (px, py)
+            jaws.append((int(end[1] / 4), int(end[0] / 2), hd["target"] is not None))
+        necks.paint(self, bold=an.beat > 0.3, base=RAIN_FG)
+        for jy, jx, biting in jaws:
+            if 0 <= jy < h - 1 and 0 <= jx < w - 2:
+                self.put(jy, jx, "◖<" if biting else "◖‹", self.fg(0.95 if biting else 0.7, biting, base=RAIN_FG))
+        # the ship, or the raft, on the swell; swallowed, it is under the whirlpool
+        if st["swallowed"] is None:
+            if st["raft"]:
+                py = int(surf[min(max(cx, 0), w - 2)]) - 2
+                self.sprite_at(h, w, self.RAFT, int(st["x"]) + dx, py + dy,
+                               lambda ch: self.fg(0.95, True, base=WAVE_FG) if ch in "o/|\\" else self.fg(0.6, False, base=RADIAL_FG),
+                               surf=surf)
+            else:
+                oar = (int(st["spin"]) if near and pull > 0.4 else int(self.frame / max(2, 8 - int(an.rms * 12)))) % 3
+                rows_ = self.ship_rows(st["n"], oar, an.mid > 0.25)
+                py = int(surf[min(max(cx, 0), w - 2)]) - 9
+                self.sprite_at(h, w, rows_, int(st["x"]) + dx, py + dy,
+                               lambda ch: (self.fg(0.95, True, base=STAR_FG) if ch in "()|" else
+                                           self.fg(0.98, True, base=WAVE_FG) if ch == "o" else
+                                           self.fg(0.55, False, base=RADIAL_FG)), surf=surf)
+        else:
+            k = (t - st["swallowed"]) / 3
+            gy = wy + 3 + int(k * 6)
+            if 0 <= gy < h - 1:
+                self.put(gy, max(0, wx - 4 + dx), "~\\___/~", self.fg(0.4, False, base=RADIAL_FG))
+        spray = []
+        for sp in st["spray"]:
+            sp[1] -= 0.4
+            sp[2] -= 0.05
+            if sp[2] > 0 and 0 <= sp[1] < h - 1 and 0 <= sp[0] < w - 1:
+                self.put(int(sp[1]) + dy, int(sp[0]) + dx, "*" if sp[2] > 0.5 else "·", self.fg(0.9, True, base=WAVE_FG))
+                spray.append(sp)
+        st["spray"] = spray
+        # through the strait: past the rock, it starts again from the east, six at the oars
+        if st["x"] <= 1:
+            st["text"] = (self.SCYLLA_SAYS["through"] + (f", {st['n']} LEFT" if st["n"] else ", ALONE"), t + 4)
+            st.update({"x": float(w - ship_w - 2), "n": 6, "raft": False, "cool": t + 6, "suck": 0.0, "swallowed": None})
+        if st["text"] and t < st["text"][1]:
+            msg = st["text"][0]
+            self.put(1, max(0, (w - len(msg)) // 2) + dx, msg[:w - 1], self.fg(1.0, True, base=RADIAL_FG))
+        elif st["text"] and t >= st["text"][1]:
+            st["text"] = None
+        self.put(h - 2, 1, f"companions {st['n']}  ·  Scylla has taken {st['taken']}  ·  Charybdis drinks {int(pull * 100)}%",
+                 self.fg(0.5, False, base=WAVE_FG))
+
+    # ---- sleestak (the Lost City at night)
+    SLEESTAK = [  # two frames, facing right; O are the eyes
+        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", " _/|  |\\_", "  /    \\ ", " ^      ^"],
+        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", " _/|  |\\_", "   |  |  ", "   ^  ^  "],
+    ]
+    SLEESTAK_SAYS = ["the Sleestak are cold-blooded; in the cold they sleep", "ssssss", "the Marshalls are in the Lost City",
+                     "Enik would not approve", "do not let the torch go out"]
+
+    def draw_sleestak(self, h, w):
+        an = self.an
+        t = self.t
+        floor = h - 3
+        st = self.state("sleestak", h, w, lambda: {
+            "tick": -1, "quiet": 0.0, "warm": 0.0, "sleestak": [], "flame": [], "hiss": 0, "say": None, "say_until": 0.0,
+            "stars": np.column_stack([self.rng.random(40) * (w - 1), self.rng.random(40) * max(1, h // 2), self.rng.random(40)])})
+        dt = 1 / FPS
+        tick = int(t * 4)
+        moved = tick != st["tick"]
+        st["tick"] = tick
+        st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
+        quiet = st["quiet"] > 4
+        # the warmth of the music: cold-blooded, they only move when it is warm
+        st["warm"] = max(0.0, min(1.0, st["warm"] + (an.rms * 1.6 + an.beat * 0.4 - 0.25) * dt * 2))
+        warm = st["warm"]
+        # the sky: a few stars over the ruins, twinkling with the treble
+        for sx, sy, ph in st["stars"]:
+            tw = 0.2 + 0.8 * abs(math.sin(t * 1.2 + ph * 6.28)) * (0.3 + an.treble)
+            if tw > 0.5 and sy < floor - 12:
+                self.put(int(sy), int(sx), "·" if tw < 0.85 else "✦", self.fg(tw, False, base=STAR_FG))
+        # the Lost City: columns and a pylon, dim, the pylon's crystals lit by the bass
+        cols_x = [int(w * f) for f in (0.08, 0.2, 0.8, 0.92)]
+        for cxx in cols_x:
+            top = max(1, floor - 10 - int(an.mid * 3))
+            self.put(top, cxx - 1, "╔═╗", self.fg(0.25, False, base=RADIAL_FG))
+            for yy in range(top + 1, floor):
+                self.put(yy, cxx, "║", self.fg(0.18 + 0.1 * (yy % 2), False, base=RADIAL_FG))
+        px_ = int(w * 0.5)
+        for k in range(6):
+            yy = floor - 1 - k
+            lit = an.level[min(BANDS - 1, k * 3)] > 0.35
+            self.put(yy, px_ - 6, "▐" + ("◆" if lit else "◇") + "▌", self.fg(0.9, lit, base=SPARK_FG) if lit else self.fg(0.2, False, base=RADIAL_FG))
+        self.put(floor - 7, px_ - 6, "▟█▙", self.fg(0.3, False, base=RADIAL_FG))
+        # the torch in the middle: the flame is the bass; its light keeps them back
+        tx = int(w * 0.5) + 4
+        flame_h = 2 + int(an.bass * 7 + an.beat * 3)
+        light = 8 + flame_h * 3
+        for k in range(flame_h):
+            fl = "▲" if k == flame_h - 1 else ("▓" if k > flame_h // 2 else "█")
+            self.put(floor - 3 - k, tx + int(math.sin(t * 9 + k) * (1 if k > 1 else 0)), fl,
+                     self.fg(0.35 + k / max(1, flame_h) * 0.6, True, base=RADIAL_FG))
+        self.put(floor - 2, tx, "╫", self.fg(0.5, False, base=RADIAL_FG))
+        self.put(floor - 1, tx, "║", self.fg(0.4, False, base=RADIAL_FG))
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.2 + an.bass * 0.3, False, base=RADIAL_FG))
+        # the Sleestak: they come out of the dark on either side, slow, and only when the music is warm
+        sl = st["sleestak"]
+        want = 2 + int(min(3, an.rms * 8))
+        if len(sl) < want and moved and self.rng.random() < 0.25:
+            side = -1 if self.rng.random() < 0.5 else 1
+            sl.append({"x": float(-10 if side > 0 else w + 1), "dir": side, "frame": 0, "gone": False, "flash": 0})
+        keep = []
+        for s_ in sl:
+            edge = tx - light - 9 if s_["dir"] > 0 else tx + light          # the sprite is nine wide
+            for o in sl:                                                    # the one behind waits for the one ahead
+                if o is not s_ and o["dir"] == s_["dir"] and not o["gone"] and (o["x"] - s_["x"]) * s_["dir"] > 0:
+                    edge = min(edge, o["x"] - 11) if s_["dir"] > 0 else max(edge, o["x"] + 11)
+            if moved and warm > 0.25:                                       # cold-blooded: no warmth, no step
+                ahead = (edge - s_["x"]) * s_["dir"] > 2
+                if ahead:
+                    s_["x"] += s_["dir"] * (1 + warm * 2)
+                    s_["frame"] ^= 1
+                elif an.bass > 0.55 and self.rng.random() < 0.5:           # the torch flares: a step back
+                    s_["x"] -= s_["dir"] * 2
+                    s_["frame"] ^= 1
+            if an.beat > 0.45:
+                s_["flash"] = 6
+            s_["flash"] = max(0, s_["flash"] - 1)
+            if quiet and self.rng.random() < 0.002:                         # cold long enough, they go back into the dark
+                s_["gone"] = True
+            if s_["gone"]:
+                s_["x"] -= s_["dir"] * 0.5
+                if -10 <= s_["x"] <= w:
+                    keep.append(s_)
+                continue
+            keep.append(s_)
+            frame = self.SLEESTAK[s_["frame"]]
+            eyes = s_["flash"] > 0
+            self.sprite_at(h, w, frame, int(s_["x"]), floor - len(frame),
+                           lambda ch, eyes=eyes: (self.fg(1.0, True, base=STAR_FG) if ch == "O" and eyes else
+                                                  self.fg(0.55 + an.treble * 0.4, an.treble > 0.3, base=STAR_FG) if ch == "O" else
+                                                  self.fg(0.35 + warm * 0.4, warm > 0.5, base=RAIN_FG)),
+                           mirror=s_["dir"] < 0)
+            if eyes and s_["flash"] == 6:
+                st["hiss"] = 8
+        st["sleestak"] = keep
+        if st["hiss"] > 0:
+            st["hiss"] -= 1
+            self.put(2, max(0, (w - 7) // 2), self.HISS[(self.frame // 3) % len(self.HISS)], self.fg(0.95, True, base=RAIN_FG))
+        if quiet and t > st["say_until"]:
+            st["say"] = self.SLEESTAK_SAYS[int(self.rng.integers(len(self.SLEESTAK_SAYS)))] if self.rng.random() < 0.6 else None
+            st["say_until"] = t + 6
+        if quiet and st["say"]:
+            self.put(h - 2, 1, st["say"], self.fg(0.6, False, base=RAIN_FG))
+        else:
+            self.put(h - 2, 1, f"warmth {int(warm * 100)}%  ·  {len(keep)} Sleestak  ·  torch {flame_h}", self.fg(0.4, False, base=RAIN_FG))
+
+    # ---- stealie (steal your face)
+    def draw_stealie(self, h, w):
+        an = self.an
+        t = self.t
+        st = self.state("stealie", h, w, lambda: {"flash": 0.0, "spin": 0.0, "peak": np.zeros(13), "say": 0.0})
+        cv_gw, cv_gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        cx, cy = cv_gw / 2, cv_gh / 2 - 2
+        R = min(cv_gw / 2, cv_gh / 2) * (0.82 + an.beat * 0.03)
+        st["flash"] = max(st["flash"] * 0.85, min(1.0, an.beat * 2))
+        st["spin"] += (0.15 + an.rms * 1.2) / FPS
+        red, blue, white, bolt, rim = (Canvas(h, w) for _ in range(5))
+        # the bolt: a zigzag down the middle of the cranium, in units of R
+        path = [(-0.20, -0.80), (0.10, -0.28), (-0.10, -0.22), (0.22, 0.28)]
+
+        def bolt_x(v):                                             # the bolt's centre line at height v (units of R)
+            for (ax, ay), (bx, by) in zip(path, path[1:]):
+                if ay <= v <= by:
+                    return ax + (bx - ax) * (v - ay) / (by - ay)
+            return path[0][0] if v < path[0][1] else path[-1][0]
+        brow = -0.08                                               # the cranium ends here; the face is below
+        Ri = R * 0.80
+        for py in range(int(cy - Ri), int(cy + Ri) + 1):
+            v = (py - cy) / R
+            half = math.sqrt(max(0.0, Ri * Ri - (py - cy) ** 2))
+            for px in range(int(cx - half), int(cx + half) + 1):
+                u = (px - cx) / R
+                if v < brow:
+                    bx = bolt_x(v)
+                    if abs(u - bx) < 0.07:
+                        bolt.dot(px, py, 0.99)
+                    elif u < bx:
+                        red.dot(px, py, 0.02 + an.bass * 0.08)
+                    else:
+                        blue.dot(px, py, 0.80 - an.treble * 0.1)
+                else:
+                    # the face: eye sockets (wider with the bass), the nose, the teeth
+                    ex = 0.30 + an.bass * 0.03
+                    if ((u - ex) / 0.19) ** 2 + ((v - 0.18) / (0.14 + an.bass * 0.05)) ** 2 < 1 or \
+                       ((u + ex) / 0.19) ** 2 + ((v - 0.18) / (0.14 + an.bass * 0.05)) ** 2 < 1:
+                        continue
+                    if 0.34 < v < 0.52 and abs(u) < 0.06 * (v - 0.34) / 0.18:
+                        continue
+                    if 0.58 < v < 0.76 and abs(u) < 0.34 and (int((u + 0.34) / 0.085) % 2 == 1 or abs(v - 0.67) < 0.015):
+                        continue
+                    white.dot(px, py, 0.97)
+        # the ring, and the thirteen points around it: each one a group of bands
+        ring = Canvas(h, w)
+        ring.circle(cx, cy, R * 0.84, 0.9, n=int(R * 3))
+        ring.circle(cx, cy, R * 0.86, 0.9, n=int(R * 3))
+        st["peak"] = np.maximum(st["peak"] * 0.92, np.array([an.level[int(i * BANDS / 13):int((i + 1) * BANDS / 13)].max() for i in range(13)]))
+        for i in range(13):
+            a = -math.pi / 2 + i * 2 * math.pi / 13 + st["spin"]
+            L = R * (0.88 + 0.12 * st["peak"][i])
+            for rr in np.linspace(R * 0.87, L, max(2, int((L - R * 0.87)) + 1)):
+                spread = 0.06 * (1 - (rr - R * 0.87) / max(1, L - R * 0.87))
+                for da in (-spread, 0, spread):
+                    rim.dot(cx + math.cos(a + da) * rr, cy + math.sin(a + da) * rr, 0.3 + st["peak"][i] * 0.7)
+            hx, hy = cx + math.cos(a) * R * 0.99, cy + math.sin(a) * R * 0.99
+            rim.dot(hx, hy, 0.9)
+        rim.paint(self, bold=an.treble > 0.3, base=STAR_FG)
+        ring.paint(self, bold=False, base=STAR_FG)
+        red.paint(self, bold=an.bass > 0.3, base=SPARK_FG)
+        blue.paint(self, bold=an.treble > 0.3, base=SPARK_FG)
+        white.paint(self, bold=True, base=STAR_FG)
+        bolt.paint(self, bold=True, base=STAR_FG if st["flash"] > 0.3 else WAVE_FG)
+        if an.beat > 0.5:
+            st["say"] = t + 1.5
+        if t < st["say"]:
+            msg = "STEAL YOUR FACE RIGHT OFF YOUR HEAD"
+            self.put(1, max(0, (w - len(msg)) // 2), msg[:w - 1], self.fg(0.99, True, base=STAR_FG))
+
+    # ---- wall (the Wall of Sound, 1974)
+    # (label, x as a fraction of the width, columns side by side, cabinets tall, first band, last band, ramp)
+    WALL = [("BOB", 0.09, 2, 8, 12, 24, "wave"), ("PHIL", 0.25, 4, 12, 0, 12, "star"), ("VOCALS", 0.50, 3, 14, 18, 36, "radial"),
+            ("JERRY", 0.68, 2, 9, 14, 30, "spark"), ("KEITH", 0.83, 2, 6, 8, 30, "spiral"), ("DRUMS", 0.94, 1, 5, 36, 48, "rain")]
+    WALL_BASES = {"wave": "WAVE_FG", "star": "STAR_FG", "radial": "RADIAL_FG", "spark": "SPARK_FG", "spiral": "SPIRAL_FG", "rain": "RAIN_FG"}
+
+    def draw_wall(self, h, w):
+        an = self.an
+        t = self.t
+        floor = h - 4                                                  # the labels' row; the stage is under it
+        st = self.state("wall", h, w, lambda: {"peak": {}, "shake": 0, "lit": 0})
+        if an.beat > 0.45:
+            st["shake"] = 2
+        dx = 0
+        if st["shake"] > 0:
+            st["shake"] -= 1
+            dx = int(self.rng.integers(-1, 2))
+        avail = max(4, (floor - 3) // 2)                               # cabinet rows that fit
+        tallest = max(s[3] for s in self.WALL)
+        scale = min(1.0, avail / tallest)
+        lit_total = cab_total = 0
+        # the scaffold behind the wall
+        for yy in range(max(1, floor - int(tallest * scale) * 2 - 1), floor):
+            self.put(yy, 1, "│", self.fg(0.15, False, base=RADIAL_FG))
+            self.put(yy, w - 3, "│", self.fg(0.15, False, base=RADIAL_FG))
+        for label, xf, ncol, tall, lo, hi, ramp in self.WALL:
+            base = globals()[self.WALL_BASES[ramp]]
+            rows_ = max(2, int(tall * scale))
+            width = ncol * 5
+            x0 = int(w * xf) - width // 2 + dx
+            bands = an.level[lo:hi]
+            per = max(1, len(bands) // ncol)
+            for c in range(ncol):
+                lvl = float(bands[c * per:(c + 1) * per].mean()) if len(bands) else 0.0
+                key = (label, c)
+                st["peak"][key] = max(lvl, st["peak"].get(key, 0.0) - 0.012)
+                filled = lvl * rows_
+                peak_row = int(st["peak"][key] * rows_ + 0.5)
+                for r in range(rows_):
+                    yy = floor - 1 - r * 2
+                    if yy - 1 < 1:
+                        break
+                    xx = x0 + c * 5
+                    cab_total += 1
+                    lit = r < filled
+                    if lit:
+                        lit_total += 1
+                        col = 0.25 + 0.7 * r / max(1, rows_ - 1)
+                        self.put(yy - 1, xx, "▐██▌", self.fg(col, r > rows_ * 0.6, base=base))
+                        self.put(yy, xx, "▐▓▓▌", self.fg(col, False, base=base))
+                    elif r == peak_row and peak_row > 0:
+                        self.put(yy - 1, xx, "┌──┐", self.fg(0.6, False, base=base))
+                        self.put(yy, xx, "└──┘", self.fg(0.6, False, base=base))
+                    else:
+                        self.put(yy - 1, xx, "┌──┐", curses.A_DIM)
+                        self.put(yy, xx, "└──┘", curses.A_DIM)
+            self.put(floor, max(0, x0 + (width - len(label)) // 2), label, self.fg(0.8, an.beat > 0.3, base=base))
+        # the stage
+        self.put(floor + 1, 0, "▔" * (w - 1), self.fg(0.3 + an.bass * 0.3, False, base=RADIAL_FG))
+        st["lit"] = lit_total
+        self.put(h - 2, 1, f"the Wall of Sound, 1974  ·  {lit_total} of {cab_total} cabinets lit"
+                 + ("  ·  PHIL'S QUAD" if an.bass > 0.6 else ""), self.fg(0.5, False, base=WAVE_FG))
 
     def next_mode(self, step=1):
         self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
