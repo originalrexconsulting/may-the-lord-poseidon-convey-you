@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1334" height="852" viewBox="0 0 1334 852">
+<rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+<g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<text x="12.0" y="26" fill="#39c5cf" font-weight="bold"> Poseidon › Stats</text>
+<text x="154.8" y="26" fill="#c9d1d9">         </text>
+<text x="230.4" y="26" fill="#39c5cf" font-weight="bold">                   </text>
+<rect x="12.0" y="30" width="1310.9" height="18" fill="#c9d1d9"/>
+<text x="12.0" y="44" fill="#0d1117">  since 2026-09-10: 10 tracks from 3 shows, 1 radio tunings                                                                                                 </text>
+<text x="12.0" y="62" fill="#c9d1d9">  2.9 hours of music, counting the 10 tracks whose length was logged</text>
+<text x="12.0" y="98" fill="#c9d1d9">  ── most played songs ──</text>
+<text x="12.0" y="116" fill="#c9d1d9">     3  Morning Dew</text>
+<text x="12.0" y="134" fill="#c9d1d9">     3  They Love Each Other</text>
+<text x="12.0" y="152" fill="#c9d1d9">     2  Dark Star</text>
+<text x="12.0" y="170" fill="#c9d1d9">     1  Scarlet Begonias</text>
+<text x="12.0" y="188" fill="#c9d1d9">     1  Fire on the Mountain</text>
+<text x="12.0" y="224" fill="#c9d1d9">  ── years ──</text>
+<text x="12.0" y="242" fill="#c9d1d9">     8  1977</text>
+<text x="12.0" y="260" fill="#c9d1d9">     1  1972</text>
+<text x="12.0" y="278" fill="#c9d1d9">     1  1973</text>
+<text x="12.0" y="314" fill="#c9d1d9">  ── shows ──</text>
+<text x="12.0" y="332" fill="#c9d1d9">     8  1977-05-08 Barton Hall</text>
+<text x="12.0" y="350" fill="#c9d1d9">     1  1972-05-11 Rotterdam</text>
+<text x="12.0" y="368" fill="#c9d1d9">     1  1973-12-06 Cleveland</text>
+<text x="12.0" y="404" fill="#c9d1d9">  ── the longest ones heard ──</text>
+<text x="12.0" y="422" fill="#c9d1d9">     40:00  Dark Star  ·  1972-05-11 Rotterdam</text>
+<text x="12.0" y="782" fill="#768390">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="12.0" y="800" fill="#57ab5a"> ▶ 1977-05-08 Barton Hall  ·  They Love Each Other</text>
+<text x="12.0" y="818" fill="#c9d1d9">   1:49 / 9:11  [=================&gt;                                                                        ]  5/22  stream mp3 44.1k 198kbps  vol 65%</text>
+<text x="12.0" y="836" fill="#768390"> ↑↓ scroll  / filter  ␣ pause  n/b trk  h back  q quit (music stays)</text>
+</g></svg>

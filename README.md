@@ -37,14 +37,33 @@ The splash, two seconds of the Earth Shaker:
 
 <img src="docs/screenshots/splash.svg" width="420" alt="splash screen: Poseidon, crowned, trident raised">
 
-The home screen, and a show:
+The home screen with Barton Hall playing, and a show:
 
-<img src="docs/screenshots/home.svg" width="900" alt="home screen">
+<img src="docs/screenshots/home.svg" width="900" alt="home screen: Now, The Dead, Not Dead, Everything; Morning Dew playing">
 <img src="docs/screenshots/tracks.svg" width="900" alt="5/8/77 Barton Hall, Loser playing">
 
-Now Playing (w), the Jokes menu, the radio list:
+This day (every show played on today's date), Tours, and May '77 night by night:
 
-<img src="docs/screenshots/queue.svg" width="900" alt="the current playlist">
+<img src="docs/screenshots/thisday.svg" width="900" alt="This day: the seven September 14ths, 1974 Munich to 1993 Philadelphia">
+<img src="docs/screenshots/tours.svg" width="900" alt="Tours: fifteen runs from Fillmore West '69 to Europe '90">
+<img src="docs/screenshots/tour.svg" width="900" alt="May '77: a random night, the whole run, then the 23 nights">
+
+The taper's notes and the reviews of a source (`i`), and the stats History adds up to:
+
+<img src="docs/screenshots/notes.svg" width="900" alt="notes on the 5/11/77 Charlie Miller soundboard: source, lineage, notes, setlist, reviews">
+<img src="docs/screenshots/stats.svg" width="900" alt="Stats: tracks, hours, most played songs, years, shows, the longest Dark Star heard">
+
+Now Playing (w), the sleep timer (t) counting down in the status line, the phone remote's
+address (R), On the air, Bookmarks:
+
+<img src="docs/screenshots/queue.svg" width="900" alt="the current playlist, Morning Dew marked">
+<img src="docs/screenshots/sleep.svg" width="900" alt="the status line with the sleep timer: 30 minutes to go">
+<img src="docs/screenshots/remote.svg" width="900" alt="the remote's URL in the message line">
+<img src="docs/screenshots/onair.svg" width="900" alt="On the air: the Grateful Dead Hour, the KFOG broadcast, Dead to the World">
+<img src="docs/screenshots/bookmarks.svg" width="900" alt="Bookmarks: two pinned nights">
+
+The Jokes menu and the radio list:
+
 <img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
 
@@ -109,23 +128,32 @@ maw the bass drags on the oars and spins the ship, and if it stays high she drin
 and spits it back, one companion fewer. In reach of the rock a big beat sends a head down
 to the deck and Scylla takes one. Through the strait, it starts again from the east.
 
+<img src="docs/screenshots/scylla.svg" width="900" alt="the strait: Scylla's rock and six necks on the left, the ship with five men, Charybdis turning on the right">
+
 The Sleestak have the Lost City to themselves: the pylon's crystals lit by the bass, the
 Marshalls' torch in the middle with a flame that is the bass. They come out of the dark on
 either side, but they are cold-blooded and slow: they only step when the music is warm,
 they stop dead when it goes quiet, and the torch's light keeps them back. A beat flashes
 their eyes and they hiss.
 
+<img src="docs/screenshots/sleestak.svg" width="900" alt="the Lost City: four Sleestak at the edge of the torch light, the pylon's crystals lit">
+
 The Stealie: the skull in the ring, the thirteen points around it one group of bands each,
 turning faster with the music, the bolt flashing white on a beat. The red half warms with
 the bass, the blue with the treble, and the eye sockets widen with the bass.
+
+<img src="docs/screenshots/stealie.svg" width="900" alt="the Stealie: skull, bolt and the thirteen points">
 
 The Wall of Sound, 1974, as the PA it was: stacks of cabinets, one per instrument where
 they stood, Bob, Phil's quad bass (four columns, one per string), the vocal cluster in the
 middle and tallest, Jerry, Keith, the drums. Each stack lights from the bottom with its own
 bands, the peak cabinet holds, and a beat shakes the scaffold.
 
-Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`. The four
-newest modes have none yet.
+<img src="docs/screenshots/wall.svg" width="900" alt="the Wall of Sound: six stacks of cabinets, Phil's four columns lit">
+
+Screenshots are SVGs made from `tmux capture-pane -e` by `scripts/ansi2svg.py`; the light
+show ones here were driven by a stand-in `parec` playing synthetic drums, since the machine
+that took them has no sound card.
 
 ## Running it
 
