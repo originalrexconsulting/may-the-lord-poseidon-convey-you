@@ -94,7 +94,9 @@ timeout on the build jobs), `v2026.09.14.4` (the owl's grey eyes give light, the
 far wing lifts against the lean; all four runners in about ninety seconds) and
 `v2026.09.14.5` (the Memories section is gone, and JGB is Jerry's own band, 1970-1995:
 the taperssection tapes under creator Jerry Garcia, since archive.org's `JGB`
-collection is Melvin Seals' band after him).
+collection is Melvin Seals' band after him) and `v2026.09.14.6` (volume control: +/-
+step mpv's software gain by 5 within 0-100, m mutes, the level is remembered in
+state.json; all four runners in under two minutes).
 
 ## If CI cannot publish
 
