@@ -74,11 +74,15 @@ Modes:
              head down to the deck and Scylla takes one. Through the strait, it starts
              again from the east with six at the oars
   sleestak   the Lost City at night: the pylon's crystals lit by the bass, columns in
-             the dark, the Marshalls' torch in the middle whose flame is the bass. The
-             Sleestak come out of the dark on either side, but they are cold-blooded and
-             slow: they only step when the music is warm, they stop dead when it goes
-             quiet, and the torch's light keeps them back. A beat flashes their eyes and
-             they hiss. Long enough in the cold and they go back where they came from
+             the dark, and Will and Holly Marshall with the torch, whose flame is the
+             bass. The Sleestak come out of the dark on either side, eyes first, and
+             chase them the way Sleestak do: slow, arms out, each on its own step, only
+             while the music is warm, faster the warmer, dead still when it goes quiet.
+             The torch's light is all that keeps them back: the Marshalls back away from
+             whichever side is pressing, cornered against a column they wave the torch
+             and push through, and a flare sends the Sleestak back with an arm up. A beat
+             flashes their eyes and they hiss, a big one and a crossbow bolt flies wide.
+             Long enough in the cold and they go back where they came from
   stealie    steal your face: the skull in the ring, the thirteen points around it one
              group of bands each, spinning faster with the music, the lightning bolt
              flashing white on a beat. The red half warms with the bass, the blue half
@@ -820,12 +824,13 @@ class Viz:
             k = f["kind"]
             spec = self.FAUNA[k]
             frames = spec["frames"]
-            frame = frames[(self.frame // 8) % len(frames)]
+            fph = f.setdefault("fph", int(self.rng.integers(16)))       # its own stroke: no two swim in step
+            frame = frames[((self.frame + fph) // 8) % len(frames)]
             fw, fh = len(frame[0]), len(frame)
             alive = True
             if k == "shark":
                 f["x"] += f["dir"] * (0.22 + an.bass * 0.35 + an.beat * 0.3)
-                y = f["y"] + math.sin(self.t * 1.5) * 0.8
+                y = f["y"] + math.sin(self.t * 1.5 + fph) * 0.8
                 alive = -fw < f["x"] < w
             elif k == "whale":
                 f["x"] += f["dir"] * 0.07
@@ -2223,81 +2228,71 @@ class Viz:
                  self.fg(0.5, False, base=WAVE_FG))
 
     # ---- sleestak (the Lost City at night)
-    SLEESTAK = [  # two frames, facing right; O are the eyes
-        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", " _/|  |\\_", "  /    \\ ", " ^      ^"],
-        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", " _/|  |\\_", "   |  |  ", "   ^  ^  "],
+    SLEESTAK = [  # the walk, four phases, facing right; O are the eyes; the arms are out in front and swing as it goes
+        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", "  _||‾‾> ", "   ||    ", "  / \\    ", " ^   ^   "],
+        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", "  _||--> ", "   ||    ", "   ||    ", "   ^^    "],
+        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", "  _||__> ", "   ||    ", "  / \\    ", " ^   ^   "],
+        ["  .-==-. ", " ( O  O )", "  \\ ‾‾ / ", "  _||--> ", "   ||    ", "   ||    ", "   ^^    "],
     ]
+    SLEESTAK_UP = ["  .-==-./", " ( O  O )", "  \\ ‾‾ /|", "  _||  | ", "   ||    ", "  / \\    ", " ^   ^   "]  # an arm up: torch in its face, or a hiss
+    WILL = [[" o ", "/|\\", " | ", "/ \\"], [" o ", "/|\\", " | ", " | "]]       # the torch bearer, facing right
+    HOLLY = [["=o=", "/|\\", "/ \\"], ["=o=", "/|\\", " | "]]                   # pigtails, behind him
     SLEESTAK_SAYS = ["the Sleestak are cold-blooded; in the cold they sleep", "ssssss", "the Marshalls are in the Lost City",
                      "Enik would not approve", "do not let the torch go out"]
+    MARSHALL_SAYS = ["HOLLY, STAY BEHIND ME", "Will!", "keep the torch up", "they're slow, keep moving", "Dad!", "the pylon, Will, get to the pylon"]
 
     def draw_sleestak(self, h, w):
         an = self.an
         t = self.t
         floor = h - 3
         st = self.state("sleestak", h, w, lambda: {
-            "tick": -1, "quiet": 0.0, "warm": 0.0, "sleestak": [], "flame": [], "hiss": 0, "say": None, "say_until": 0.0,
+            "quiet": 0.0, "warm": 0.0, "sleestak": [], "bolts": [], "say": None, "say_until": 0.0, "beat_prev": 0.0,
+            "hx": w * 0.5 + 3, "hdir": 1, "hnext": 0.0, "charge_until": 0.0, "hstep": 0, "shout": None, "shout_until": 0.0, "shout_next": 0.0,
             "stars": np.column_stack([self.rng.random(40) * (w - 1), self.rng.random(40) * max(1, h // 2), self.rng.random(40)])})
         dt = 1 / FPS
-        tick = int(t * 4)
-        moved = tick != st["tick"]
-        st["tick"] = tick
         st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
         quiet = st["quiet"] > 4
+        onset = an.beat > 0.4 >= st["beat_prev"]                    # the first frame of a beat
+        st["beat_prev"] = an.beat
         # the warmth of the music: cold-blooded, they only move when it is warm
-        st["warm"] = max(0.0, min(1.0, st["warm"] + (an.rms * 4.0 + an.beat * 0.5 - 0.25) * dt * 2))   # music at rms 0.1 warms them
+        st["warm"] = max(0.0, min(1.0, st["warm"] + (an.rms * 5.0 + an.beat * 0.5 - 0.25) * dt * 2))   # anything over the quiet line warms them
         warm = st["warm"]
         # the sky: a few stars over the ruins, twinkling with the treble
         for sx, sy, ph in st["stars"]:
             tw = 0.2 + 0.8 * abs(math.sin(t * 1.2 + ph * 6.28)) * (0.3 + an.treble)
             if tw > 0.5 and sy < floor - 12:
                 self.put(int(sy), int(sx), "·" if tw < 0.85 else "✦", self.fg(tw, False, base=STAR_FG))
-        # the Lost City: columns and a pylon, dim, the pylon's crystals lit by the bass
-        cols_x = [int(w * f) for f in (0.08, 0.2, 0.8, 0.92)]
-        for cxx in cols_x:
-            top = max(1, floor - 10 - int(an.mid * 3))
-            self.put(top, cxx - 1, "╔═╗", self.fg(0.25, False, base=RADIAL_FG))
-            for yy in range(top + 1, floor):
-                self.put(yy, cxx, "║", self.fg(0.18 + 0.1 * (yy % 2), False, base=RADIAL_FG))
-        px_ = int(w * 0.5)
-        for k in range(6):
-            yy = floor - 1 - k
-            lit = an.level[min(BANDS - 1, k * 3)] > 0.35
-            self.put(yy, px_ - 6, "▐" + ("◆" if lit else "◇") + "▌", self.fg(0.9, lit, base=SPARK_FG) if lit else self.fg(0.2, False, base=RADIAL_FG))
-        self.put(floor - 7, px_ - 6, "▟█▙", self.fg(0.3, False, base=RADIAL_FG))
-        # the torch in the middle: the flame is the bass; its light keeps them back
-        tx = int(w * 0.5) + 4
+        cols_x = [int(w * f) for f in (0.08, 0.2, 0.8, 0.92)]          # the Lost City's columns; drawn last, everyone passes behind them
+        # the torch is in Will's hand, held out toward whichever side is pressing; the flame is the bass, and
+        # its light is all that keeps them back
+        hx, hdir = st["hx"], st["hdir"]
+        tx = int(hx) + (3 if hdir > 0 else -1)
         flame_h = 2 + int(an.bass * 7 + an.beat * 3)
         light = 8 + flame_h * 3
-        for k in range(flame_h):
-            fl = "▲" if k == flame_h - 1 else ("▓" if k > flame_h // 2 else "█")
-            self.put(floor - 3 - k, tx + int(math.sin(t * 9 + k) * (1 if k > 1 else 0)), fl,
-                     self.fg(0.35 + k / max(1, flame_h) * 0.6, True, base=RADIAL_FG))
-        self.put(floor - 2, tx, "╫", self.fg(0.5, False, base=RADIAL_FG))
-        self.put(floor - 1, tx, "║", self.fg(0.4, False, base=RADIAL_FG))
-        self.put(floor, 0, "▔" * (w - 1), self.fg(0.2 + an.bass * 0.3, False, base=RADIAL_FG))
-        # the Sleestak: they come out of the dark on either side, slow, and only when the music is warm
+        # the floor: a pool of torch light, dark beyond it
+        pool = 0.15 + 0.6 * np.clip(1 - np.abs(np.arange(w - 1) - tx) / light, 0, 1) ** 1.5
+        q = (pool * 12).astype(int)
+        x0 = 0
+        for x1 in range(1, w):
+            if x1 == w - 1 or q[x1] != q[x0]:
+                self.put(floor, x0, "▔" * (x1 - x0), self.fg(pool[x0], False, base=RADIAL_FG))
+                x0 = x1
+        # the Sleestak: they come out of the dark on either side, eyes first, and chase the torch at their own pace,
+        # each on its own step; cold-blooded, they only step while the music is warm, faster the warmer
         sl = st["sleestak"]
-        want = 2 + int(min(3, an.rms * 8))
-        if len(sl) < want and moved and self.rng.random() < 0.25:
+        want = min(2 + int(an.rms * 8), 3 + w // 60)
+        if len(sl) < want and self.rng.random() < dt:                       # about one a second while short
             side = -1 if self.rng.random() < 0.5 else 1
-            sl.append({"x": float(-10 if side > 0 else w + 1), "dir": side, "frame": 0, "gone": False, "flash": 0})
+            sl.append({"x": float(-2 if side > 0 else w - 8), "dir": side, "ph": 0, "up": 0, "flash": 0, "hiss": 0,
+                       "next": t + self.rng.random() * 0.3, "gone": False})
+        near = [None, None]                                                 # the closest on the left / right, from the light's edge
         keep = []
         for s_ in sl:
             edge = tx - light - 9 if s_["dir"] > 0 else tx + light          # the sprite is nine wide
             for o in sl:                                                    # the one behind waits for the one ahead
                 if o is not s_ and o["dir"] == s_["dir"] and not o["gone"] and (o["x"] - s_["x"]) * s_["dir"] > 0:
                     edge = min(edge, o["x"] - 11) if s_["dir"] > 0 else max(edge, o["x"] + 11)
-            if moved and warm > 0.25:                                       # cold-blooded: no warmth, no step
-                ahead = (edge - s_["x"]) * s_["dir"] > 2
-                if ahead:
-                    s_["x"] += s_["dir"] * (1 + warm * 2)
-                    s_["frame"] ^= 1
-                elif an.bass > 0.55 and self.rng.random() < 0.5:           # the torch flares: a step back
-                    s_["x"] -= s_["dir"] * 2
-                    s_["frame"] ^= 1
-            if an.beat > 0.45:
-                s_["flash"] = 6
-            s_["flash"] = max(0, s_["flash"] - 1)
+            inside = (s_["x"] - edge) * s_["dir"]                           # > 0: the light is on it
             if quiet and self.rng.random() < 0.002:                         # cold long enough, they go back into the dark
                 s_["gone"] = True
             if s_["gone"]:
@@ -2306,19 +2301,112 @@ class Viz:
                     keep.append(s_)
                 continue
             keep.append(s_)
-            frame = self.SLEESTAK[s_["frame"]]
+            side = 0 if s_["dir"] > 0 else 1
+            if near[side] is None or -inside < near[side]:
+                near[side] = -inside
+            if onset and s_["next"] > t + 0.08:                             # a beat lands the step early
+                s_["next"] = t
+            if t >= s_["next"] and warm > 0.2:                              # cold-blooded: no warmth, no step
+                s_["next"] = t + 0.35 - 0.2 * warm
+                if inside < -2:                                             # room ahead: a step toward the torch
+                    s_["x"] += s_["dir"] * (1 + warm * 2)
+                    s_["ph"] = (s_["ph"] + 1) % 4
+                elif inside > 1:                                            # the light is in its face: back, arm up
+                    s_["x"] -= s_["dir"] * 2
+                    s_["ph"] = (s_["ph"] + 1) % 4
+                    s_["up"] = 6
+                elif self.rng.random() < 0.4:                               # at the edge: it shifts and reaches
+                    s_["ph"] = 1 if s_["ph"] == 0 else 0
+            if onset and an.beat > 0.45:
+                s_["flash"] = 6
+                if inside > -8 and self.rng.random() < 0.5:                 # the ones at the light hiss and reach
+                    s_["up"] = 7
+                    s_["hiss"] = 8
+                if an.beat > 0.5 and -5 < inside < 2 and not st["bolts"] and self.rng.random() < 0.35:  # a crossbow bolt
+                    st["bolts"].append({"x": s_["x"] + (8 if s_["dir"] > 0 else 0), "y": floor - 4.0, "vx": s_["dir"] * 1.3, "vy": -0.1})
+            s_["flash"] = max(0, s_["flash"] - 1)
+            s_["up"] = max(0, s_["up"] - 1)
             eyes = s_["flash"] > 0
+            lit = max(0.0, 1 - max(0.0, -inside) / (w * 0.3))               # deep in the dark only the eyes show
+            frame = self.SLEESTAK_UP if s_["up"] else self.SLEESTAK[s_["ph"]]
+            if lit < 0.15:
+                frame = ["".join(c if c == "O" else " " for c in row) for row in frame]
             self.sprite_at(h, w, frame, int(s_["x"]), floor - len(frame),
-                           lambda ch, eyes=eyes: (self.fg(1.0, True, base=STAR_FG) if ch == "O" and eyes else
-                                                  self.fg(0.55 + an.treble * 0.4, an.treble > 0.3, base=STAR_FG) if ch == "O" else
-                                                  self.fg(0.35 + warm * 0.4, warm > 0.5, base=RAIN_FG)),
+                           lambda ch, eyes=eyes, lit=lit: (self.fg(1.0, True, base=STAR_FG) if ch == "O" and eyes else
+                                                           self.fg(0.55 + an.treble * 0.4, an.treble > 0.3, base=STAR_FG) if ch == "O" else
+                                                           self.fg(0.2 + lit * 0.5 + warm * 0.2, warm > 0.5 and lit > 0.5, base=RAIN_FG)),
                            mirror=s_["dir"] < 0)
-            if eyes and s_["flash"] == 6:
-                st["hiss"] = 8
+            if s_["hiss"] > 0:
+                s_["hiss"] -= 1
+                self.put(floor - len(frame) - 1, int(s_["x"]) + 2, self.HISS[(self.frame // 3) % len(self.HISS)], self.fg(0.95, True, base=RAIN_FG))
         st["sleestak"] = keep
-        if st["hiss"] > 0:
-            st["hiss"] -= 1
-            self.put(2, max(0, (w - 7) // 2), self.HISS[(self.frame // 3) % len(self.HISS)], self.fg(0.95, True, base=RAIN_FG))
+        # the bolts: they never hit anything
+        bolts = []
+        for b in st["bolts"]:
+            b["x"] += b["vx"]
+            b["vy"] += 0.02
+            b["y"] += b["vy"]
+            if b["y"] >= floor - 1 or abs(b["x"] - tx) < 3 or not (0 <= b["x"] < w - 2):
+                self.put(floor - 1, int(min(max(b["x"], 0), w - 2)), "✧", self.fg(0.9, True, base=RADIAL_FG))
+                continue
+            self.put(int(b["y"]), int(b["x"]), "─>" if b["vx"] > 0 else "<─", self.fg(0.6, False, base=RADIAL_FG))
+            bolts.append(b)
+        st["bolts"] = bolts
+        # the Marshalls back away from whichever side is pressing, torch out, and the columns pen them in;
+        # with nobody pressing they edge back toward the pylon
+        lo, hi = cols_x[1] + 6, cols_x[2] - 8
+        press_l = near[0] is not None and near[0] < 4
+        press_r = near[1] is not None and near[1] < 4
+        charging = t < st["charge_until"]                                  # cornered, they wave the torch and push through
+        if charging:
+            pass
+        elif press_l and press_r:
+            hdir = -1 if near[0] < near[1] else 1
+        elif press_l or press_r:
+            hdir = -1 if press_l else 1
+        cornered = False
+        if t >= st["hnext"] and not quiet:
+            st["hnext"] = t + 0.18
+            if charging:
+                ahead = near[0 if hdir < 0 else 1]
+                if (ahead is None or ahead > -4) and lo <= hx + hdir * 2 <= hi:   # up to the Sleestak, not through it
+                    hx, st["hstep"] = hx + hdir * 2, st["hstep"] ^ 1
+            elif press_l or press_r:
+                nx = hx - hdir * 2
+                if lo <= nx <= hi:
+                    hx, st["hstep"] = nx, st["hstep"] ^ 1
+                else:
+                    cornered = True
+                    st["charge_until"] = t + 2.0
+            elif abs(hx - (w * 0.5 + 3)) > 2:
+                hx, st["hstep"] = hx + (1 if hx < w * 0.5 + 3 else -1), st["hstep"] ^ 1
+        st["hx"], st["hdir"] = hx, hdir
+        if cornered and t > st["shout_next"]:
+            st["shout"] = self.MARSHALL_SAYS[int(self.rng.integers(len(self.MARSHALL_SAYS)))]
+            st["shout_until"], st["shout_next"] = t + 2.5, t + 6
+        hx_ = int(hx)
+        tx = hx_ + (3 if hdir > 0 else -1)                                 # the torch goes with the turn
+        for k in range(flame_h):
+            fl = "▲" if k == flame_h - 1 else ("▓" if k > flame_h // 2 else "█")
+            self.put(floor - 3 - k, tx + int(math.sin(t * 9 + k) * (1 if k > 1 else 0)), fl,
+                     self.fg(0.35 + k / max(1, flame_h) * 0.6, True, base=RADIAL_FG))
+        self.put(floor - 2, tx, "|", self.fg(0.5, False, base=RADIAL_FG))
+        self.sprite_at(h, w, self.WILL[st["hstep"]], hx_, floor - 4, lambda ch: self.fg(0.75, False, base=RADIAL_FG), mirror=hdir < 0)
+        self.sprite_at(h, w, self.HOLLY[st["hstep"]], hx_ - hdir * 4, floor - 3, lambda ch: self.fg(0.65, False, base=RADIAL_FG), mirror=hdir < 0)
+        if st["shout"] and t < st["shout_until"]:
+            self.put(floor - 9, max(0, hx_ + 1 - len(st["shout"]) // 2), st["shout"], self.fg(0.9, True, base=RADIAL_FG))
+        # the Lost City in front of them all: columns, dim, and the pylon off to one side, its crystals lit by the bass
+        for cxx in cols_x:
+            top = max(1, floor - 10 - int(an.mid * 3))
+            self.put(top, cxx - 1, "╔═╗", self.fg(0.25, False, base=RADIAL_FG))
+            for yy in range(top + 1, floor):
+                self.put(yy, cxx, "║", self.fg(0.18 + 0.1 * (yy % 2), False, base=RADIAL_FG))
+        px_ = int(w * 0.14)                                                # in the dark, between the outer columns
+        for k in range(6):
+            yy = floor - 1 - k
+            lit = an.level[min(BANDS - 1, k * 3)] > 0.35
+            self.put(yy, px_, "▐" + ("◆" if lit else "◇") + "▌", self.fg(0.9, lit, base=SPARK_FG) if lit else self.fg(0.2, False, base=RADIAL_FG))
+        self.put(floor - 7, px_, "▟█▙", self.fg(0.3, False, base=RADIAL_FG))
         if quiet and t > st["say_until"]:
             st["say"] = self.SLEESTAK_SAYS[int(self.rng.integers(len(self.SLEESTAK_SAYS)))] if self.rng.random() < 0.6 else None
             st["say_until"] = t + 6
