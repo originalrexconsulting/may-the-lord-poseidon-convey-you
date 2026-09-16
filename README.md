@@ -130,13 +130,15 @@ to the deck and Scylla takes one. Through the strait, it starts again from the e
 
 <img src="docs/screenshots/scylla.svg" width="900" alt="the strait: Scylla's rock and six necks on the left, the ship with five men, Charybdis turning on the right">
 
-The Sleestak have the Lost City to themselves: the pylon's crystals lit by the bass, the
-Marshalls' torch in the middle with a flame that is the bass. They come out of the dark on
-either side, but they are cold-blooded and slow: they only step when the music is warm,
-they stop dead when it goes quiet, and the torch's light keeps them back. A beat flashes
-their eyes and they hiss.
+The Sleestak have the Marshalls in the Lost City: the pylon's crystals lit by the bass, Will
+and Holly with the torch, its flame the bass. The Sleestak come out of the dark on either
+side, eyes first, and chase them the way Sleestak do, slow and arms out, each on its own
+step, only while the music is warm and dead still when it goes quiet. The torch's light is
+all that keeps them back: the Marshalls back away from whichever side is pressing, and
+cornered against a column they wave the torch and push through. A beat flashes the
+Sleestak's eyes and they hiss; a big one and a crossbow bolt flies wide.
 
-<img src="docs/screenshots/sleestak.svg" width="900" alt="the Lost City: four Sleestak at the edge of the torch light, the pylon's crystals lit">
+<img src="docs/screenshots/sleestak.svg" width="900" alt="the Lost City: Will and Holly with the torch between two Sleestak, one coming out from behind a column, a crossbow bolt on the way">
 
 The Stealie: the skull in the ring, the thirteen points around it one group of bands each,
 turning faster with the music, the bolt flashing white on a beat. The red half warms with
