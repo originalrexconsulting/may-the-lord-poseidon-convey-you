@@ -56,7 +56,8 @@ Modes:
              snapping wide on a beat. The eyes dilate with the bass and follow the
              stereo balance; the head snaps toward the loudest band the way an owl's
              does. Quiet music and it asks the only question an owl asks; the answer
-             here is Nobody. Long enough and it turns its head all the way round
+             here is Nobody. Long enough and it turns its head all the way round.
+             The bough sways in a wind that gusts with the music, and she rides it
   althea     the healer, not the goddess: Althaea, at the hearth in Calydon with the
              brand that holds her son's life. The fire is the spectrum, one flame per
              band, the ember of the log glows with the bass, sparks fly on a beat and
@@ -1603,9 +1604,22 @@ class Viz:
         an = self.an
         t = self.t
         floor = h - 2
+
+        def grow():                                                 # the bough's twigs, fixed for the life of the screen
+            twigs, u = [], 0.05
+            while u < 0.94:
+                if not 0.40 < u < 0.60:                             # nothing sprouts where she stands
+                    up = self.rng.random() < 0.55
+                    twigs.append({"u": u, "up": up, "L": self.rng.uniform(0.09, 0.14),
+                                  "ang": -self.rng.uniform(0.5, 1.0) if up else self.rng.uniform(0.35, 0.75),
+                                  "pairs": int(self.rng.integers(2, 4)), "olives": self.rng.random() < 0.5,
+                                  "ph": self.rng.uniform(0, 2 * math.pi)})
+                u += self.rng.uniform(0.08, 0.13)
+            return twigs
         st = self.state("athena", h, w, lambda: {
             "tick": -1, "turn": 0, "quiet": 0.0, "lid": 0.0, "blink": 0, "hoot": 0, "around": 0.0,
-            "spread": 0.2, "said": None, "say_until": 0.0, "olives": [],
+            "spread": 0.2, "said": None, "say_until": 0.0, "twigs": grow(),
+            "wind": 0.0, "gust": 0.0, "gust_at": 0.0, "bend": 0.0, "bend_v": 0.0,
             "phase": 0.0, "amp": 0.0, "period": 0.5, "last_beat": -9.0, "y": 0.0, "vy": 0.0})
         tick = int(t * 4)
         moved = tick != st["tick"]
@@ -1662,18 +1676,42 @@ class Viz:
         stretch = -st["y"] * 0.25                                   # squashed on the dip, tall on the rebound
         # geometry
         gw, gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
-        H = min(floor * 4 - 10, gw * 0.9)
+        H = min(floor * 4 - 18, gw * 0.9)
         cx0 = gw / 2
-        top = floor * 4 - 4 - 0.96 * H
+        top = floor * 4 - 12 - 0.96 * H
         feet_v = 0.94                                               # she pivots on her talons
+        # the olive bough: rooted off the left edge, thick there and a whip at the tip.  A wind
+        # gusts across it, harder when the music is loud; the bough is a cantilever, so it bends
+        # most at the tip, springs back past level, and settles; the twigs bend further and the
+        # leaves flutter.  When she lands a beat the bough gives under her and the far end dips
+        # with it.  Her feet are wherever the bough is: she rides the sway, and dances on top.
+        y0 = floor * 4 - 13                                         # over the architrave, the leaves in the sky
+        wind_A = 0.15 * H                                           # a full gust lifts the tip this far
+        if t >= st["gust_at"]:
+            st["gust_at"] = t + self.rng.uniform(1.5, 4.0)
+            st["gust"] = self.rng.uniform(-0.4, 1.0) * (0.5 + 0.5 * min(1.0, an.rms * 2.5))
+        st["wind"] += (st["gust"] - st["wind"]) * dt / 0.7
+        wind = st["wind"]
+        st["bend_v"] += (32 * (-wind * wind_A - st["bend"]) - 4 * st["bend_v"]) * dt
+        st["bend"] += st["bend_v"] * dt
+        load = 0.7 * bob * H                                        # her weight, landing the beat
+        perch_u, end_u = 0.5, 0.965
+
+        def bough(u):                                               # (x, y, thickness) of the bough's centreline
+            base = y0 + 0.025 * H * math.sin(u * 7.5 + 0.6)
+            r = min(u, perch_u) / perch_u
+            s = r * r * (3 - r) / 2 if u <= perch_u else 1 + 1.5 * (u - perch_u) / perch_u
+            return u * gw, base + st["bend"] * u ** 1.6 + load * s, 4.5 - 3.2 * u
+        px_, py_, pth = bough(perch_u)
+        feet_y = py_ - pth / 2 - 1
 
         def P(u, v):
             return cx0 + u * H, top + v * H
 
-        def B(u, v, follow=1.0):                                    # the owl: sways, dips, stretches from the feet up
+        def B(u, v, follow=1.0):                                    # she sways, dips, stretches from the feet up
             lift = feet_v - v
             return (cx0 + u * H * (1 - 0.35 * stretch) + sway * follow * lift * H,
-                    top + feet_v * H - lift * H * (1 + stretch) + bob * H)
+                    feet_y - lift * H * (1 + stretch))
         # the moon, and the Parthenon along the bottom
         moon = Canvas(h, w)
         mx, my = P(0.36, 0.10)
@@ -1686,6 +1724,46 @@ class Viz:
                 self.put(floor - 1 - r, xx, "┃", self.fg(0.15, False, base=SPIRAL_FG))
         self.put(floor - 4, 0, "━" * (w - 1), self.fg(0.2, False, base=SPIRAL_FG))
         self.put(floor, 0, "▔" * (w - 1), self.fg(0.2, False, base=SPIRAL_FG))
+        # the bough, its twigs, the leaves in pairs the way olive leaves grow, and the olives
+        wood = Canvas(h, w)
+        leaves = Canvas(h, w)
+        bend = st["bend"] / wind_A                                  # -1..1, the tip's lift as a fraction of a full gust
+        leaf_col = 0.5 + 0.3 * min(1.0, an.treble * 1.5)
+        pts = [bough(end_u * i / 60) for i in range(61)]
+        for i, ((xa, ya, wa), (xb, yb, wb)) in enumerate(zip(pts, pts[1:])):
+            wood.line(xa, ya, xb, yb, 0.32, width=max(1, int(round((wa + wb) / 2))))
+            if i % 3 == 1:                                         # bark, a fleck on the underside
+                wood.dot(xa, ya + wa / 2 + 1, 0.2)
+
+        def leaf(x, y, a, L):
+            dx, dy = math.cos(a), math.sin(a)
+            m, wd = L * 0.45, L * 0.2
+            leaves.poly([(x, y), (x + dx * m - dy * wd, y + dy * m + dx * wd), (x + dx * L, y + dy * L),
+                         (x + dx * m + dy * wd, y + dy * m - dx * wd)], leaf_col)
+        for tw in st["twigs"]:
+            x, y, th = bough(tw["u"])
+            slope = math.atan2(bough(tw["u"] + 0.01)[1] - y, 0.01 * gw)
+            flutter = 0.1 + 0.3 * abs(wind) + 0.15 * an.treble
+            a = tw["ang"] + slope - bend * 0.3 + math.sin(t * 4.5 + tw["ph"]) * flutter * 0.4
+            L = tw["L"] * H
+            sx, sy = x, y + (-th / 2 if tw["up"] else th / 2)
+            ex, ey = sx + math.cos(a) * L, sy + math.sin(a) * L
+            wood.line(sx, sy, ex, ey, 0.35, width=2 if L > 16 else 1)
+            for j in range(tw["pairs"] + 1):
+                f = (j + 1) / (tw["pairs"] + 1)
+                lx, ly = sx + (ex - sx) * f, sy + (ey - sy) * f
+                ll = 0.065 * H * (1 - 0.25 * f)
+                if j == tw["pairs"]:                                # the tip leaf carries on the twig's line
+                    leaf(lx, ly, a + math.sin(t * 7 + tw["ph"]) * flutter, ll)
+                    continue
+                for k in (-1, 1):                                  # opposite pairs
+                    wob = math.sin(t * 7 + tw["ph"] + j * 1.7 + k) * flutter
+                    leaf(lx, ly, a + k * 0.85 + wob, ll)
+                if tw["olives"] and j == tw["pairs"] - 1:          # a pair of olives hanging at the node
+                    for k in (-1, 1):
+                        wood.ellipse(lx + k * 2.5 - bend * 2, ly + 4 + abs(bend), 1.5, 2.2, 0.12)
+        wood.paint(self, bold=False, base=RAIN_FG)
+        leaves.paint(self, bold=True, base=RAIN_FG)
         # the wings: one feather per band, fanned from the shoulders, long when the band is loud
         wings = Canvas(h, w)
         half = BANDS // 2
@@ -1701,7 +1779,7 @@ class Viz:
                 wings.line(sx, sy, ex, ey, 0.25 + lvl * 0.7, width=2)
                 wings.dot(ex, ey, 0.95)
         wings.paint(self, bold=an.beat > 0.3, base=WAVE_FG)
-        # the owl: body, head, face, eyes, beak, talons, and the olive branch
+        # the goddess: body, head, face, eyes, beak
         body = Canvas(h, w)
         face = Canvas(h, w)
         eyes = Canvas(h, w)
@@ -1748,22 +1826,16 @@ class Viz:
         else:                                                      # the back of the head: rings of feathers
             for r in (0.06, 0.12, 0.18):
                 face.circle(hx, hy, r * H, 0.4, n=int(r * H * 3))
-        # olive branch, leaves, olives, talons
-        branch = Canvas(h, w)
-        y0 = floor * 4 - 5
-        for xx in range(0, gw, 2):
-            branch.dot(xx, y0 + 2 * math.sin(xx * 0.05), 0.5)
-            branch.dot(xx, y0 + 1 + 2 * math.sin(xx * 0.05), 0.5)
-            if xx % 24 == 0:
-                yy = y0 + 2 * math.sin(xx * 0.05)
-                branch.line(xx, yy, xx + 9, yy - 8, 0.8, width=2)
-                branch.line(xx, yy, xx - 6, yy - 9, 0.8, width=2)
-            if xx % 40 == 20:
-                branch.ellipse(xx, y0 + 2 * math.sin(xx * 0.05) - 3, 2, 3, 0.15)
+        # the talons: three toes forward from each ankle over the bough, each claw hooking under
+        # the far side of it, so however it sways she is on it
+        claws = Canvas(h, w)
         for side in (-1, 1):
-            tx = bx + side * 0.07 * H
+            ax, ay = bx + side * 0.07 * H, feet_y - 0.05 * H
             for k in (-1, 0, 1):
-                branch.line(tx, by + 0.26 * H * tall, tx + k * 0.03 * H, y0 - 1, 0.3, width=2)
+                tx = ax + k * 0.035 * H
+                _, ty, tth = bough(min(end_u, max(0.0, tx / gw)))
+                claws.line(ax, ay, tx, ty - tth / 2, 0.3, width=2)
+                claws.line(tx, ty - tth / 2, tx + (1.5 if k >= 0 else -1.5), ty + tth / 2 + 1.5, 0.35, width=2)
         for (cy, cx), _ in body.cells.items():
             self.put(cy, cx, " ")
         body.paint(self, bold=False, base=RADIAL_FG)
@@ -1771,7 +1843,7 @@ class Viz:
         eyes.paint(self, bold=True, base=STAR_FG)
         dark.paint(self, bold=False, base=RADIAL_FG)
         gleam.paint(self, bold=True, base=STAR_FG)
-        branch.paint(self, bold=True, base=RAIN_FG)
+        claws.paint(self, bold=True, base=RAIN_FG)
         # words
         if st["hoot"] > 0 and not around:
             self.put(int(hy / 4) + 2, int((hx + turn) / 2) + 8, "hoo" if st["hoot"] > 4 else "hoo-hoo",
