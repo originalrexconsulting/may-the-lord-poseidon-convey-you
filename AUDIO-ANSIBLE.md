@@ -11,6 +11,7 @@ Debian 13 ships PipeWire as the default audio server. The laptop running PulseAu
 ## Why this design
 
 - PipeWire with `allowed-rates` switches the DAC to the file's rate instead of resampling. Bit-perfect in practice without exclusive `hw:` access.
+  The switch only happens when the device is idle and PipeWire re-opens it: a sink that is already `RUNNING` keeps its current rate and resamples the new stream into it. Going straight from a 44.1 kHz show to a 48 kHz stream therefore stays at 44.1, with no second stream involved. Stop, let the sink suspend (a few seconds), then start the new source.
 - All apps (Strawberry, browser for KDFC, archive.org) share the Rotel. No "device busy" errors.
 - Debian is moving to PipeWire; PulseAudio config would be throwaway work.
 
@@ -71,7 +72,7 @@ context.properties = {
 }
 ```
 
-Rationale: Dead shows are 44.1 kHz, DAT captures are 48 or 32 kHz, TV/optical is 48. The list covers everything the A14 accepts.
+Rationale: Dead shows are 44.1 kHz, DAT captures are 48 or 32 kHz, TV/optical is 48. The list covers everything the A14 accepts. `default.clock.rate` is the rate the DAC idles at and the one it falls back to, so a 44.1 kHz source is indistinguishable from a resampled one by rate alone -- test rate switching with a 48 kHz source.
 
 Notify a handler that restarts `pipewire` and `wireplumber` in user scope when this file changes.
 
@@ -117,7 +118,7 @@ Use `community.general.ini_file` for these keys. Strawberry must not be running 
 - `pactl info` reports `Server Name: PulseAudio (on PipeWire ...)`
 - `wpctl status` lists the Rotel under Audio Sinks
 - `fuser -v /dev/snd/*` shows `pipewire`, not `pulseaudio`
-- Optional: with a 48 kHz file playing, `cat /proc/asound/R20/pcm0p/sub0/hw_params` shows `rate: 48000`
+- Optional, and order-dependent: stop playback first, wait for the sink to reach `SUSPENDED` (`pactl list sinks short`, a few seconds; `hw_params` then reads `closed`), and only then start a 48 kHz source. `cat /proc/asound/R20/pcm0p/sub0/hw_params` shows `rate: 48000`. Run against a still-`RUNNING` sink it reports `44100` and looks like a broken config when nothing is wrong. `scripts/radio.py`'s `ddur` station is 16/48 and exists for this test.
 
 Fail the play if the first three don't hold after a login cycle.
 
