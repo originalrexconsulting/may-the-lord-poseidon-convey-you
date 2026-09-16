@@ -37,7 +37,7 @@ alsa-utils
 
 On trixie, `pipewire-pulse` conflicts with `pulseaudio`, so apt will remove `pulseaudio` when installing the list above. Let it; use `state: absent` for `pulseaudio` explicitly so the play is honest about it. Keep `pulseaudio-utils` (provides `pactl`, works against pipewire-pulse). Add `gstreamer1.0-pipewire` to the list.
 
-### 2. User services (run as `cp`, `scope: user`)
+### 2. User services (run as the login user, `scope: user`)
 
 Disable and mask:
 
@@ -56,14 +56,14 @@ pipewire-pulse.socket
 wireplumber.service
 ```
 
-Ansible `systemd` module with `scope: user` needs `XDG_RUNTIME_DIR=/run/user/<uid>` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus` in `environment:`. Get uid with `getent passwd cp`. Do not run these tasks with `become: true` targeting root.
+Ansible `systemd` module with `scope: user` needs `XDG_RUNTIME_DIR=/run/user/<uid>` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus` in `environment:`. Get uid with `getent passwd <user>`. Do not run these tasks with `become: true` targeting root.
 
 A logout/login (or reboot) is required once after the PulseAudio to PipeWire switch. The playbook should print a debug message when the pulse services were actually changed, not fail or reboot on its own.
 
 ### 3. PipeWire rate config
 
 File: `~/.config/pipewire/pipewire.conf.d/10-rates.conf`
-Owner `cp:cp`, mode `0644`. Create parent dirs.
+Owner the login user and group, mode `0644`. Create parent dirs.
 
 ```
 context.properties = {
@@ -79,7 +79,7 @@ Notify a handler that restarts `pipewire` and `wireplumber` in user scope when t
 ### 3b. WirePlumber default-sink rule
 
 File: `~/.config/wireplumber/wireplumber.conf.d/51-rotel-default.conf`
-Owner `cp:cp`, mode `0644`. Create parent dirs.
+Owner the login user and group, mode `0644`. Create parent dirs.
 
 ```
 monitor.alsa.rules = [
@@ -119,7 +119,7 @@ output=pulsesink
 
 which reaches PipeWire through pipewire-pulse. Either is fine; `pipewiresink` is preferred. Install `gstreamer1.0-pipewire` to get it.
 
-Use `community.general.ini_file` for these keys. Strawberry must not be running when the file is edited; check with `pgrep -u cp strawberry` and skip with a warning rather than clobbering.
+Use `community.general.ini_file` for these keys. Strawberry must not be running when the file is edited; check with `pgrep -u "$USER" strawberry` and skip with a warning rather than clobbering.
 
 ### 5. Verification tasks (tagged `verify`, `changed_when: false`)
 
