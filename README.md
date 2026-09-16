@@ -102,7 +102,11 @@ snapping wide on a beat; the grey eyes give light with the music, brightest on a
 moon their catchlight; they dilate with the bass and follow the stereo balance; the
 head snaps toward the loudest band the way an owl's does. The body dances: a sway on the
 beat from foot to foot, the far wing lifting against the lean like a dancer's arm, a dip
-and a spring back taller, the head held steady above it.
+and a spring back taller, the head held steady above it. The olive bough is a real one,
+rooted off the left edge and whippy at the tip, in a wind that gusts harder with the
+music: it bends, springs back, the twigs bend further and the leaves flutter, and she
+rides it, talons hooked under the wood, dancing on top of the sway. Land a beat and the
+bough gives under her.
 Quiet music, and it asks the
 only question an owl asks. The answer here is Nobody.
 
