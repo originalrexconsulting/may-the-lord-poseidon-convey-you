@@ -15,7 +15,7 @@ Modes:
   rings      pulsing tunnel
   waterfall  blue/cyan scrolling spectrogram, newest at the bottom
   fire       red/orange/yellow flames whose heat comes from the spectrum
-  rain       Matrix-green falling glyph columns, spawned where the music is loud
+  rain       blue falling glyph columns, white at the head, spawned where the music is loud
   stars      blue/white warp-speed starfield, faster with the bass
   wave       cyan/white stereo waveform, left over right
   radial     orange/gold spectrum around a circle, bass at the top
@@ -117,6 +117,7 @@ CHUNK = 1024          # samples per parec read
 WINDOW = 2048         # FFT size
 BANDS = 48
 FPS = 24
+REF_H, REF_W = 40, 140   # the terminal the cell-counted modes were drawn for; Viz.density() scales them from here
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
          "athena", "althea", "scylla", "sleestak", "stealie", "wall"]
@@ -340,6 +341,16 @@ class Canvas:
                 c[0] |= bit
                 c[1] = max(c[1], col)
 
+    def blob(self, px, py, col=0.5, size=1):
+        """A dot, or a size x size square of dots: a point that stays visible on a fine grid."""
+        if size <= 1:
+            self.dot(px, py, col)
+            return
+        px, py = int(px) - (size - 1) // 2, int(py) - (size - 1) // 2
+        for j in range(size):
+            for i in range(size):
+                self.dot(px + i, py + j, col)
+
     def line(self, x0, y0, x1, y1, col=0.5, width=1):
         n = int(max(abs(x1 - x0), abs(y1 - y0))) + 1
         if n == 1:
@@ -407,6 +418,7 @@ class Viz:
         self.npal = build_palette()
         self.rng = np.random.default_rng()
         self.states = {}   # per-mode persistent state (fire heat, star positions, ...)
+        self.flow = "down"   # the waterfall's direction: newest row at the top and falling, or rising; the arrows flip it
 
     def fg(self, x, bold=False, base=MAIN_FG):
         """Foreground attr for 0..1 on the main ramp or another fg ramp such as STAR_FG."""
@@ -422,6 +434,16 @@ class Viz:
             self.scr.addstr(y, x, s, attr)
         except curses.error:
             pass
+
+    def density(self, h, w):
+        """How much finer than the reference grid this terminal is: 1.0 at 40x140 cells, about 2.0 once the
+        font is shrunk to half size. Anything counted in cells or dots (stars, sparks, stroke widths, cabinets)
+        scales by it, so the picture keeps its size on the glass and gains resolution instead of shrinking."""
+        return max(0.5, min(4.0, math.sqrt(h * w / (REF_H * REF_W))))
+
+    def stroke(self, h, w):
+        """Braille stroke width in dots for a hairline at this density."""
+        return max(1, int(round(self.density(h, w))))
 
     def state(self, name, h, w, init):
         """Per-mode state dict, rebuilt by init() when the terminal size changes."""
@@ -496,13 +518,15 @@ class Viz:
 
     # ---- scope (stereo Lissajous in braille)
     def draw_scope(self, h, w):
-        st = self.cap.samples()[-1200:]
+        k = self.density(h, w)
+        st = self.cap.samples()[-int(1200 * k):]          # a finer grid gets more of the buffer, so the trace stays dense
         cv = Canvas(h, w)
         gain = 0.9 / max(0.05, float(np.abs(st).max()) if len(st) else 1.0)
         gain = min(gain, 12.0)
         col = 0.3 + self.an.bass * 0.7
-        for l, r in st[::2]:
-            cv.dot((l * gain * 0.5 + 0.5) * (cv.gw - 1), (0.5 - r * gain * 0.5) * (cv.gh - 1), col)
+        size = self.stroke(h, w)
+        for l, r in st[::2 if k < 1.5 else 1]:
+            cv.blob((l * gain * 0.5 + 0.5) * (cv.gw - 1), (0.5 - r * gain * 0.5) * (cv.gh - 1), col, size)
         cv.paint(self, self.an.beat > 0.2)
         # spectrum ghost along the bottom
         n = min(BANDS, w - 2)
@@ -529,14 +553,17 @@ class Viz:
                     continue
                 self.put(yy, xx, chars[min(5, int(val * 6))], self.fg(val, val > 0.8))
 
-    # ---- waterfall (spectrogram scrolling up, newest row at the bottom)
+    # ---- waterfall (spectrogram: newest row at the top and falling, as water does; the up arrow makes it rise)
     def draw_waterfall(self, h, w):
         st = self.state("waterfall", h, w, lambda: {"rows": []})
         rows = st["rows"]
         rows.append(self.an.level[self.band_cols(w - 1)])
         del rows[:-(h - 1)]
         v = np.zeros((h - 1, w - 1))
-        v[h - 1 - len(rows):] = np.array(rows)
+        if self.flow == "down":
+            v[:len(rows)] = np.array(rows[::-1])
+        else:
+            v[h - 1 - len(rows):] = np.array(rows)
         self.field(v, mask=v > 0.05, base=WATER_BG)
 
     # ---- fire (classic cellular flame, fed by the spectrum along the bottom)
@@ -580,13 +607,13 @@ class Viz:
                 if 0 <= yy < h - 1:
                     ch = GLYPHS[(x * 7 + yy * 13 + self.frame // 4) % g]
                     fade = 1 - k / L
-                    col = 0.98 if k == 0 else 0.1 + fade * 0.5 + lvl[x] * 0.25   # white head, green tail
-                    self.put(yy, int(x), ch, self.fg(col, k == 0, base=RAIN_FG))
+                    col = 0.98 if k == 0 else 0.1 + fade * 0.5 + lvl[x] * 0.25   # white head, blue tail
+                    self.put(yy, int(x), ch, self.fg(col, k == 0, base=STAR_FG))   # blue rain (the green ramp keeps its old name for the Sleestak and the leaves)
 
     # ---- stars (warp field, faster with the bass)
     def draw_stars(self, h, w):
         an = self.an
-        n = 180
+        n = int(180 * self.density(h, w) ** 2)            # the same stars per square inch of glass at any font size
         st = self.state("stars", h, w, lambda: {"p": self.rng.random((n, 3)) * [2, 2, 1] - [1, 1, 0]})
         p = st["p"]                                       # x, y in -1..1, z depth 0..1 (small is near)
         speed = 0.006 + an.bass * 0.05 + an.beat * 0.08
@@ -619,11 +646,12 @@ class Viz:
         idx = np.linspace(0, len(st) - 1, n).astype(int)
         gain = min(8.0, 0.9 / max(0.05, float(np.abs(st).max())))
         half = cv.gh // 2
+        lw = self.stroke(h, w)
         for chan, (top, hh) in enumerate(((0, half), (half, cv.gh - half))):
             ys = top + hh / 2 - st[idx, chan] * gain * (hh / 2 - 1)
             amp = np.abs(st[idx, chan] * gain)                # loud swings go white, quiet stays cyan
             for x in range(1, n):
-                cv.line(x - 1, ys[x - 1], x, ys[x], 0.3 + min(1.0, amp[x]) * 0.7)
+                cv.line(x - 1, ys[x - 1], x, ys[x], 0.3 + min(1.0, amp[x]) * 0.7, width=lw)
         cv.paint(self, an.beat > 0.3, base=WAVE_FG)
         self.put(0, 1, "L", self.fg(0.5, base=WAVE_FG))
         self.put((h - 1) // 2, 1, "R", self.fg(0.5, base=WAVE_FG))
@@ -636,14 +664,16 @@ class Viz:
         rmax = min(cx, cy) * 0.95
         rmin = rmax * (0.18 + an.beat * 0.1)
         rot = self.hue * 2 * math.pi
+        lw = self.stroke(h, w)
         for i in range(BANDS):
             r = rmin + an.level[i] * (rmax - rmin)
             col = 0.2 + an.level[i] * 0.8                     # quiet bands orange, loud ones gold
             for sign in (1, -1):
                 a = -math.pi / 2 + rot + sign * (i + 0.5) / BANDS * math.pi
                 cv.line(cx + math.cos(a) * rmin, cy + math.sin(a) * rmin,
-                        cx + math.cos(a) * r, cy + math.sin(a) * r, col)
-        cv.circle(cx, cy, rmin * 0.85, 0.6 + an.bass * 0.4)
+                        cx + math.cos(a) * r, cy + math.sin(a) * r, col, width=lw)
+        for o in range(lw):
+            cv.circle(cx, cy, rmin * 0.85 - o, 0.6 + an.bass * 0.4)
         cv.paint(self, an.beat > 0.3, base=RADIAL_FG)
 
     # ---- particles (fireworks: each beat launches a burst in its own colour)
@@ -651,7 +681,8 @@ class Viz:
         an = self.an
         st = self.state("particles", h, w, lambda: {"p": np.zeros((0, 6))})
         p = st["p"]                                       # x, y, vx, vy, life, hue
-        k = int(an.beat * 80 + an.rms * 10)
+        d = self.density(h, w)                            # speeds are in cells per frame: a finer grid needs faster sparks
+        k = int((an.beat * 80 + an.rms * 10) * d)
         if k:
             if an.beat > 0.15:                            # a real beat: one shell, one colour, off-centre
                 ox = (w - 1) * (0.25 + self.rng.random() * 0.5)
@@ -661,20 +692,20 @@ class Viz:
                 ox, oy = (w - 1) / 2, (h - 1) * 0.6
                 hue = self.rng.random(k)
             ang = self.rng.random(k) * 2 * math.pi
-            spd = (0.4 + self.rng.random(k)) * (0.6 + an.bass * 2)
+            spd = (0.4 + self.rng.random(k)) * (0.6 + an.bass * 2) * d
             new = np.column_stack([np.full(k, ox), np.full(k, oy),
-                                   np.cos(ang) * spd * 2.2, np.sin(ang) * spd - 0.3 - an.beat,
+                                   np.cos(ang) * spd * 2.2, np.sin(ang) * spd - (0.3 + an.beat) * d,
                                    np.ones(k), hue % 1.0])
             p = np.vstack([p, new])
         if len(p):
             p[:, 0] += p[:, 2]
             p[:, 1] += p[:, 3]
-            p[:, 3] += 0.07                               # gravity
+            p[:, 3] += 0.07 * d                           # gravity
             p[:, 2] *= 0.985
             p[:, 4] -= 0.015 + 0.02 * (1 - min(1.0, an.rms * 4))
             keep = ((p[:, 4] > 0) & (p[:, 0] >= 0) & (p[:, 0] < w - 1)
                     & (p[:, 1] >= 0) & (p[:, 1] < h - 1))
-            p = p[keep][-700:]
+            p = p[keep][-int(700 * d * d):]
             for x, y, _, _, life, hue in p:
                 self.put(int(y), int(x), "●" if life > 0.7 else ("•" if life > 0.35 else "·"),
                          self.fg(hue, life > 0.85, base=SPARK_FG))
@@ -725,6 +756,7 @@ class Viz:
         arms, n = 3, 160
         rot = self.t * (0.4 + an.bass * 2.5) + self.hue * 2
         twist = 2.2 + an.mid * 2
+        lw = self.stroke(h, w)
         for arm in range(arms):
             px = py = None
             for k in range(n):
@@ -734,7 +766,7 @@ class Viz:
                 a = f * math.pi * twist + rot + arm * 2 * math.pi / arms
                 x, y = cx + math.cos(a) * rad, cy + math.sin(a) * rad
                 if px is not None:
-                    cv.line(px, py, x, y, min(1.0, f * 0.6 + lvl * 0.4))   # purple core -> pink tips
+                    cv.line(px, py, x, y, min(1.0, f * 0.6 + lvl * 0.4), width=lw)   # purple core -> pink tips
                 px, py = x, y
         cv.paint(self, an.beat > 0.3, base=SPIRAL_FG)
 
@@ -1365,7 +1397,7 @@ class Viz:
         elif ph == "roar":
             mth.ellipse(mouth[0], mouth[1] + 0.02 * H, 0.05 * H, 0.05 * H, 0.05)
         else:
-            mth.line(mouth[0] - 0.03 * H, mouth[1], mouth[0] + 0.03 * H, mouth[1], 0.1, width=2)
+            mth.line(mouth[0] - 0.03 * H, mouth[1], mouth[0] + 0.03 * H, mouth[1], 0.1, width=2 * self.stroke(h, w))
         mth.paint(self, bold=False, base=RADIAL_FG)
         # the eye: one, on the loudest band; blinks; shut asleep; put out after the stake
         ex, ey = P(0.28, 0.19)
@@ -1374,11 +1406,11 @@ class Viz:
             st["blink"] = 3
         st["blink"] = max(0, st["blink"] - 1)
         if ph == "roar" or (stake is not None and stake["at"] is not None and t - stake["at"] > 0.6):
-            eye.line(ex - 0.04 * H, ey - 0.04 * H, ex + 0.04 * H, ey + 0.04 * H, 0.9, width=3)
-            eye.line(ex - 0.04 * H, ey + 0.04 * H, ex + 0.04 * H, ey - 0.04 * H, 0.9, width=3)
+            eye.line(ex - 0.04 * H, ey - 0.04 * H, ex + 0.04 * H, ey + 0.04 * H, 0.9, width=3 * self.stroke(h, w))
+            eye.line(ex - 0.04 * H, ey + 0.04 * H, ex + 0.04 * H, ey - 0.04 * H, 0.9, width=3 * self.stroke(h, w))
             eye.paint(self, bold=True, base=RADIAL_FG)
         elif asleep or st["blink"] > 0:
-            eye.line(ex - 0.05 * H, ey, ex + 0.05 * H, ey, 0.2, width=2)
+            eye.line(ex - 0.05 * H, ey, ex + 0.05 * H, ey, 0.2, width=2 * self.stroke(h, w))
             eye.paint(self, bold=False, base=RADIAL_FG)
         else:
             eye.ellipse(ex, ey, 0.055 * H, 0.035 * H, 0.95)
@@ -1410,7 +1442,7 @@ class Viz:
             x1 = stake["x"] if stake["at"] is None else P(0.28, 0)[0]
             glow = 0.7 + 0.3 * abs(math.sin(t * 20))
             stk = Canvas(h, w)
-            stk.line(x1, stake["y"], min(cv_gw - 1, x1 + 0.6 * H), stake["y"] + 0.03 * H, glow, width=3)
+            stk.line(x1, stake["y"], min(cv_gw - 1, x1 + 0.6 * H), stake["y"] + 0.03 * H, glow, width=3 * self.stroke(h, w))
             stk.paint(self, bold=True, base=RADIAL_FG)
             for k in range(3):
                 self.put(int(stake["y"] / 4) - 1 - k // 2, int(x1 / 2) + k * 2, "*", self.fg(1.0, True, base=RADIAL_FG))
@@ -1748,7 +1780,7 @@ class Viz:
             L = tw["L"] * H
             sx, sy = x, y + (-th / 2 if tw["up"] else th / 2)
             ex, ey = sx + math.cos(a) * L, sy + math.sin(a) * L
-            wood.line(sx, sy, ex, ey, 0.35, width=2 if L > 16 else 1)
+            wood.line(sx, sy, ex, ey, 0.35, width=(2 if L > 16 else 1) * self.stroke(h, w))
             for j in range(tw["pairs"] + 1):
                 f = (j + 1) / (tw["pairs"] + 1)
                 lx, ly = sx + (ex - sx) * f, sy + (ey - sy) * f
@@ -1776,7 +1808,7 @@ class Viz:
                 a = math.radians(95 - spread * (95 - 5) * (i + 1) / half)   # from hanging to horizontal
                 L = (0.12 + lvl * 0.45 + spread * 0.10) * H
                 ex, ey = sx + side * math.sin(a) * L, sy + math.cos(a) * L
-                wings.line(sx, sy, ex, ey, 0.25 + lvl * 0.7, width=2)
+                wings.line(sx, sy, ex, ey, 0.25 + lvl * 0.7, width=2 * self.stroke(h, w))
                 wings.dot(ex, ey, 0.95)
         wings.paint(self, bold=an.beat > 0.3, base=WAVE_FG)
         # the goddess: body, head, face, eyes, beak
@@ -1834,8 +1866,8 @@ class Viz:
             for k in (-1, 0, 1):
                 tx = ax + k * 0.035 * H
                 _, ty, tth = bough(min(end_u, max(0.0, tx / gw)))
-                claws.line(ax, ay, tx, ty - tth / 2, 0.3, width=2)
-                claws.line(tx, ty - tth / 2, tx + (1.5 if k >= 0 else -1.5), ty + tth / 2 + 1.5, 0.35, width=2)
+                claws.line(ax, ay, tx, ty - tth / 2, 0.3, width=2 * self.stroke(h, w))
+                claws.line(tx, ty - tth / 2, tx + (1.5 if k >= 0 else -1.5), ty + tth / 2 + 1.5, 0.35, width=2 * self.stroke(h, w))
         for (cy, cx), _ in body.cells.items():
             self.put(cy, cx, " ")
         body.paint(self, bold=False, base=RADIAL_FG)
@@ -1930,7 +1962,7 @@ class Viz:
             prev = P(u, 0.94)
             for j, v in enumerate(np.linspace(0.94, 0.22, 10)):
                 x, y = P(u + bend * (0.94 - v) / 0.72, v)
-                stalks.line(prev[0], prev[1], x, y, 0.35, width=2)
+                stalks.line(prev[0], prev[1], x, y, 0.35, width=2 * self.stroke(h, w))
                 if j % 2 == 1 and j < 9:
                     side = -1 if (j // 2 + k) % 2 else 1
                     stalks.line(x, y, x + side * 0.04 * H, y + 0.02 * H, 0.5)
@@ -1955,8 +1987,8 @@ class Viz:
             x0, y0 = P(u, fv)
             L = (0.03 + lvl * 0.36 + min(1.0, an.beat) * 0.08) * H * scale
             wob = math.sin(t * 9 + i * 1.7) * 0.02 * H * scale
-            fire.line(x0, y0, x0 + wob, y0 - L, 0.45 + lvl * 0.55, width=2)
-            fire.line(x0, y0, x0 + wob * 0.5, y0 - L * 0.55, 0.9, width=2)
+            fire.line(x0, y0, x0 + wob, y0 - L, 0.45 + lvl * 0.55, width=2 * self.stroke(h, w))
+            fire.line(x0, y0, x0 + wob * 0.5, y0 - L * 0.55, 0.9, width=2 * self.stroke(h, w))
         if mode == "easy":                                          # embers, breathing slowly
             for i in range(0, BANDS, 3):
                 x0, y0 = P(f0 + (f1 - f0) * (i + 0.5) / BANDS, fv - 0.01)
@@ -1996,7 +2028,7 @@ class Viz:
             a = math.radians(-90 + k * 22)
             x1, y1 = hx + math.cos(a) * 0.085 * H, hy + math.sin(a) * 0.095 * H
             side = -1 if k <= 0 else 1
-            hair.line(x1, y1, x1 + side * 0.03 * H + hs, hy + 0.20 * H, 0.35 + abs(k) * 0.06, width=2)
+            hair.line(x1, y1, x1 + side * 0.03 * H + hs, hy + 0.20 * H, 0.35 + abs(k) * 0.06, width=2 * self.stroke(h, w))
         hair.ellipse(hx, hy - 0.05 * H, 0.085 * H, 0.05 * H, 0.4)
         ex, ey = hx + 0.035 * H, hy - 0.005 * H                    # eyes on the fire (or closed for a blink)
         for dx in (-0.045 * H, 0.0):
@@ -2252,7 +2284,7 @@ class Viz:
             for s in np.linspace(0, 1, 14)[1:]:
                 px = (1 - s) ** 2 * anchor[0] + 2 * (1 - s) * s * ctrl[0] + s ** 2 * end[0]
                 py = (1 - s) ** 2 * anchor[1] + 2 * (1 - s) * s * ctrl[1] + s ** 2 * end[1]
-                necks.line(prev[0], prev[1], px, py, 0.5 + (0.45 if hd["target"] is not None else 0.0), width=2)
+                necks.line(prev[0], prev[1], px, py, 0.5 + (0.45 if hd["target"] is not None else 0.0), width=2 * self.stroke(h, w))
                 prev = (px, py)
             jaws.append((int(end[1] / 4), int(end[0] / 2), hd["target"] is not None))
         necks.paint(self, bold=an.beat > 0.3, base=RAIN_FG)
@@ -2575,18 +2607,21 @@ class Viz:
         if st["shake"] > 0:
             st["shake"] -= 1
             dx = int(self.rng.integers(-1, 2))
-        avail = max(4, (floor - 3) // 2)                               # cabinet rows that fit
-        tallest = max(s[3] for s in self.WALL)
+        s = self.stroke(h, w)                                          # a cabinet is 4x2 cells at the reference font, 8x4 at half size
+        cw, ch_ = 4 * s, 2 * s
+        avail = max(4, (floor - 3) // ch_)                             # cabinet rows that fit
+        tallest = max(s_[3] for s_ in self.WALL)
         scale = min(1.0, avail / tallest)
         lit_total = cab_total = 0
         # the scaffold behind the wall
-        for yy in range(max(1, floor - int(tallest * scale) * 2 - 1), floor):
+        for yy in range(max(1, floor - int(tallest * scale) * ch_ - 1), floor):
             self.put(yy, 1, "│", self.fg(0.15, False, base=RADIAL_FG))
             self.put(yy, w - 3, "│", self.fg(0.15, False, base=RADIAL_FG))
+        box = ["└" + "─" * (cw - 2) + "┘"] + ["│" + " " * (cw - 2) + "│"] * (ch_ - 2) + ["┌" + "─" * (cw - 2) + "┐"]
         for label, xf, ncol, tall, lo, hi, ramp in self.WALL:
             base = globals()[self.WALL_BASES[ramp]]
             rows_ = max(2, int(tall * scale))
-            width = ncol * 5
+            width = ncol * (cw + 1)
             x0 = int(w * xf) - width // 2 + dx
             bands = an.level[lo:hi]
             per = max(1, len(bands) // ncol)
@@ -2597,23 +2632,23 @@ class Viz:
                 filled = lvl * rows_
                 peak_row = int(st["peak"][key] * rows_ + 0.5)
                 for r in range(rows_):
-                    yy = floor - 1 - r * 2
-                    if yy - 1 < 1:
+                    yy = floor - 1 - r * ch_                           # the cabinet's bottom row
+                    if yy - ch_ + 1 < 1:
                         break
-                    xx = x0 + c * 5
+                    xx = x0 + c * (cw + 1)
                     cab_total += 1
                     lit = r < filled
                     if lit:
                         lit_total += 1
                         col = 0.25 + 0.7 * r / max(1, rows_ - 1)
-                        self.put(yy - 1, xx, "▐██▌", self.fg(col, r > rows_ * 0.6, base=base))
-                        self.put(yy, xx, "▐▓▓▌", self.fg(col, False, base=base))
-                    elif r == peak_row and peak_row > 0:
-                        self.put(yy - 1, xx, "┌──┐", self.fg(0.6, False, base=base))
-                        self.put(yy, xx, "└──┘", self.fg(0.6, False, base=base))
+                        for k in range(ch_):                           # grille on the lower half, solid above
+                            top = k >= ch_ // 2
+                            self.put(yy - k, xx, "▐" + ("█" if top else "▓") * (cw - 2) + "▌",
+                                     self.fg(col, top and r > rows_ * 0.6, base=base))
                     else:
-                        self.put(yy - 1, xx, "┌──┐", curses.A_DIM)
-                        self.put(yy, xx, "└──┘", curses.A_DIM)
+                        attr = self.fg(0.6, False, base=base) if r == peak_row and peak_row > 0 else curses.A_DIM
+                        for k in range(ch_):
+                            self.put(yy - k, xx, box[k], attr)
             self.put(floor, max(0, x0 + (width - len(label)) // 2), label, self.fg(0.8, an.beat > 0.3, base=base))
         # the stage
         self.put(floor + 1, 0, "▔" * (w - 1), self.fg(0.3 + an.bass * 0.3, False, base=RADIAL_FG))
@@ -2663,6 +2698,9 @@ class Viz:
             if ch in (ord("V"), ord("M")):
                 self.next_mode(-1)
                 continue
+            if ch in (curses.KEY_UP, curses.KEY_DOWN):    # which way the waterfall runs
+                self.flow = "up" if ch == curses.KEY_UP else "down"
+                continue
             if ord("0") <= ch <= ord("9"):
                 i = (ch - ord("1")) % 10                  # 1-9 then 0 pick the first ten modes
                 if i < len(MODES):
@@ -2679,7 +2717,7 @@ class Viz:
 def main():
     def go(scr):
         curses.use_default_colors()
-        Viz(scr, title_fn=lambda: "deadviz standalone  (v next mode, V previous, 1-9/0 pick, Esc quits)").run()
+        Viz(scr, title_fn=lambda: "deadviz standalone  (v next mode, V previous, 1-9/0 pick, ↑↓ waterfall direction, Esc quits)").run()
     os.environ.setdefault("ESCDELAY", "25")
     curses.wrapper(go)
 

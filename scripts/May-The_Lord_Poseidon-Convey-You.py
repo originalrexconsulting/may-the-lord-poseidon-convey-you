@@ -75,8 +75,8 @@ Keys:
                 (bars, plasma, scope, rings, waterfall, fire, rain, stars, wave,
                 radial, particles, meters, spiral, life, poseidon, enik, cyclops, convey, athena, althea,
                 scylla, sleestak, stealie, wall), V steps back, 1-9/0
-                pick the first ten, space/n/b/arrows still control playback,
-                Esc (or any other key) returns.
+                pick the first ten, space/n/b/←/→ still control playback,
+                ↑/↓ set the waterfall's direction, Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
   t             sleep timer: minutes, or 'track' (the end of this track) or 'show' (the end
                 of the playlist); the gain fades over the last minute, then playback pauses
