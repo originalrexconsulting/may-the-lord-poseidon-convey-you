@@ -153,11 +153,13 @@ Sleestak's eyes and they hiss; a big one and a crossbow bolt flies wide.
 
 <img src="docs/screenshots/sleestak.svg" width="900" alt="the Lost City: Will and Holly with the torch between two Sleestak, one coming out from behind a column, a crossbow bolt on the way">
 
-The Stealie: the skull in the ring, the thirteen points around it one group of bands each,
-turning faster with the music, the bolt flashing white on a beat. The red half warms with
-the bass, the blue with the treble, and the eye sockets widen with the bass.
+The Stealie, traced from the 1969 design: the skull in the ring, blue and red behind it, the
+disc in the cranium red and blue either side of the thirteen-point bolt, which flashes white
+on a beat. The red lights with the bass, the blue with the treble, the eye sockets open with
+the bass, and the thirteen points around the ring are one group of bands each, turning
+faster with the music.
 
-<img src="docs/screenshots/stealie.svg" width="900" alt="the Stealie: skull, bolt and the thirteen points">
+<img src="docs/screenshots/stealie.svg" width="900" alt="the Stealie: the skull in the ring, red and blue, the bolt through the cranium, the thirteen points">
 
 The Wall of Sound, 1974, as the PA it was: stacks of cabinets, one per instrument where
 they stood, Bob, Phil's quad bass (four columns, one per string), the vocal cluster in the

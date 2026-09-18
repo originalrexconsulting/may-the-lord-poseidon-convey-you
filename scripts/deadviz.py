@@ -84,10 +84,12 @@ Modes:
              and push through, and a flare sends the Sleestak back with an arm up. A beat
              flashes their eyes and they hiss, a big one and a crossbow bolt flies wide.
              Long enough in the cold and they go back where they came from
-  stealie    steal your face: the skull in the ring, the thirteen points around it one
-             group of bands each, spinning faster with the music, the lightning bolt
-             flashing white on a beat. The red half warms with the bass, the blue half
-             with the treble, the eye sockets widen with the bass
+  stealie    steal your face, traced from the 1969 design: the skull in the ring, blue
+             and red behind it, the disc in the cranium red and blue either side of the
+             thirteen-point bolt, which flashes white on a beat. The red lights with the
+             bass, the blue with the treble, the eye sockets open with the bass, and
+             the thirteen points around the ring are one group of bands each, turning
+             faster with the music
   wall       the Wall of Sound, 1974: the PA as stacks of cabinets, one stack per
              instrument in the places they stood: Bob, Phil's quad bass (four columns,
              one per string), the vocal cluster in the middle and tallest, Jerry, Keith,
@@ -396,9 +398,61 @@ class Canvas:
         for a in np.linspace(0, 2 * math.pi, n, endpoint=False):
             self.dot(cx + math.cos(a) * r, cy + math.sin(a) * r, col)
 
-    def paint(self, viz, bold=False, base=None):
+    def mask(self, m, col=0.5, x0=0, y0=0):
+        """Every True dot of a boolean grid whose [0, 0] is dot (x0, y0): a whole layer in one go. x0 must be
+        even and y0 a multiple of 4 so the grid lines up with the cells."""
+        gh, gw = m.shape
+        pad_h, pad_w = (-gh) % 4, (-gw) % 2
+        if pad_h or pad_w:
+            m = np.pad(m, ((0, pad_h), (0, pad_w)))
+        bits = np.zeros((m.shape[0] // 4, m.shape[1] // 2), np.int16)
+        for r in range(4):
+            for c in range(2):
+                bits |= m[r::4, c::2] * BRAILLE_DOTS[r][c]
+        rows, cols = self.gh // 4, self.gw // 2
+        r0, c0 = y0 // 4, x0 // 2
+        for j, i in zip(*np.nonzero(bits)):
+            key = (r0 + int(j), c0 + int(i))
+            if 0 <= key[0] < rows and 0 <= key[1] < cols:
+                cell = self.cells.get(key)
+                if cell is None:
+                    self.cells[key] = [int(bits[j, i]), col]
+                else:
+                    cell[0] |= int(bits[j, i])
+                    cell[1] = max(cell[1], col)
+
+    def paint(self, viz, bold=False, base=None, attr=None):
+        if attr is not None:                                 # one attribute for the whole layer
+            for (cy, cx), (bits, _) in self.cells.items():
+                viz.put(cy, cx, chr(BRAILLE_BASE + bits), attr)
+            return
         for (cy, cx), (bits, col) in self.cells.items():
             viz.put(cy, cx, chr(BRAILLE_BASE + bits), viz.fg(col, bold) if base is None else viz.fg(col, bold, base))
+
+
+def _parity(U, V, pts, closed=True):
+    """For each point of the coordinate grids, whether a ray to the right crosses the polyline an odd number
+    of times: inside the polygon when it is closed, or on the left of the chain when it is open."""
+    odd = np.zeros(U.shape, bool)
+    edges = list(zip(pts, pts[1:] + (pts[:1] if closed else [])))
+    for (xa, ya), (xb, yb) in edges:
+        if ya == yb:
+            continue
+        span = (ya <= V) != (yb <= V)
+        odd ^= span & (U < xa + (V - ya) * (xb - xa) / (yb - ya))
+    return odd
+
+
+def _grow(m, n):
+    """Dilate a boolean grid by n dots, 4-connected."""
+    for _ in range(n):
+        g = m.copy()
+        g[1:] |= m[:-1]
+        g[:-1] |= m[1:]
+        g[:, 1:] |= m[:, :-1]
+        g[:, :-1] |= m[:, 1:]
+        m = g
+    return m
 
 
 # --------------------------------------------------------------------------- renderers
@@ -2520,75 +2574,105 @@ class Viz:
             self.put(h - 2, 1, f"warmth {int(warm * 100)}%  ·  {len(keep)} Sleestak  ·  torch {flame_h}", self.fg(0.4, False, base=RAIN_FG))
 
     # ---- stealie (steal your face)
+    # The Stealie in ring units (the ring's radius is 1, y down, origin at its centre), traced from the 1969
+    # design: the skull's silhouette, the bolt's outline (vertex 0 is its top, STEALIE_BOLT_BOTTOM its lowest
+    # point, so 0..16 is the right edge going down and 16..29 the left edge coming back up), the right eye
+    # socket (the left is its mirror), the nasal cavity, where the gaps between the teeth fall, and the disc
+    # in the cranium (centre x, centre y, radius). The black outlines of the original become gaps of a
+    # stroke's width against the terminal's black.
+    STEALIE_SKULL = [(-0.02, -0.95), (0.121, -0.942), (0.256, -0.915), (0.399, -0.862), (0.518, -0.796), (0.631, -0.668),
+                     (0.726, -0.457), (0.751, -0.307), (0.731, -0.088), (0.696, 0.018), (0.631, 0.141), (0.601, 0.427),
+                     (0.56, 0.485), (0.495, 0.508), (0.48, 0.626), (0.445, 0.691), (0.394, 0.721), (0.296, 0.721),
+                     (0.249, 0.802), (0.249, 0.877), (0.188, 0.93), (0.02, 0.95), (-0.191, 0.93), (-0.204, 0.907),
+                     (-0.274, 0.892), (-0.271, 0.824), (-0.322, 0.711), (-0.432, 0.706), (-0.518, 0.656), (-0.538, 0.616),
+                     (-0.538, 0.543), (-0.638, 0.475), (-0.673, 0.392), (-0.663, 0.279), (-0.714, 0.118), (-0.754, -0.209),
+                     (-0.744, -0.394), (-0.698, -0.548), (-0.593, -0.724), (-0.543, -0.779), (-0.472, -0.824),
+                     (-0.256, -0.915), (-0.023, -0.947)]
+    STEALIE_BOLT = [(0.291, -0.827), (0.302, -0.819), (0.224, -0.658), (0.339, -0.676), (0.151, -0.503), (0.364, -0.482),
+                    (0.085, -0.284), (0.317, -0.281), (0.015, -0.095), (0.216, -0.083), (-0.065, 0.068), (-0.065, 0.078),
+                    (0.025, 0.106), (-0.178, 0.176), (-0.178, 0.186), (-0.111, 0.221), (-0.319, 0.294), (-0.329, 0.284),
+                    (-0.186, 0.015), (-0.324, 0.018), (-0.128, -0.158), (-0.296, -0.161), (0.005, -0.389), (-0.193, -0.382),
+                    (0.131, -0.583), (-0.04, -0.608), (0.193, -0.714), (0.209, -0.734), (0.146, -0.751), (0.289, -0.824)]
+    STEALIE_BOLT_BOTTOM = 16
+    STEALIE_EYE = [(0.23, 0.42), (0.32, 0.42), (0.46, 0.45), (0.53, 0.48), (0.55, 0.50), (0.50, 0.52), (0.45, 0.54),
+                   (0.35, 0.545), (0.29, 0.53), (0.07, 0.525), (0.07, 0.495), (0.11, 0.465), (0.17, 0.435)]
+    STEALIE_NOSE = [(-0.05, 0.60), (0.035, 0.60), (0.055, 0.73), (0.013, 0.76), (0.0, 0.72), (-0.035, 0.76), (-0.073, 0.71)]
+    STEALIE_TEETH = (-0.19, -0.125, -0.05, 0.04, 0.11, 0.18)
+    STEALIE_DISC = (0.0, -0.26, 0.66)
+    STEALIE_EYE_STEPS = 5
+
+    def _stealie_masks(self, h, w):
+        """The Stealie's fixed layers for this terminal size, each a braille canvas: the outer field's two halves,
+        the disc's two halves either side of the bolt, the bolt, and the skull's white at each eye width."""
+        cv = Canvas(h, w)
+        gw, gh = cv.gw, cv.gh
+        cx, cy = gw / 2, gh / 2
+        R = min(gw / 2, gh / 2) * 0.86
+        g = self.stroke(h, w)
+        x0, x1 = max(0, int(cx - 1.02 * R)) // 2 * 2, min(gw, int(cx + 1.02 * R) + 2)
+        y0, y1 = max(0, int(cy - 1.02 * R)) // 4 * 4, min(gh, int(cy + 1.02 * R) + 4)
+        X, Y = np.meshgrid(np.arange(x0, x1), np.arange(y0, y1))
+        U, V = (X - cx) / R, (Y - cy) / R
+        ring = np.hypot(U, V) <= 1.0
+        skull = _parity(U, V, self.STEALIE_SKULL)
+        dx, dy, dr = self.STEALIE_DISC
+        disc = np.hypot(U - dx, V - dy) <= dr
+        bolt = _parity(U, V, self.STEALIE_BOLT) & disc
+        left_edge = self.STEALIE_BOLT[self.STEALIE_BOLT_BOTTOM:] + self.STEALIE_BOLT[:1]
+        red_side = _parity(U, V, left_edge, closed=False) | (V < self.STEALIE_BOLT[0][1])   # red above the bolt's top too
+        field = ring & ~_grow(skull, g + 1)
+        inner = disc & ~_grow(bolt, g)
+        nose = _parity(U, V, self.STEALIE_NOSE)
+        teeth = np.zeros(U.shape, bool)
+        for tu in self.STEALIE_TEETH:
+            teeth |= (np.abs(U - tu) * R < g / 2 + 0.5) & (V > 0.78)
+        white = skull & ~_grow(disc, g) & ~nose & ~teeth
+
+        def layer(m, col):
+            c = Canvas(h, w)
+            c.mask(m, col, x0, y0)
+            return c
+
+        whites = []
+        for k in range(self.STEALIE_EYE_STEPS):
+            s = 1.0 + 0.5 * k / (self.STEALIE_EYE_STEPS - 1)             # the sockets open with the bass
+            eyes = np.zeros(U.shape, bool)
+            for sign in (1, -1):
+                eyes |= _parity(U, V, [(sign * u, 0.48 + (v - 0.48) * s) for u, v in self.STEALIE_EYE])
+            whites.append(layer(white & ~eyes, 0.99))
+        return {"flash": 0.0, "spin": 0.0, "peak": np.zeros(13), "say": 0.0, "said": -99.0, "cx": cx, "cy": cy, "R": R,
+                "outer_blue": layer(field & (U < 0), 0.78), "outer_red": layer(field & (U >= 0), 0.0),
+                "red": layer(inner & red_side, 0.0), "blue": layer(inner & ~red_side, 0.78),
+                "bolt": layer(bolt, 0.99), "whites": whites}
+
     def draw_stealie(self, h, w):
         an = self.an
         t = self.t
-        st = self.state("stealie", h, w, lambda: {"flash": 0.0, "spin": 0.0, "peak": np.zeros(13), "say": 0.0})
-        cv_gw, cv_gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
-        cx, cy = cv_gw / 2, cv_gh / 2 - 2
-        R = min(cv_gw / 2, cv_gh / 2) * (0.82 + an.beat * 0.03)
+        st = self.state("stealie", h, w, lambda: self._stealie_masks(h, w))
+        cx, cy, R = st["cx"], st["cy"], st["R"]
         st["flash"] = max(st["flash"] * 0.85, min(1.0, an.beat * 2))
         st["spin"] += (0.15 + an.rms * 1.2) / FPS
-        red, blue, white, bolt, rim = (Canvas(h, w) for _ in range(5))
-        # the bolt: a zigzag down the middle of the cranium, in units of R
-        path = [(-0.20, -0.80), (0.10, -0.28), (-0.10, -0.22), (0.22, 0.28)]
-
-        def bolt_x(v):                                             # the bolt's centre line at height v (units of R)
-            for (ax, ay), (bx, by) in zip(path, path[1:]):
-                if ay <= v <= by:
-                    return ax + (bx - ax) * (v - ay) / (by - ay)
-            return path[0][0] if v < path[0][1] else path[-1][0]
-        brow = -0.08                                               # the cranium ends here; the face is below
-        Ri = R * 0.80
-        for py in range(int(cy - Ri), int(cy + Ri) + 1):
-            v = (py - cy) / R
-            half = math.sqrt(max(0.0, Ri * Ri - (py - cy) ** 2))
-            for px in range(int(cx - half), int(cx + half) + 1):
-                u = (px - cx) / R
-                if v < brow:
-                    bx = bolt_x(v)
-                    if abs(u - bx) < 0.07:
-                        bolt.dot(px, py, 0.99)
-                    elif u < bx:
-                        red.dot(px, py, 0.02 + an.bass * 0.08)
-                    else:
-                        blue.dot(px, py, 0.80 - an.treble * 0.1)
-                else:
-                    # the face: eye sockets (wider with the bass), the nose, the teeth
-                    ex = 0.30 + an.bass * 0.03
-                    if ((u - ex) / 0.19) ** 2 + ((v - 0.18) / (0.14 + an.bass * 0.05)) ** 2 < 1 or \
-                       ((u + ex) / 0.19) ** 2 + ((v - 0.18) / (0.14 + an.bass * 0.05)) ** 2 < 1:
-                        continue
-                    if 0.34 < v < 0.52 and abs(u) < 0.06 * (v - 0.34) / 0.18:
-                        continue
-                    if 0.58 < v < 0.76 and abs(u) < 0.34 and (int((u + 0.34) / 0.085) % 2 == 1 or abs(v - 0.67) < 0.015):
-                        continue
-                    white.dot(px, py, 0.97)
-        # the ring, and the thirteen points around it: each one a group of bands
-        ring = Canvas(h, w)
-        ring.circle(cx, cy, R * 0.84, 0.9, n=int(R * 3))
-        ring.circle(cx, cy, R * 0.86, 0.9, n=int(R * 3))
+        # the thirteen points around the ring: each the peak of a group of bands
         st["peak"] = np.maximum(st["peak"] * 0.92, np.array([an.level[int(i * BANDS / 13):int((i + 1) * BANDS / 13)].max() for i in range(13)]))
+        rim = Canvas(h, w)
         for i in range(13):
             a = -math.pi / 2 + i * 2 * math.pi / 13 + st["spin"]
-            L = R * (0.88 + 0.12 * st["peak"][i])
-            for rr in np.linspace(R * 0.87, L, max(2, int((L - R * 0.87)) + 1)):
-                spread = 0.06 * (1 - (rr - R * 0.87) / max(1, L - R * 0.87))
-                for da in (-spread, 0, spread):
-                    rim.dot(cx + math.cos(a + da) * rr, cy + math.sin(a + da) * rr, 0.3 + st["peak"][i] * 0.7)
-            hx, hy = cx + math.cos(a) * R * 0.99, cy + math.sin(a) * R * 0.99
-            rim.dot(hx, hy, 0.9)
+            r0, r1 = R * 1.03, R * (1.06 + 0.16 * st["peak"][i])                # a clock face's tick at rest
+            rim.line(cx + math.cos(a) * r0, cy + math.sin(a) * r0, cx + math.cos(a) * r1, cy + math.sin(a) * r1,
+                     0.35 + 0.65 * st["peak"][i], width=self.stroke(h, w))
         rim.paint(self, bold=an.treble > 0.3, base=STAR_FG)
-        ring.paint(self, bold=False, base=STAR_FG)
-        red.paint(self, bold=an.bass > 0.3, base=SPARK_FG)
-        blue.paint(self, bold=an.treble > 0.3, base=SPARK_FG)
-        white.paint(self, bold=True, base=STAR_FG)
-        bolt.paint(self, bold=True, base=STAR_FG if st["flash"] > 0.3 else WAVE_FG)
-        if an.beat > 0.5:
-            st["say"] = t + 1.5
+        st["outer_blue"].paint(self, attr=self.fg(0.78, False, base=SPARK_FG))
+        st["outer_red"].paint(self, attr=self.fg(0.0, False, base=SPARK_FG))
+        st["red"].paint(self, attr=self.fg(0.0, an.bass > 0.3, base=SPARK_FG))
+        st["blue"].paint(self, attr=self.fg(0.78, an.treble > 0.3, base=SPARK_FG))
+        k = min(self.STEALIE_EYE_STEPS - 1, int(an.bass * 2.5 * self.STEALIE_EYE_STEPS))
+        st["whites"][k].paint(self, attr=self.fg(0.99, True, base=STAR_FG))
+        st["bolt"].paint(self, attr=self.fg(0.99, True, base=STAR_FG) if st["flash"] > 0.3 else self.fg(0.85, False, base=STAR_FG))
+        if an.beat > 0.6 and t - st["said"] > 10:
+            st["say"], st["said"] = t + 1.5, t
         if t < st["say"]:
             msg = "STEAL YOUR FACE RIGHT OFF YOUR HEAD"
-            self.put(1, max(0, (w - len(msg)) // 2), msg[:w - 1], self.fg(0.99, True, base=STAR_FG))
+            self.put(h - 2, max(0, (w - len(msg)) // 2), msg[:w - 1], self.fg(0.99, True, base=STAR_FG))
 
     # ---- wall (the Wall of Sound, 1974)
     # (label, x as a fraction of the width, columns side by side, cabinets tall, first band, last band, ramp)
