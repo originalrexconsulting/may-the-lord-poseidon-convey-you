@@ -78,6 +78,10 @@ Keys:
                 pick the first ten, space/n/b/arrows still control playback,
                 Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
+                While something plays, the panel is held awake (screen saver and DPMS
+                off, plus a logind idle inhibitor) until DISPLAY_SLEEP_SECS past the
+                last key, so the light show is not blanked out mid-show; after that the
+                screen sleeps as the desktop says. 0 disables and hands the screen back.
   t             sleep timer: minutes, or 'track' (the end of this track) or 'show' (the end
                 of the playlist); the gain fades over the last minute, then playback pauses
                 and the gain comes back. 0 cancels. The status line shows 💤 and what is left.
@@ -122,6 +126,7 @@ import random
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -405,6 +410,7 @@ SPLASHES = {
 }
 SPLASH_EYES = {"crowned": (10, 11), "storm": ()}   # rows whose inner blocks are the eyes; ▓ is always an eye
 SCREENSAVER_SECS = 180   # idle time (while playing) before the light show starts; 0 disables
+DISPLAY_SLEEP_SECS = 5400  # hold the panel awake this long past the last key, while playing; 0 disables
 VOLUME_STEP = 5          # +/- move mpv's software volume by this much; m mutes. The level is remembered.
 VOLUME_MAX = 100         # unity gain; mpv allows 130 but that only clips before the DAC
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
@@ -1046,6 +1052,110 @@ class Mpv:
             os.unlink(self.path)
 
 
+class KeepAwake(threading.Thread):
+    """Hold the screen awake while the music plays, until DISPLAY_SLEEP_SECS past the last key.
+
+    mpv runs here with --no-video --force-window=no, so its own stop-screensaver never
+    fires: there is no window to inhibit from, and the desktop blanks the panel out from
+    under the light show a few minutes in. The light show is the whole point of the
+    player in a room with people in it, so hold the blankers off while something is
+    playing -- but only for DISPLAY_SLEEP_SECS past the last key, so a player left
+    running overnight still lets the panel sleep.
+
+    Two blankers, two mechanisms, both optional. X's own screen saver and DPMS are
+    turned off with xset and put back exactly as they were. A userspace screensaver
+    (xfce4-screensaver and friends) ignores xset and watches the XScreenSaver idle
+    counter, which only input events reset; that one wants a logind idle inhibitor,
+    held here by a systemd-inhibit child. The child sleeps for DISPLAY_SLEEP_SECS
+    rather than forever so a TUI that dies without unwinding cannot pin the inhibitor
+    past the window it was asked for. Whatever is missing is skipped, and a machine
+    with neither keeps the behaviour it had.
+
+    This has to be a thread: light_show() blocks in deadviz's frame loop until a key is
+    pressed, which is exactly the stretch the panel must stay lit for, so the UI loop is
+    in no position to do the poking.
+    """
+
+    POLL = 15
+
+    def __init__(self, mpv, idle_since):
+        super().__init__(daemon=True)
+        self.mpv = mpv
+        self.idle_since = idle_since          # callable: when the last key was pressed
+        self.stopping = threading.Event()
+        self.holding = False
+        self.saved = None                     # what xset q said before we touched it
+        self.inhibitor = None
+        self.can_inhibit = bool(shutil.which("systemd-inhibit"))
+
+    def run(self):
+        if not DISPLAY_SLEEP_SECS:
+            return
+        while not self.stopping.wait(self.POLL):
+            try:
+                if self.playing() and time.time() - self.idle_since() < DISPLAY_SLEEP_SECS:
+                    self.hold()
+                else:
+                    self.release()
+            except Exception:
+                pass                          # never take the player down over a screen saver
+        try:
+            self.release()
+        except Exception:
+            pass
+
+    def stop(self):
+        self.stopping.set()
+
+    def playing(self):
+        st = self.mpv.status() if self.mpv.sock else None
+        return bool(st and not st["paused"])
+
+    def hold(self):
+        if not self.holding:
+            self.holding = True
+            self.saved = self.xset_read()
+            if self.saved:
+                self.xset("s", "off", "-dpms")
+        if self.can_inhibit and (self.inhibitor is None or self.inhibitor.poll() is not None):
+            self.inhibitor = subprocess.Popen(
+                ["systemd-inhibit", "--what=idle", "--who=poseidon", "--why=the light show",
+                 "sleep", str(DISPLAY_SLEEP_SECS)],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def release(self):
+        if not self.holding:
+            return
+        self.holding = False
+        if self.saved:
+            (timeout, cycle), dpms, enabled = self.saved
+            self.xset("s", timeout, cycle)
+            self.xset("dpms", *dpms)
+            self.xset("+dpms" if enabled else "-dpms")
+            self.saved = None
+        if self.inhibitor is not None:
+            self.inhibitor.terminate()
+            self.inhibitor = None
+
+    @staticmethod
+    def xset(*args):
+        subprocess.run(["xset", *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=5)
+
+    @staticmethod
+    def xset_read():
+        """((timeout, cycle), (standby, suspend, off), dpms enabled), or None if there is no X to ask."""
+        if not os.environ.get("DISPLAY") or not shutil.which("xset"):
+            return None
+        out = subprocess.run(["xset", "q"], stdin=subprocess.DEVNULL, capture_output=True,
+                             text=True, timeout=5).stdout
+        saver = re.search(r"timeout:\s+(\d+)\s+cycle:\s+(\d+)", out)
+        dpms = re.search(r"Standby:\s+(\d+)\s+Suspend:\s+(\d+)\s+Off:\s+(\d+)", out)
+        if not (saver and dpms):
+            return None
+        return saver.groups(), dpms.groups(), "DPMS is Enabled" in out
+
+
 # --------------------------------------------------------------------------- ui
 
 class Level:
@@ -1084,6 +1194,8 @@ class App:
         self.last_status = None
         self.pending_seek = None
         self.last_key = time.time()
+        self.awake = KeepAwake(self.mpv, lambda: self.last_key)
+        self.awake.start()
         self.viz_mode = self.load_state().get("viz_mode", "bars")
         self.rng = random.Random()
         self.splash()
@@ -2791,6 +2903,8 @@ class App:
             except Exception as e:  # keep the UI alive on a bad API response
                 self.say(f"error: {e}", 8)
         self.save_position()
+        self.awake.stop()
+        self.awake.join(2)        # put the screen saver and DPMS back before curses lets go
         if self.sleep and self.sleep.get("fading"):
             self.mpv.set_volume(self.sleep["vol"])
         if self.remote:
