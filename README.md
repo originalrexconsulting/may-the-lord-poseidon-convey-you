@@ -2,7 +2,16 @@
 
 A terminal player for the archive.org Grateful Dead collection, and the audio
 plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip: run the scripts
-from a clone, or download one self-contained build from Releases.
+from a clone, or download one self-contained build from
+[Releases](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases).
+
+It looks like a toy and it is a listening rig. The purpose is more serious than the
+light show suggests: play good music as losslessly as the source allows, and make
+choosing it instant. Fetched shows play as FLAC from disk, streams take the FLAC
+source when the archive offers one, and PipeWire follows the file's rate to the DAC
+instead of resampling (`AUDIO-ANSIBLE.md` is that setup). Picking a show is a keypress
+in a terminal that already has the list: no web page, no phone app, nothing that
+thinks for a second before every screen. Everything else here sits on top of that.
 
 ```
 scripts/poseidon.py                           # one door to every tool: bare = the TUI,
