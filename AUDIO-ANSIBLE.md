@@ -37,7 +37,7 @@ alsa-utils
 
 On trixie, `pipewire-pulse` conflicts with `pulseaudio`, so apt will remove `pulseaudio` when installing the list above. Let it; use `state: absent` for `pulseaudio` explicitly so the play is honest about it. Keep `pulseaudio-utils` (provides `pactl`, works against pipewire-pulse). Add `gstreamer1.0-pipewire` to the list.
 
-### 2. User services (run as `cp`, `scope: user`)
+### 2. User services (run as the login user, `scope: user`)
 
 Disable and mask:
 
@@ -56,14 +56,14 @@ pipewire-pulse.socket
 wireplumber.service
 ```
 
-Ansible `systemd` module with `scope: user` needs `XDG_RUNTIME_DIR=/run/user/<uid>` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus` in `environment:`. Get uid with `getent passwd cp`. Do not run these tasks with `become: true` targeting root.
+Ansible `systemd` module with `scope: user` needs `XDG_RUNTIME_DIR=/run/user/<uid>` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus` in `environment:`. Get uid with `getent passwd <user>`. Do not run these tasks with `become: true` targeting root.
 
 A logout/login (or reboot) is required once after the PulseAudio to PipeWire switch. The playbook should print a debug message when the pulse services were actually changed, not fail or reboot on its own.
 
 ### 3. PipeWire rate config
 
-File: `~cp/.config/pipewire/pipewire.conf.d/10-rates.conf`
-Owner `cp:cp`, mode `0644`. Create parent dirs.
+File: `~/.config/pipewire/pipewire.conf.d/10-rates.conf`
+Owner the login user and group, mode `0644`. Create parent dirs.
 
 ```
 context.properties = {
@@ -78,8 +78,8 @@ Notify a handler that restarts `pipewire` and `wireplumber` in user scope when t
 
 ### 3b. WirePlumber default-sink rule
 
-File: `~cp/.config/wireplumber/wireplumber.conf.d/51-rotel-default.conf`
-Owner `cp:cp`, mode `0644`. Create parent dirs.
+File: `~/.config/wireplumber/wireplumber.conf.d/51-rotel-default.conf`
+Owner the login user and group, mode `0644`. Create parent dirs.
 
 ```
 monitor.alsa.rules = [
@@ -92,9 +92,17 @@ monitor.alsa.rules = [
 
 Rationale: the internal card's Pro Audio profile has `priority.session` 1500 and the Rotel 1009, so WirePlumber never chose the Rotel on plug-in (found 2026-09-12; fixed by hand that day with `wpctl set-default`, which WirePlumber also remembers in `~/.local/state/wireplumber/default-nodes`). The rule makes it deterministic. Same restart handler as the rates file.
 
+### 3c. Internal card: Pro Audio pin and codec switches
+
+File: `~/.config/wireplumber/wireplumber.conf.d/52-internal-pro-audio.conf` pins the sof-hda-dsp card to `device.profile = "pro-audio"` (PipeWire offers only "off" and "pro-audio" for it, and WirePlumber never picks pro-audio by itself, so without the pin the card came up "off" and streams landed on a silent Dummy Output when the Rotel was unplugged, 2026-09-12).
+
+Task: unmute the ALC287's `Speaker` and `Headphone` playback switches, set `Auto-Mute Mode` to Enabled, `alsactl store` when anything changed. Only where the pin is in force; a UCM HiFi profile would drive these switches itself.
+
+Rationale: Pro Audio hands PipeWire the raw PCM and never touches the ALSA mixer, so the switches stay wherever they were last left, and nothing in userspace turns them back on. Both were off on 2026-09-12 with everything upstream healthy. It recurred 2026-09-16: both switches off again, Firefox correctly linked to the Pro sink, jack unplugged, Auto-Mute Enabled, `asound.state` and the boot-time alsa-restore both had them on. `amixer -c 0 sset Speaker on` (and Headphone) fixed it, which is what this task does. What flips them is still unknown: no udev rule, hook or script calls amixer, no PipeWire errors, no kernel jack events. Next time run `alsactl monitor` across a headphone plug/unplug and a Rotel plug/unplug to catch it. The `verify` tag should include `amixer -c 0 sget Speaker` showing `[on]`.
+
 ### 4. Strawberry config
 
-Strawberry stores settings in `~cp/.config/strawberry/strawberry.conf` (INI). Set only these keys; do not template the whole file, it contains UI state.
+Strawberry stores settings in `~/.config/strawberry/strawberry.conf` (INI). Set only these keys; do not template the whole file, it contains UI state.
 
 ```
 [Backend]
@@ -111,7 +119,7 @@ output=pulsesink
 
 which reaches PipeWire through pipewire-pulse. Either is fine; `pipewiresink` is preferred. Install `gstreamer1.0-pipewire` to get it.
 
-Use `community.general.ini_file` for these keys. Strawberry must not be running when the file is edited; check with `pgrep -u cp strawberry` and skip with a warning rather than clobbering.
+Use `community.general.ini_file` for these keys. Strawberry must not be running when the file is edited; check with `pgrep -u "$USER" strawberry` and skip with a warning rather than clobbering.
 
 ### 5. Verification tasks (tagged `verify`, `changed_when: false`)
 
@@ -131,5 +139,5 @@ Reinstall `pulseaudio` (apt will remove `pipewire-pulse`) and reverse the servic
 - Idempotent. Rerunning must produce zero changes.
 - No `shell:` where a module exists. `shell:` only for `wpctl`/`pactl` checks.
 - Tag everything `audio`. Verification tasks also tagged `verify`.
-- Don't touch `/etc/pipewire`. All config is per-user under `~cp/.config`.
+- Don't touch `/etc/pipewire`. All config is per-user under `~/.config`.
 - Report what changed in one short summary, verdict first.
