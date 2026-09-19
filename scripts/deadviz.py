@@ -2753,48 +2753,50 @@ class Viz:
             pass
         frame = 1.0 / FPS
         last = 0
-        while True:
-            now = time.time()
-            if now - last >= frame:
-                last = now
-                self.t = now - self.t0
-                self.frame += 1
-                self.an.update(self.cap.samples())
-                self.hue = (self.hue + 0.002 + self.an.beat * 0.01) % 1.0
-                h, w = self.scr.getmaxyx()
-                self.scr.erase()
-                getattr(self, "draw_" + self.mode)(h, w)
-                title = self.title_fn()
-                foot = f" {self.mode}  ·  {title}" if title else f" {self.mode}"
-                if self.cap.error:
-                    foot = f" {self.cap.error}"
-                self.put(h - 1, 0, foot[:w - 1], curses.A_DIM)
-                self.scr.refresh()
-            ch = self.scr.getch()
-            if ch == -1:
-                time.sleep(0.005)
-                continue
-            if ch == curses.KEY_RESIZE:
-                continue
-            if ch in (ord("v"), ord("m")):
-                self.next_mode(1)
-                continue
-            if ch in (ord("V"), ord("M")):
-                self.next_mode(-1)
-                continue
-            if ch in (curses.KEY_UP, curses.KEY_DOWN):    # which way the waterfall runs
-                self.flow = "up" if ch == curses.KEY_UP else "down"
-                continue
-            if ord("0") <= ch <= ord("9"):
-                i = (ch - ord("1")) % 10                  # 1-9 then 0 pick the first ten modes
-                if i < len(MODES):
-                    self.mode = MODES[i]
-                continue
-            if self.on_key(ch):
-                continue
-            break
-        self.cap.stop()
-        self.scr.nodelay(False)
+        try:
+            while True:
+                now = time.time()
+                if now - last >= frame:
+                    last = now
+                    self.t = now - self.t0
+                    self.frame += 1
+                    self.an.update(self.cap.samples())
+                    self.hue = (self.hue + 0.002 + self.an.beat * 0.01) % 1.0
+                    h, w = self.scr.getmaxyx()
+                    self.scr.erase()
+                    getattr(self, "draw_" + self.mode)(h, w)
+                    title = self.title_fn()
+                    foot = f" {self.mode}  ·  {title}" if title else f" {self.mode}"
+                    if self.cap.error:
+                        foot = f" {self.cap.error}"
+                    self.put(h - 1, 0, foot[:w - 1], curses.A_DIM)
+                    self.scr.refresh()
+                ch = self.scr.getch()
+                if ch == -1:
+                    time.sleep(0.005)
+                    continue
+                if ch == curses.KEY_RESIZE:
+                    continue
+                if ch in (ord("v"), ord("m")):
+                    self.next_mode(1)
+                    continue
+                if ch in (ord("V"), ord("M")):
+                    self.next_mode(-1)
+                    continue
+                if ch in (curses.KEY_UP, curses.KEY_DOWN):    # which way the waterfall runs
+                    self.flow = "up" if ch == curses.KEY_UP else "down"
+                    continue
+                if ord("0") <= ch <= ord("9"):
+                    i = (ch - ord("1")) % 10                  # 1-9 then 0 pick the first ten modes
+                    if i < len(MODES):
+                        self.mode = MODES[i]
+                    continue
+                if self.on_key(ch):
+                    continue
+                break
+        finally:                 # a kill (or any other exception) must not orphan parec
+            self.cap.stop()
+            self.scr.nodelay(False)
         return ch
 
 
