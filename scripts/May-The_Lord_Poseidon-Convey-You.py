@@ -78,10 +78,11 @@ Keys:
                 pick the first ten, space/n/b/←/→ still control playback,
                 ↑/↓ set the waterfall's direction, Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
-                While something plays, the panel is held awake (screen saver and DPMS
-                off, plus a logind idle inhibitor) until DISPLAY_SLEEP_SECS past the
-                last key, so the light show is not blanked out mid-show; after that the
-                screen sleeps as the desktop says. 0 disables and hands the screen back.
+                While something plays, the panel is held awake (the X idle counter is put
+                back with xset, plus a logind idle inhibitor) until DISPLAY_SLEEP_SECS
+                past the last key, so the light show is not blanked out mid-show; after
+                that the screen sleeps as the desktop says, on its own settings, which
+                are never touched. 0 disables and hands the screen back.
   t             sleep timer: minutes, or 'track' (the end of this track) or 'show' (the end
                 of the playlist); the gain fades over the last minute, then playback pauses
                 and the gain comes back. 0 cancels. The status line shows 💤 and what is left.
@@ -127,6 +128,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -1062,30 +1064,43 @@ class KeepAwake(threading.Thread):
     playing -- but only for DISPLAY_SLEEP_SECS past the last key, so a player left
     running overnight still lets the panel sleep.
 
-    Two blankers, two mechanisms, both optional. X's own screen saver and DPMS are
-    turned off with xset and put back exactly as they were. A userspace screensaver
-    (xfce4-screensaver and friends) ignores xset and watches the XScreenSaver idle
-    counter, which only input events reset; that one wants a logind idle inhibitor,
-    held here by a systemd-inhibit child. The child sleeps for DISPLAY_SLEEP_SECS
-    rather than forever so a TUI that dies without unwinding cannot pin the inhibitor
-    past the window it was asked for. Whatever is missing is skipped, and a machine
-    with neither keeps the behaviour it had.
+    The hold is `xset s reset` on every poll, which is what mpv itself does on X11: it
+    puts the server's idle counter back to zero, and on X everything that blanks a screen
+    counts from that one counter -- the server's own screen saver, DPMS, and a userspace
+    screensaver like xfce4-screensaver, which polls XScreenSaverQueryInfo and activates
+    once the idle time passes its timeout. Nothing is switched off, so there is nothing
+    to put back: a TUI that is killed without unwinding simply stops resetting the
+    counter, and the desktop blanks on its own timeout as it always did.
+
+    Switching the blankers off with `xset s off -dpms` and restoring whatever `xset q`
+    reported is the obvious alternative, and it is what this did until 2026-09-19. It is
+    worse in two ways. xfce4-screensaver does not ignore the X state, whatever its
+    reputation: 4.18's listener sets the server's timeout itself and skips its check
+    entirely while the state reads disabled, so `xset s off` switched the desktop's
+    screensaver off rather than holding it for a while. And a TUI that was killed left it
+    that way for good, with the next run saving the broken state as the one to restore --
+    one kill disabled the screensaver on that machine until somebody noticed by hand.
+
+    A logind idle inhibitor (systemd-inhibit --what=idle) is held alongside it for
+    whatever watches logind rather than X. The child sleeps for DISPLAY_SLEEP_SECS rather
+    than forever so a TUI that dies without unwinding cannot pin the inhibitor past the
+    window it was asked for. Whatever is missing is skipped, and a machine with neither
+    keeps the behaviour it had.
 
     This has to be a thread: light_show() blocks in deadviz's frame loop until a key is
     pressed, which is exactly the stretch the panel must stay lit for, so the UI loop is
     in no position to do the poking.
     """
 
-    POLL = 15
+    POLL = 15                                 # has to stay well under any blanker's timeout
 
     def __init__(self, mpv, idle_since):
         super().__init__(daemon=True)
         self.mpv = mpv
         self.idle_since = idle_since          # callable: when the last key was pressed
         self.stopping = threading.Event()
-        self.holding = False
-        self.saved = None                     # what xset q said before we touched it
         self.inhibitor = None
+        self.can_reset = bool(os.environ.get("DISPLAY")) and bool(shutil.which("xset"))
         self.can_inhibit = bool(shutil.which("systemd-inhibit"))
 
     def run(self):
@@ -1112,11 +1127,8 @@ class KeepAwake(threading.Thread):
         return bool(st and not st["paused"])
 
     def hold(self):
-        if not self.holding:
-            self.holding = True
-            self.saved = self.xset_read()
-            if self.saved:
-                self.xset("s", "off", "-dpms")
+        if self.can_reset:
+            self.xset("s", "reset")
         if self.can_inhibit and (self.inhibitor is None or self.inhibitor.poll() is not None):
             self.inhibitor = subprocess.Popen(
                 ["systemd-inhibit", "--what=idle", "--who=poseidon", "--why=the light show",
@@ -1124,15 +1136,6 @@ class KeepAwake(threading.Thread):
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def release(self):
-        if not self.holding:
-            return
-        self.holding = False
-        if self.saved:
-            (timeout, cycle), dpms, enabled = self.saved
-            self.xset("s", timeout, cycle)
-            self.xset("dpms", *dpms)
-            self.xset("+dpms" if enabled else "-dpms")
-            self.saved = None
         if self.inhibitor is not None:
             self.inhibitor.terminate()
             self.inhibitor = None
@@ -1141,19 +1144,6 @@ class KeepAwake(threading.Thread):
     def xset(*args):
         subprocess.run(["xset", *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=5)
-
-    @staticmethod
-    def xset_read():
-        """((timeout, cycle), (standby, suspend, off), dpms enabled), or None if there is no X to ask."""
-        if not os.environ.get("DISPLAY") or not shutil.which("xset"):
-            return None
-        out = subprocess.run(["xset", "q"], stdin=subprocess.DEVNULL, capture_output=True,
-                             text=True, timeout=5).stdout
-        saver = re.search(r"timeout:\s+(\d+)\s+cycle:\s+(\d+)", out)
-        dpms = re.search(r"Standby:\s+(\d+)\s+Suspend:\s+(\d+)\s+Off:\s+(\d+)", out)
-        if not (saver and dpms):
-            return None
-        return saver.groups(), dpms.groups(), "DPMS is Enabled" in out
 
 
 # --------------------------------------------------------------------------- ui
@@ -2863,48 +2853,48 @@ class App:
             self.say(f"mpv failed to start: {e}", 30)
         if self.state.get("remote"):
             self.toggle_remote()               # it was on last time: back on, same port
-        while True:
-            st = self.mpv.status() if self.mpv.sock else None
-            if st and self.now and self.now.get("rain") and st["count"] == len(self.now["tracks"]) \
-                    and st["pos"] >= st["count"] - 1 and not st["paused"] \
-                    and not (self.sleep and self.sleep["mode"] == "show"):
-                self.rain_more()
-                st = self.mpv.status()
-            self.tick_sleep(st)
-            if st and (not self.now or st["count"] != len(self.now["tracks"])):
-                # something else loaded a playlist into our mpv (restore-playlist.py, a hand-typed
-                # loadfile): describe it the same way an adopted mpv is described
-                self.adopt_playlist()
-            if st and self.pending_seek is not None and st["time"] is not None:
-                self.mpv.cmd("seek", self.pending_seek, "absolute")
-                self.pending_seek = None
-            if st and self.now and self.now.get("doc") and st["pos"] != (self.last_status or {}).get("pos"):
-                self.save_state(self.now["doc"], st["pos"])
-            key = (id(self.now), st["pos"]) if st and self.now else None
-            if key and key != self.logged and st["pos"] < len(self.now["tracks"]) and not st["paused"]:
+        try:
+            while True:
+                st = self.mpv.status() if self.mpv.sock else None
+                if st and self.now and self.now.get("rain") and st["count"] == len(self.now["tracks"]) \
+                        and st["pos"] >= st["count"] - 1 and not st["paused"] \
+                        and not (self.sleep and self.sleep["mode"] == "show"):
+                    self.rain_more()
+                    st = self.mpv.status()
+                self.tick_sleep(st)
+                if st and (not self.now or st["count"] != len(self.now["tracks"])):
+                    # something else loaded a playlist into our mpv (restore-playlist.py, a hand-typed
+                    # loadfile): describe it the same way an adopted mpv is described
+                    self.adopt_playlist()
+                if st and self.pending_seek is not None and st["time"] is not None:
+                    self.mpv.cmd("seek", self.pending_seek, "absolute")
+                    self.pending_seek = None
+                if st and self.now and self.now.get("doc") and st["pos"] != (self.last_status or {}).get("pos"):
+                    self.save_state(self.now["doc"], st["pos"])
+                key = (id(self.now), st["pos"]) if st and self.now else None
+                if key and key != self.logged and st["pos"] < len(self.now["tracks"]) and not st["paused"]:
+                    self.last_status = st
+                    self.log_history(self.now["tracks"][st["pos"]])
+                    self.logged = key
                 self.last_status = st
-                self.log_history(self.now["tracks"][st["pos"]])
-                self.logged = key
-            self.last_status = st
-            self.draw()
-            try:
-                ch = self.scr.getch()
-            except KeyboardInterrupt:
-                break
-            if ch == -1:
-                if (SCREENSAVER_SECS and st and not st["paused"] and deadviz
-                        and time.time() - self.last_key > SCREENSAVER_SECS):
-                    self.light_show()
-                continue
-            self.last_key = time.time()
-            try:
-                if not self.handle(ch):
-                    break
-            except Exception as e:  # keep the UI alive on a bad API response
-                self.say(f"error: {e}", 8)
+                self.draw()
+                ch = self.scr.getch()        # a Ctrl-C here raises out to the handler below
+                if ch == -1:
+                    if (SCREENSAVER_SECS and st and not st["paused"] and deadviz
+                            and time.time() - self.last_key > SCREENSAVER_SECS):
+                        self.light_show()
+                    continue
+                self.last_key = time.time()
+                try:
+                    if not self.handle(ch):
+                        break
+                except Exception as e:  # keep the UI alive on a bad API response
+                    self.say(f"error: {e}", 8)
+        except KeyboardInterrupt:    # Ctrl-C, or the SIGTERM/SIGHUP handler in main()
+            pass                     # fall through and put everything back
         self.save_position()
         self.awake.stop()
-        self.awake.join(2)        # put the screen saver and DPMS back before curses lets go
+        self.awake.join(2)        # drop the idle inhibitor before curses lets go
         if self.sleep and self.sleep.get("fading"):
             self.mpv.set_volume(self.sleep["vol"])
         if self.remote:
@@ -3198,6 +3188,19 @@ def cli_remote(argv):
         r.shutdown()
 
 
+def on_signal(signum, frame):
+    """A kill unwinds like a Ctrl-C.
+
+    Without this a SIGTERM stops the process dead: the show's parec child is orphaned,
+    the position of what was playing is never written, and curses never hands the
+    terminal back -- the shell it was killed from is left with no echo and no cursor.
+    KeepAwake used to leave the screen saver switched off this way too. The UI loop
+    already treats a KeyboardInterrupt as quit, so raise one in the main thread and let
+    every finally: on the way out do its job.
+    """
+    raise KeyboardInterrupt
+
+
 def main():
     argv = sys.argv[1:]
     if argv and argv[0] == "play":
@@ -3206,7 +3209,15 @@ def main():
         return cli_remote(argv[1:])
     if os.environ.get("TERM", "").startswith("tmux"):
         os.environ.setdefault("ESCDELAY", "25")
-    still = curses.wrapper(lambda scr: App(scr).run())
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(sig, on_signal)
+        except (ValueError, OSError, AttributeError):
+            pass                              # not the main thread, or no such signal here
+    try:
+        still = curses.wrapper(lambda scr: App(scr).run())
+    except KeyboardInterrupt:                 # a kill before the UI loop was up
+        return
     for ident, p, log in still:
         print(f"still fetching {ident} in the background; log: {log}")
 
