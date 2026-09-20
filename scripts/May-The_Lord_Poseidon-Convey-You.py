@@ -1081,11 +1081,17 @@ class KeepAwake(threading.Thread):
     that way for good, with the next run saving the broken state as the one to restore --
     one kill disabled the screensaver on that machine until somebody noticed by hand.
 
+    The reset goes to the display the panel is actually on, which find_display works out
+    rather than reading $DISPLAY: this rig is driven from tmux on a tty, and such a
+    session has no DISPLAY at all, so gating the reset on the environment meant it never
+    ran on the one machine it was written for.
+
     A logind idle inhibitor (systemd-inhibit --what=idle) is held alongside it for
-    whatever watches logind rather than X. The child sleeps for DISPLAY_SLEEP_SECS rather
-    than forever so a TUI that dies without unwinding cannot pin the inhibitor past the
-    window it was asked for. Whatever is missing is skipped, and a machine with neither
-    keeps the behaviour it had.
+    whatever watches logind rather than X -- not for xfce4-screensaver, which does not
+    honour it: it reported itself "not inhibited" with the inhibitor held. The child
+    sleeps for DISPLAY_SLEEP_SECS rather than forever so a TUI that dies without
+    unwinding cannot pin the inhibitor past the window it was asked for. Whatever is
+    missing is skipped, and a machine with neither keeps the behaviour it had.
 
     This has to be a thread: light_show() blocks in deadviz's frame loop until a key is
     pressed, which is exactly the stretch the panel must stay lit for, so the UI loop is
@@ -1100,7 +1106,7 @@ class KeepAwake(threading.Thread):
         self.idle_since = idle_since          # callable: when the last key was pressed
         self.stopping = threading.Event()
         self.inhibitor = None
-        self.can_reset = bool(os.environ.get("DISPLAY")) and bool(shutil.which("xset"))
+        self.display = self.find_display() if shutil.which("xset") else None
         self.can_inhibit = bool(shutil.which("systemd-inhibit"))
 
     def run(self):
@@ -1127,8 +1133,10 @@ class KeepAwake(threading.Thread):
         return bool(st and not st["paused"])
 
     def hold(self):
-        if self.can_reset:
-            self.xset("s", "reset")
+        if self.display is None:              # X may have come up after the TUI did
+            self.display = self.find_display() if shutil.which("xset") else None
+        if self.display:
+            self.xset(self.display, "s", "reset")
         if self.can_inhibit and (self.inhibitor is None or self.inhibitor.poll() is not None):
             self.inhibitor = subprocess.Popen(
                 ["systemd-inhibit", "--what=idle", "--who=poseidon", "--why=the light show",
@@ -1141,9 +1149,40 @@ class KeepAwake(threading.Thread):
             self.inhibitor = None
 
     @staticmethod
-    def xset(*args):
-        subprocess.run(["xset", *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL, timeout=5)
+    def find_display():
+        """The X display the panel is on, or None if there is no X to ask.
+
+        Not simply $DISPLAY. The ordinary way this rig is driven is a tmux session on a
+        tty (or over ssh) while the panel shows X, and such a session has no DISPLAY at
+        all, so reading the environment said "no X here" and the reset never ran -- the
+        counter climbed to the desktop's timeout and the panel blanked mid-show anyway.
+        xset takes -display, and the server does not care which session asks, so find
+        the display instead: logind knows which one the user's graphical session is on,
+        and failing that the server is listening on a socket that names it.
+        """
+        if os.environ.get("DISPLAY"):
+            return os.environ["DISPLAY"]
+        if shutil.which("loginctl"):
+            try:
+                def ask(*args):
+                    return subprocess.run(["loginctl", *args, "--value"], stdin=subprocess.DEVNULL,
+                                          capture_output=True, text=True, timeout=5).stdout.strip()
+                session = ask("show-user", str(os.getuid()), "-p", "Display")
+                display = ask("show-session", session, "-p", "Display") if session else ""
+                if display:
+                    return display
+            except Exception:
+                pass
+        try:
+            socks = sorted(s for s in os.listdir("/tmp/.X11-unix") if re.fullmatch(r"X\d+", s))
+        except OSError:
+            socks = []
+        return ":" + socks[0][1:] if socks else None
+
+    @staticmethod
+    def xset(display, *args):
+        subprocess.run(["xset", "-display", display, *args], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
 
 
 # --------------------------------------------------------------------------- ui
