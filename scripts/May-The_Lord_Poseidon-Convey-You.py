@@ -78,6 +78,8 @@ Keys:
                 pick the first ten, space/n/b/←/→ still control playback,
                 ↑/↓ set the waterfall's direction, Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
+  V             stop the light show starting by itself (V again lets it; the setting
+                is remembered). v still opens it by hand.
                 While something plays, the panel is held awake (the X idle counter is put
                 back with xset, plus a logind idle inhibitor) until DISPLAY_SLEEP_SECS
                 past the last key, so the light show is not blanked out mid-show; after
@@ -643,7 +645,7 @@ def onair_doc(identifier):
     return next((d for d in ONAIR_DOCS if d["identifier"] == identifier), None)
 
 
-SETTINGS = ("viz_mode", "volume", "remote")   # state keys that outlive what was last played
+SETTINGS = ("viz_mode", "volume", "remote", "screensaver")   # state keys that outlive what was last played
 
 
 def load_state():
@@ -1516,6 +1518,22 @@ class App:
         self.state["remote"] = True
         self.write_state()
         self.say(f"remote: {self.remote.url()}  (R again turns it off)", 15)
+
+    def screensaver_on(self):
+        """Whether the light show starts by itself after SCREENSAVER_SECS idle (V toggles, remembered)."""
+        return bool(SCREENSAVER_SECS) and self.state.get("screensaver", True)
+
+    def toggle_screensaver(self):
+        if not SCREENSAVER_SECS:
+            self.say("the light show never starts by itself here (SCREENSAVER_SECS is 0)", 6)
+            return
+        on = not self.state.get("screensaver", True)
+        self.state["screensaver"] = on
+        self.write_state()
+        if on:
+            self.say(f"light show starts by itself after {SCREENSAVER_SECS // 60} minutes idle  (V stops it)", 6)
+        else:
+            self.say("light show stays off until you press v  (V lets it start by itself again)", 6)
 
     # ---- levels
 
@@ -2842,6 +2860,8 @@ class App:
                 self.push_radio(self.state.get("radio"))
         elif ch == ord("v"):
             self.light_show()
+        elif ch == ord("V"):
+            self.toggle_screensaver()
         elif ch == ord("t"):
             self.set_sleep(self.prompt("sleep: minutes, 'track' (end of this track) or 'show' (end of the playlist); 0 cancels"))
         elif ch == ord("R"):
@@ -2918,7 +2938,7 @@ class App:
                 self.draw()
                 ch = self.scr.getch()        # a Ctrl-C here raises out to the handler below
                 if ch == -1:
-                    if (SCREENSAVER_SECS and st and not st["paused"] and deadviz
+                    if (self.screensaver_on() and st and not st["paused"] and deadviz
                             and time.time() - self.last_key > SCREENSAVER_SECS):
                         self.light_show()
                     continue
