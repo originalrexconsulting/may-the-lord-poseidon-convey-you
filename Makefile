@@ -70,10 +70,17 @@ PTY     = $(PYTHON) -c 'import pty,sys; sys.exit(pty.spawn(sys.argv[1:]) >> 8)'
 smoke-pex:
 	SB=$$(mktemp -d) && $(SANDBOX) sh -c '$(UPEX) --version | grep -x "poseidon $(VERSION)" \
 	  && $(UPEX) gdarchive --help >/dev/null && $(UPEX) radio list >/dev/null && $(UPEX) doctor'
+# `doctor` runs under a pty so the static ncurses is really exercised. Its output goes to a
+# file, never straight into `grep -q`: grep exits on the first match, the next write to the
+# pipe fails, and pty.spawn then stops reading the child for good (it marks stdout dead and
+# only selects on stdin), so the child is never drained or reaped and the recipe hangs
+# forever. That is what hung the release build in `make scie smoke-scie` six times between
+# 2026-09-14 and 2026-09-20, five on Linux x86_64 and once on the Intel Mac; locally the
+# output lands in one chunk and gets through. Two greps over the file, one pty run.
 smoke-scie:
 	SB=$$(mktemp -d) && B=$$(ls $(SCIE_NAME)-*) && $(SANDBOX) sh -c "$$B --version | grep -x 'poseidon $(VERSION)' \
-	  && $$B gdarchive --help >/dev/null && $(PTY) $$B doctor | tee /dev/stderr | grep -q 'terminfo: ok' \
-	  && $(PTY) $$B doctor | grep -q 'numpy: [0-9]'"
+	  && $$B gdarchive --help >/dev/null && $(PTY) $$B doctor > $$SB/doctor.txt; rc=\$$?; cat $$SB/doctor.txt; [ \$$rc = 0 ] \
+	  && grep -q 'terminfo: ok' $$SB/doctor.txt && grep -q 'numpy: [0-9]' $$SB/doctor.txt"
 
 clean:
 	rm -rf build dist
