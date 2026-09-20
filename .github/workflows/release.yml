@@ -20,8 +20,9 @@ jobs:
           - { os: macos-15,         universal: false }   # arm64
           - { os: macos-15-intel,   universal: false }   # x86_64; if the label goes away, cross-build on macos-15 (docs/release.md)
     runs-on: ${{ matrix.os }}
-    # a healthy build is under five minutes; twice on 2026-09-14 a runner hung in
-    # `make scie smoke-scie` and would have sat for GitHub's six hours. Fail fast instead;
+    # a healthy build is under five minutes; six times between 2026-09-14 and 2026-09-20 a
+    # runner hung in `make scie smoke-scie` (the smoke test's grep -q pipe deadlock, fixed in
+    # the Makefile on 2026-09-20) and would have sat for GitHub's six hours. Fail fast instead;
     # rerun the one job (gh run rerun --job <id>) and the green jobs' artifacts are kept.
     timeout-minutes: 15
     env:
