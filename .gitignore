@@ -1,8 +1,6 @@
-# the music itself (16 GB+); the playlist snapshots in dead/ are kept
-dead/shows/
-dead/songs/
-dead/jgb/
-dead/lp/
+# the whole audio tree: the music itself (31 GB+), the playlist snapshots,
+# and the .nobackup tagfile that keeps it out of the restic repos
+dead/
 __pycache__/
 *.pyc
 *.part
