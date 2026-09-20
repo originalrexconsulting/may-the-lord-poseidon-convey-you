@@ -80,6 +80,10 @@ In the light show, `v` cycles the modes forward and `V` backward, so from the fi
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
 Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
+The light show also starts on its own after three idle minutes while something
+plays. `V` in the list stops that, `V` again lets it, and the choice is remembered;
+`v` still opens it by hand.
+
 The Poseidon mode: the bass raises the swell, a beat shakes the earth, and the cast
 drops by.
 
