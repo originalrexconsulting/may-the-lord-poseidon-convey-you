@@ -1242,7 +1242,6 @@ class App:
         lines = art + ["", "MAY THE LORD POSEIDON CONVEY YOU", "E A R T H   S H A K E R", "archive.org  ·  Grateful Dead"]
         top = max(0, (h - len(lines)) // 2)
         gold = curses.color_pair(3) | curses.A_BOLD
-        red = curses.color_pair(4) | curses.A_BOLD
         white = curses.A_BOLD
         sea = curses.color_pair(1)
         self.scr.erase()
@@ -1261,7 +1260,7 @@ class App:
                     elif ch == "~":
                         attr = sea
                     elif ch == "▓" or (i in SPLASH_EYES[style] and ch in "█▀" and ink and ink[1] < c < ink[-2]):
-                        attr = red                                  # the eyes
+                        attr = sea                                  # the eyes, the colour of the water
                     else:
                         attr = white
                     self.put(y, x + c, ch, attr)
