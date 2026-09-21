@@ -421,12 +421,9 @@ HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
 SLEEP_FADE = 60          # the sleep timer fades the gain to nothing over its last minute, then pauses
 REMOTE_PORT = 8402       # the phone remote: R in the TUI, or poseidon remote; http://<this machine>:8402/
 
-# Stations beyond radio.py's lossless list go here: key: (name, url, nominal format, notes).
-# KDFC is absent on purpose: every StreamTheWorld mount that used to serve it
-# (KDFCFMAAC, KDFCFM, *_SC, with and without dist=kdfc) answered
-# "430 Invalid Mount" on 2026-09-12 and kdfc.com no longer exposes a stream URL
-# in its HTML. Add it back once a working URL is found (browser dev tools,
-# Network tab, while the web player runs).
+# Stations beyond radio.py's list go here: key: (name, url, nominal format, notes).
+# KDFC lives in radio.py since 2026-09-20 (StreamTheWorld's KDFCFMAAC96 mount;
+# the 256 kbps one is gone for good).
 EXTRA_STATIONS = {}
 
 
