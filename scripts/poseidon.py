@@ -9,7 +9,7 @@ A symlink named after a tool (gdarchive, deadtui, ...) runs that tool directly.
   poseidon gdarchive fetch <identifier>
   poseidon radio list
   poseidon play 1977-05-08 --song "Morning Dew"   # play without the TUI (also random, an identifier,
-  poseidon play random | stop | pause | status    # radio <station>); the next TUI adopts the player
+  poseidon play random | stop | pause | status    # radio <station|random>); the next TUI adopts the player
   poseidon remote                           # the phone remote on the LAN, for a player started without the TUI
   poseidon doctor                           # what this build is, what it found
   POSEIDON_LIBRARY=/path/to/dead poseidon   # where shows are kept (default: dead/ beside

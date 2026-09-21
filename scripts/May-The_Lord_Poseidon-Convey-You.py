@@ -65,8 +65,9 @@ Keys:
   i             the taper's notes and the reviews of this show (source, lineage, setlist,
                 every review with its stars); in the radio list, probe the station
   *             pin a bookmark: what is playing at this second, or the show under the cursor
-  c             classical radio (the lossless FLAC stations from radio.py);
-                also the first entry of the top-level list. i probes a station.
+  c             classical radio (radio.py's stations, lossless first); also the first
+                entry of the top-level list. Its first row tunes a random station and
+                parks the cursor on it. i probes a station.
   r             resume the last thing played, at the position it was at
   w             what's playing: the whole current playlist (also the first top-level
                 row while something plays); ▶ marks the track, Enter jumps to one
@@ -100,7 +101,7 @@ The command line, no TUI (`poseidon play ...`, the next TUI start adopts the pla
   poseidon play 1977-05-08 [--song "Morning Dew"] [--source aud] [--track 3] [--volume 60]
   poseidon play random                  # a night rated 4+ from a random year, best source
   poseidon play <identifier>            # any archive.org item
-  poseidon play radio naim              # a station from radio.py
+  poseidon play radio naim              # a station from radio.py; radio random picks one
   poseidon play stop | pause | next | prev | status
 An mpv started this way is in its own session, so cron can run `poseidon play random`
 at 7 and `poseidon play stop` at 8 and the shell that started it may go away.
@@ -2182,15 +2183,28 @@ class App:
 
     def push_radio(self, select_key=None):
         def render(s_, w):
+            if s_ == "random":
+                return "  🎲 A random station, straight into play (the dice land on its row)"
             right = f"  {s_['fmt']:13}"
             left = f"  {s_['name']:26} {s_['notes']}"
             return left[:max(0, w - len(right))].ljust(w - len(right)) + right
-        items = stations()
+        items = ["random"] + stations()
         lvl = Level("radio", "♪ Classical radio", items, render)
-        sel = next((i for i, s_ in enumerate(items) if s_["key"] == select_key), 0) if select_key else 0
+        sel = next((i for i, s_ in enumerate(items) if s_ != "random" and s_["key"] == select_key), 0) if select_key else 0
         self.push(lvl, sel)
 
+    def random_station(self):
+        """Any station but the one playing; the cursor follows it when the radio list is open."""
+        pool = [s_ for s_ in stations() if s_["key"] != (self.now or {}).get("radio")] or stations()
+        s_ = self.rng.choice(pool)
+        lvl = self.stack[-1]
+        if lvl.kind == "radio" and not lvl.filter:
+            lvl.cursor = next((i for i, it in enumerate(lvl.items) if it != "random" and it["key"] == s_["key"]), lvl.cursor)
+        return s_
+
     def play_station(self, s_):
+        if s_ == "random":
+            s_ = self.random_station()
         self.now = {"doc": None, "radio": s_["key"], "title": s_["name"],
                     "tracks": [{"title": s_["name"], "how": s_["fmt"], "src": s_["url"], "length": None}]}
         self.mpv.play([s_["url"]], 0)
@@ -2865,7 +2879,9 @@ class App:
             self.toggle_remote()
         elif ch == ord("i") and lvl.kind == "radio":
             i, item = self.current()
-            if item:
+            if item == "random":
+                self.say("move to a station to probe it")
+            elif item:
                 self.probe_station(item)
         elif ch == ord("i"):
             doc = self.doc_here()
@@ -3177,9 +3193,10 @@ def _cli_play(a, mpv):
     state = load_state()
     if a.what == "radio":
         key = (a.rest or [None])[0]
-        s_ = next((x for x in stations() if x["key"] == key), None)
+        s_ = random.choice(stations()) if key == "random" else next((x for x in stations() if x["key"] == key), None)
         if not s_:
-            sys.exit("radio <station>: one of " + ", ".join(x["key"] for x in stations()))
+            sys.exit("radio <station>: random, or one of " + ", ".join(x["key"] for x in stations()))
+        key = s_["key"]
         mpv.start(detach=True)
         mpv.play([s_["url"]], 0)
         if a.volume is not None:

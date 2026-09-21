@@ -24,6 +24,7 @@ Examples:
   radio.py list                 # stations
   radio.py probe                # codec / rate / depth / now-playing for each
   radio.py play naim            # start Naim Classical in the Radio tab
+  radio.py play random          # any station, the dice decide
   radio.py now                  # what Strawberry plays + the DAC's actual rate
   radio.py back                 # return to the previous playlist tab
 """
@@ -31,6 +32,7 @@ Examples:
 import argparse
 import glob
 import os
+import random
 import re
 import sqlite3
 import subprocess
@@ -160,6 +162,8 @@ def die(msg, code=1):
 
 def station(key):
     k = key.lower()
+    if k == "random":
+        return random.choice(list(STATIONS.values()))
     if k in STATIONS:
         return STATIONS[k]
     hits = [v for kk, v in STATIONS.items() if k in kk or k in v[0].lower()]
