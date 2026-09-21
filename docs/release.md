@@ -112,7 +112,11 @@ same code plus Poseidon's eyes the colour of the water, cyan pair 1 instead of r
 not a stoner; the Linux x86_64 job hung a third time, the run was cancelled, and the
 release was published by hand from the three green runners' artifacts plus a local build of
 the Linux x86_64 binary and the `.pex`, the "If CI cannot publish" recipe below, six
-assets; the Makefile fix followed).
+assets; the Makefile fix followed) and `v2026.09.20` (KDFC is back on StreamTheWorld's
+96 kbps mount with 36 more classical streams, 52 stations in all, and the radio list's
+first row tunes a random one; the first tag since the `smoke-scie` fix, and the Linux
+x86_64 job that used to hang finished in 38 seconds, the slowest the Intel Mac at 52,
+the publish job in 10, six assets).
 
 ## If CI cannot publish
 
