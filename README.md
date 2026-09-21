@@ -16,7 +16,7 @@ thinks for a second before every screen. Everything else here sits on top of tha
 ```
 scripts/poseidon.py                           # one door to every tool: bare = the TUI,
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor,
-                                              # poseidon play 1977-05-08 (no TUI; random, an identifier, radio <station>, stop),
+                                              # poseidon play 1977-05-08 (no TUI; random, an identifier, radio <station|random>, stop),
                                               # poseidon remote (the phone remote for a player started that way)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
