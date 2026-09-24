@@ -116,7 +116,12 @@ assets; the Makefile fix followed) and `v2026.09.20` (KDFC is back on StreamTheW
 96 kbps mount with 36 more classical streams, 52 stations in all, and the radio list's
 first row tunes a random one; the first tag since the `smoke-scie` fix, and the Linux
 x86_64 job that used to hang finished in 38 seconds, the slowest the Intel Mac at 52,
-the publish job in 10, six assets).
+the publish job in 10, six assets) and `v2026.09.23` (the panel is held for as long as
+the light show is on the screen, the 90 minutes past the last key bounding the list view
+only, after tiro went dark mid-show again with nobody touching a key for hours; the
+little owl's markings, pale scowling brows, spots over the crown, a hooked beak, navy
+pupils and gold feet; a small touch to Althea; all four runners in 85 seconds end to end,
+the slowest the Intel Mac at 65, the publish job in 10, six assets).
 
 ## If CI cannot publish
 
