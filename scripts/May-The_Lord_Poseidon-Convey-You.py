@@ -82,10 +82,11 @@ Keys:
   V             stop the light show starting by itself (V again lets it; the setting
                 is remembered). v still opens it by hand.
                 While something plays, the panel is held awake (the X idle counter is put
-                back with xset, plus a logind idle inhibitor) until DISPLAY_SLEEP_SECS
-                past the last key, so the light show is not blanked out mid-show; after
-                that the screen sleeps as the desktop says, on its own settings, which
-                are never touched. 0 disables and hands the screen back.
+                back with xset, plus a logind idle inhibitor) for as long as the light
+                show is on the screen, and with the list on the screen until
+                DISPLAY_SLEEP_SECS past the last key; after that the screen sleeps as the
+                desktop says, on its own settings, which are never touched. 0 disables
+                and hands the screen back.
   t             sleep timer: minutes, or 'track' (the end of this track) or 'show' (the end
                 of the playlist); the gain fades over the last minute, then playback pauses
                 and the gain comes back. 0 cancels. The status line shows 💤 and what is left.
@@ -1061,8 +1062,20 @@ class KeepAwake(threading.Thread):
     fires: there is no window to inhibit from, and the desktop blanks the panel out from
     under the light show a few minutes in. The light show is the whole point of the
     player in a room with people in it, so hold the blankers off while something is
-    playing -- but only for DISPLAY_SLEEP_SECS past the last key, so a player left
-    running overnight still lets the panel sleep.
+    playing and the light show is on the screen, for as long as it is on the screen.
+    With the list on the screen instead, the hold lasts DISPLAY_SLEEP_SECS past the
+    last key, so a player left open overnight with the show switched off (V) still
+    lets the panel sleep.
+
+    The window used to bound the light show too, counted from the last key, and that
+    is how tiro's panel went dark mid-show again on 2026-09-23: the ordinary evening
+    here is a show started over ssh, the light show coming on by itself three minutes
+    later, and nobody touching a key for hours, so the hold lapsed 90 minutes in and
+    the desktop blanked the panel five minutes after that. Keys inside the light show
+    never reached the count either (deadviz reads them itself). A light show is on the
+    screen because somebody put it there or because the music is playing; a dark
+    panel is not what either of them wanted, and the music stopping releases the hold
+    in any case.
 
     The hold is `xset s reset` on every poll, which is what mpv itself does on X11: it
     puts the server's idle counter back to zero, and on X everything that blanks a screen
@@ -1100,10 +1113,11 @@ class KeepAwake(threading.Thread):
 
     POLL = 15                                 # has to stay well under any blanker's timeout
 
-    def __init__(self, mpv, idle_since):
+    def __init__(self, mpv, idle_since, showing=lambda: False):
         super().__init__(daemon=True)
         self.mpv = mpv
         self.idle_since = idle_since          # callable: when the last key was pressed
+        self.showing = showing                # callable: whether the light show is on the screen
         self.stopping = threading.Event()
         self.inhibitor = None
         self.display = self.find_display() if shutil.which("xset") else None
@@ -1114,7 +1128,7 @@ class KeepAwake(threading.Thread):
             return
         while not self.stopping.wait(self.POLL):
             try:
-                if self.playing() and time.time() - self.idle_since() < DISPLAY_SLEEP_SECS:
+                if self.playing() and (self.showing() or time.time() - self.idle_since() < DISPLAY_SLEEP_SECS):
                     self.hold()
                 else:
                     self.release()
@@ -1223,7 +1237,8 @@ class App:
         self.last_status = None
         self.pending_seek = None
         self.last_key = time.time()
-        self.awake = KeepAwake(self.mpv, lambda: self.last_key)
+        self.showing = False                  # the light show is on the screen
+        self.awake = KeepAwake(self.mpv, lambda: self.last_key, lambda: self.showing)
         self.awake.start()
         self.viz_mode = self.load_state().get("viz_mode", "bars")
         self.rng = random.Random()
@@ -2409,9 +2424,11 @@ class App:
             return True
 
         viz = deadviz.Viz(self.scr, title_fn=title, on_key=on_key, mode=self.viz_mode)
+        self.showing = True
         try:
             viz.run()
         finally:
+            self.showing = False
             self.viz_mode = viz.mode
             self.state["viz_mode"] = viz.mode
             self.write_state()
