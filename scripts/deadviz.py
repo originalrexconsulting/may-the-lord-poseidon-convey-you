@@ -1702,9 +1702,18 @@ class Viz:
                                   "ph": self.rng.uniform(0, 2 * math.pi)})
                 u += self.rng.uniform(0.08, 0.13)
             return twigs
+        def speckle():                                              # the crown's white spots, fixed for the life of the screen
+            spots = []
+            for _ in range(400):                                    # a dozen or so; the band is small, so give up gracefully
+                u, v = self.rng.uniform(-0.2, 0.2), self.rng.uniform(-0.19, -0.12)
+                if (u / 0.22) ** 2 + (v / 0.20) ** 2 < 0.88 and all(abs(u - a) + abs(v - b) > 0.03 for a, b in spots):
+                    spots.append((u, v))
+                if len(spots) == 14:
+                    break
+            return spots
         st = self.state("athena", h, w, lambda: {
             "tick": -1, "turn": 0, "quiet": 0.0, "lid": 0.0, "blink": 0, "hoot": 0, "around": 0.0,
-            "spread": 0.2, "said": None, "say_until": 0.0, "twigs": grow(),
+            "spread": 0.2, "said": None, "say_until": 0.0, "twigs": grow(), "spots": speckle(),
             "wind": 0.0, "gust": 0.0, "gust_at": 0.0, "bend": 0.0, "bend_v": 0.0,
             "phase": 0.0, "amp": 0.0, "period": 0.5, "last_beat": -9.0, "y": 0.0, "vy": 0.0})
         tick = int(t * 4)
@@ -1869,6 +1878,8 @@ class Viz:
         body = Canvas(h, w)
         face = Canvas(h, w)
         eyes = Canvas(h, w)
+        pale = Canvas(h, w)                                        # the little owl's markings: brows, spots, beak
+        pupil = Canvas(h, w)
         dark = Canvas(h, w)
         gleam = Canvas(h, w)                                       # the catchlight, painted last so the pupil cannot cover it
         bx, by = B(0, 0.64)
@@ -1900,15 +1911,25 @@ class Viz:
                 else:
                     face.circle(ex, ey, 0.085 * H, 0.55 + (glow - 0.62) * 0.9, n=int(0.085 * H * 3))
                     px = ex + look * 0.03 * H
-                    dark.ellipse(px, ey, pup, pup, 0.02)
+                    pupil.ellipse(px, ey, pup, pup, 0.0)           # navy, the darkest ink the star ramp has
                     d = math.hypot(mx - px, my - ey) or 1.0        # the catchlight is the moon
                     gleam.dot(px + (mx - px) / d * pup * 0.45, ey + (my - ey) / d * pup * 0.45, 1.0)
                     if st["lid"] > 0.05:                           # heavy lids when the music is gone
                         dark.poly([(ex - 0.08 * H, ey - 0.08 * H), (ex + 0.08 * H, ey - 0.08 * H),
                                    (ex + 0.08 * H, ey - 0.08 * H + st["lid"] * 0.16 * H),
                                    (ex - 0.08 * H, ey - 0.08 * H + st["lid"] * 0.16 * H)], 0.28)
-            kx, ky = hx + turn, hy + 0.06 * H
-            dark.poly([(kx - 0.025 * H, ky), (kx + 0.025 * H, ky), (kx, ky + 0.06 * H)], 0.1)
+            # the little owl's face: pale brows that meet low over the beak and rise outward, the scowl
+            # Athene noctua is known for; white spots over the crown; a pale hooked beak with a dark ridge
+            sw = self.stroke(h, w)
+            for side in (-1, 1):
+                pale.line(hx + turn + side * 0.03 * H, hy - 0.07 * H,
+                          hx + turn + side * 0.15 * H, hy - 0.13 * H, 0.95, width=2 * sw)
+            for u, v in st["spots"]:
+                pale.blob(hx + turn * 0.5 + u * H, hy + v * H, 0.9, size=sw)
+            kx, ky = hx + turn, hy + 0.045 * H
+            pale.poly([(kx - 0.03 * H, ky), (kx + 0.03 * H, ky), (kx + 0.012 * H, ky + 0.075 * H),
+                       (kx - 0.012 * H, ky + 0.075 * H)], 0.9)
+            dark.line(kx, ky + 0.03 * H, kx, ky + 0.078 * H, 0.05, width=sw)
         else:                                                      # the back of the head: rings of feathers
             for r in (0.06, 0.12, 0.18):
                 face.circle(hx, hy, r * H, 0.4, n=int(r * H * 3))
@@ -1920,16 +1941,18 @@ class Viz:
             for k in (-1, 0, 1):
                 tx = ax + k * 0.035 * H
                 _, ty, tth = bough(min(end_u, max(0.0, tx / gw)))
-                claws.line(ax, ay, tx, ty - tth / 2, 0.3, width=2 * self.stroke(h, w))
-                claws.line(tx, ty - tth / 2, tx + (1.5 if k >= 0 else -1.5), ty + tth / 2 + 1.5, 0.35, width=2 * self.stroke(h, w))
+                claws.line(ax, ay, tx, ty - tth / 2, 0.6, width=2 * self.stroke(h, w))
+                claws.line(tx, ty - tth / 2, tx + (1.5 if k >= 0 else -1.5), ty + tth / 2 + 1.5, 0.65, width=2 * self.stroke(h, w))
         for (cy, cx), _ in body.cells.items():
             self.put(cy, cx, " ")
         body.paint(self, bold=False, base=RADIAL_FG)
         face.paint(self, bold=False, base=RADIAL_FG)
         eyes.paint(self, bold=True, base=STAR_FG)
+        pale.paint(self, bold=True, base=RADIAL_FG)
+        pupil.paint(self, bold=False, base=STAR_FG)
         dark.paint(self, bold=False, base=RADIAL_FG)
         gleam.paint(self, bold=True, base=STAR_FG)
-        claws.paint(self, bold=True, base=RAIN_FG)
+        claws.paint(self, bold=True, base=RADIAL_FG)               # gold feet, not the bough's green
         # words
         if st["hoot"] > 0 and not around:
             self.put(int(hy / 4) + 2, int((hx + turn) / 2) + 8, "hoo" if st["hoot"] > 4 else "hoo-hoo",
@@ -2084,6 +2107,15 @@ class Viz:
             side = -1 if k <= 0 else 1
             hair.line(x1, y1, x1 + side * 0.03 * H + hs, hy + 0.20 * H, 0.35 + abs(k) * 0.06, width=2 * self.stroke(h, w))
         hair.ellipse(hx, hy - 0.05 * H, 0.085 * H, 0.05 * H, 0.4)
+        fringe = Canvas(h, w)                                      # over the face, so it is painted after the skin
+        arc = [(hx + math.cos(a) * 0.082 * H, hy + math.sin(a) * 0.098 * H)
+               for a in np.linspace(math.radians(200), math.radians(340), 15)]
+        edge = [(hx + (1 - 2 * f) * 0.077 * H, hy - (0.033 + 0.012 * (2 * f - 1) ** 2) * H)
+                for f in np.linspace(0, 1, 7)]
+        fringe.poly(arc + edge, 0.4)
+        for k in (-2, -1, 0, 1, 2):                                # lighter strands combed down into it
+            fringe.line(hx + k * 0.018 * H, hy - 0.09 * H, hx + k * 0.036 * H + 0.01 * H, hy - 0.042 * H,
+                        0.5, width=self.stroke(h, w))
         ex, ey = hx + 0.035 * H, hy - 0.005 * H                    # eyes on the fire (or closed for a blink)
         for dx in (-0.045 * H, 0.0):
             if st["blink"] > 0:
@@ -2164,6 +2196,7 @@ class Viz:
         dress.paint(self, bold=False, base=SPIRAL_FG)
         hair.paint(self, bold=False, base=RADIAL_FG)
         skin.paint(self, bold=True, base=RADIAL_FG)
+        fringe.paint(self, bold=False, base=RADIAL_FG)
         dark.paint(self, bold=False, base=RADIAL_FG)
         brand.paint(self, bold=False, base=RADIAL_FG)
         ember.paint(self, bold=True, base=MAIN_FG)
