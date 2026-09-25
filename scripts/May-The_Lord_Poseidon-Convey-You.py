@@ -155,8 +155,12 @@ CACHE = os.path.expanduser("~/.cache/deadtui")
 STATE = os.path.join(CACHE, "state.json")
 HISTORY = os.path.join(CACHE, "history.jsonl")   # one line per track played, newest last
 BOOKMARKS_FILE = os.path.join(CACHE, "bookmarks.json")   # a list, newest first
+SEARCHES_FILE = os.path.join(CACHE, "searches.json")     # songs looked for, newest first: the Find a song menu
+SEARCHES_ROWS = 40
 HISTORY_ROWS = 500
 THISDAY = "thisday"    # sentinel: every show played on today's month and day, 1965-1995
+FIND = "find"          # sentinel: Find a song: type a title, or one looked for before, straight from the cache
+FIND_TYPE = "type"     # the first row of that menu: type a title
 TOURS = "tours"        # sentinel: the famous runs, night by night, a random night, or the whole run
 TOUR_LIST = [          # (name, first date, last date, why), oldest first
     ("Fillmore West, Feb-Mar 1969", "1969-02-27", "1969-03-02", "the four nights Live/Dead was cut from"),
@@ -508,6 +512,16 @@ def _cache_path(name):
     return os.path.join(CACHE, name.replace("/", "_") + ".json")
 
 
+def cache_load(name):
+    """(data, age in seconds) of a cache file however old it is, or (None, None)."""
+    p = _cache_path(name)
+    try:
+        with open(p) as f:
+            return json.load(f), time.time() - os.path.getmtime(p)
+    except (OSError, ValueError):
+        return None, None
+
+
 def cached(name, fn, ttl=CACHE_TTL):
     p = _cache_path(name)
     try:
@@ -625,6 +639,40 @@ def save_bookmarks(marks):
     with open(BOOKMARKS_FILE + ".tmp", "w") as f:
         json.dump(marks, f)
     os.replace(BOOKMARKS_FILE + ".tmp", BOOKMARKS_FILE)
+
+
+def load_searches():
+    try:
+        with open(SEARCHES_FILE) as f:
+            return [r for r in json.load(f) if isinstance(r, dict) and r.get("song")]
+    except (OSError, ValueError):
+        return []
+
+
+def save_searches(rows):
+    os.makedirs(CACHE, exist_ok=True)
+    with open(SEARCHES_FILE + ".tmp", "w") as f:
+        json.dump(rows[:SEARCHES_ROWS], f)
+    os.replace(SEARCHES_FILE + ".tmp", SEARCHES_FILE)
+
+
+def remember_search(song, collection, count):
+    """Put `song` at the top of the Find a song menu with how many nights it found."""
+    rows = [r for r in load_searches()
+            if not (gd.norm(r["song"]) == gd.norm(song) and (r.get("collection") or gd.DEFAULT_COLLECTION) == collection)]
+    rows.insert(0, {"song": song, "collection": collection, "count": count, "when": time.time()})
+    save_searches(rows)
+
+
+def ago(ts):
+    d = max(0, time.time() - (ts or 0))
+    if d < 86400:
+        return "today"
+    if d < 14 * 86400:
+        return f"{int(d // 86400)} days ago"
+    if d < 60 * 86400:
+        return f"{int(d // (7 * 86400))} weeks ago"
+    return f"{int(d // (30 * 86400))} months ago"
 
 
 def song_key_title(title):
@@ -866,6 +914,8 @@ class SongSearch(threading.Thread):
         self.total = self.checked = 0
         self.done = False
         self.error = None
+        self.stale = False    # the list came from a cache older than CACHE_TTL; new nights are being looked for
+        self.new = 0          # ...and this many have turned up so far
 
     def rank(self, d):
         kind = PREFER.index(d["kind"]) if d["kind"] in PREFER else len(PREFER)
@@ -883,34 +933,50 @@ class SongSearch(threading.Thread):
                 return d
         return None
 
+    @staticmethod
+    def cache_key(song, collection=gd.DEFAULT_COLLECTION):
+        return "song-" + ("" if collection == gd.DEFAULT_COLLECTION else collection + "-") \
+            + gd.norm(song).replace(" ", "-")
+
     def run(self):
-        key = "song-" + ("" if self.collection == gd.DEFAULT_COLLECTION else self.collection + "-") \
-            + gd.norm(self.song).replace(" ", "-")
-        try:
-            hit = cached(key, lambda: None)
-        except Exception:
-            hit = None
+        """The index of a song is kept for good: the first search of a common song takes minutes
+        (every date's candidates are checked against item metadata), a later one reads the file.
+        Once it is older than CACHE_TTL the list still shows at once, and the search runs again
+        behind it for the dates it does not have yet (archive.org gains a few items a week),
+        so a refresh costs one query and a handful of metadata reads instead of the whole ten minutes."""
+        key = self.cache_key(self.song, self.collection)
+        hit, age = cache_load(key)
         if hit:
             self.results.extend(hit)
             self.total = self.checked = len(hit)
-            self.done = True
-            return
+            if age is not None and age < CACHE_TTL:
+                self.done = True
+                remember_search(self.song, self.collection, len(self.results))
+                return
+            self.stale = True
         try:
             args = SimpleNamespace(collection=self.collection, year=None, date=None, song=self.song,
                                    min_rating=None, min_reviews=None, source="any", downloadable=False,
                                    query=None, sort="date asc", limit=10000)
             docs = gd.search(args)[1]
+            have = {d["date"] for d in self.results}
             by_date = {}
             for d in docs:
-                by_date.setdefault(d["date"], []).append(d)
-            self.total = len(by_date)
+                if d["date"] not in have:
+                    by_date.setdefault(d["date"], []).append(d)
+            self.total = len(by_date) + len(have)
             with cf.ThreadPoolExecutor(10) as ex:
                 for d in ex.map(self.pick, [by_date[k] for k in sorted(by_date)]):
                     self.checked += 1
                     if d:
                         self.results.append(d)
-            with open(_cache_path(key), "w") as f:
+                        self.new += 1
+            if self.stale and self.new:
+                self.results.sort(key=lambda d: d["date"])
+            with open(_cache_path(key) + ".tmp", "w") as f:
                 json.dump(self.results, f)
+            os.replace(_cache_path(key) + ".tmp", _cache_path(key))
+            remember_search(self.song, self.collection, len(self.results))
         except Exception as e:
             self.error = str(e)
         self.done = True
@@ -1559,7 +1625,7 @@ class App:
         (HDR, "Now"),
         QUEUE, RANDOM, THISDAY,
         (HDR, "The Dead"),
-        YEARS_GD, TOURS, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
+        YEARS_GD, FIND, TOURS, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
         (HDR, "Not Dead"),
         RADIO, ONAIR, FIRESIGN, JOKES,
         (HDR, "Everything"),
@@ -1570,6 +1636,7 @@ class App:
         RANDOM: "🎲 Random show       any night, 1965-1995, best source, straight into play",
         THISDAY: "📅 This day          every show played on today's date, 1965-1995",
         YEARS_GD: "Grateful Dead        1965-1995, by year",
+        FIND: "🔍 Find a song       every recording of one song, 1965-1995: type a title, or one you looked for before",
         TOURS: "🚌 Tours             Europe '72, the Wall of Sound, May '77, Egypt, Winterland's last nights... a night, or the whole run",
         ONAIR: "📻 On the air        the Grateful Dead Hour, Dead to the World, the KFOG New Year's broadcast",
         BOOKMARKS: "★ Bookmarks          shows and moments pinned with *",
@@ -1617,16 +1684,21 @@ class App:
         same = (self.state.get("collection") or gd.DEFAULT_COLLECTION) == collection
         self.push(lvl, items.index(year) if same and year in items else 0)
 
-    def random_version(self, song):
-        """A random night's version of `song`: (doc, track index, tracks, meta), or None."""
-        key = "song-index-" + gd.norm(song).replace(" ", "-")
+    def random_version(self, song, collection=gd.DEFAULT_COLLECTION):
+        """A random night's version of `song`: (doc, track index, tracks, meta), or None.
+
+        Drawn from the song's verified index when a search has built one (every doc in it has the
+        track, so the first pick lands), else from the raw candidate query."""
+        key = "song-index-" + ("" if collection == gd.DEFAULT_COLLECTION else collection + "-") \
+            + gd.norm(song).replace(" ", "-")
 
         def fetch():
-            args = SimpleNamespace(collection=gd.DEFAULT_COLLECTION, year=None, date=None, song=song, min_rating=None,
+            args = SimpleNamespace(collection=collection, year=None, date=None, song=song, min_rating=None,
                                    min_reviews=None, source="any", downloadable=False, query=None,
                                    sort="date asc", limit=3000)
             return gd.search(args)[1]
-        docs = list(cached(key, fetch) or [])
+        docs = cache_load(SongSearch.cache_key(song, collection))[0]
+        docs = list(docs or cached(key, fetch) or [])
         self.rng.shuffle(docs)
         if self.rng.random() < 0.4:                                         # some of the time, what is on disk first
             docs.sort(key=lambda d: not os.path.isdir(local_show_dir(d)))
@@ -1641,7 +1713,7 @@ class App:
                 continue
         return None
 
-    def rain_tracks(self, n, songs=RAIN_SONGS, icon="☔", avoid=()):
+    def rain_tracks(self, n, songs=RAIN_SONGS, icon="☔", avoid=(), collection=gd.DEFAULT_COLLECTION):
         out = []
         seen = set(avoid)
         picks = self.rng.sample(songs, min(n, len(songs))) if len(songs) > 1 else [songs[0]] * n
@@ -1649,7 +1721,7 @@ class App:
             self.loading(f"{icon} looking for a {song}...")
             hit = None
             for _ in range(4):                       # not one we already have queued
-                hit = self.random_version(song)
+                hit = self.random_version(song, collection)
                 if not hit or hit[2][hit[1]]["src"] not in seen:
                     break
             if not hit or hit[2][hit[1]]["src"] in seen:
@@ -1661,13 +1733,15 @@ class App:
             out.append(t)
         return out
 
-    def rain(self, songs=RAIN_SONGS, title="☔ Rain and Snow", icon="☔", batch=RAIN_BATCH, more=3):
+    def rain(self, songs=RAIN_SONGS, title="☔ Rain and Snow", icon="☔", batch=RAIN_BATCH, more=3,
+             collection=gd.DEFAULT_COLLECTION):
         """A stream of random versions of random songs from `songs`, refilled as it plays."""
-        tracks = self.rain_tracks(batch, songs, icon)
+        tracks = self.rain_tracks(batch, songs, icon, collection=collection)
         if not tracks:
             self.say("nothing found (archive.org?)")
             return
-        self.now = {"doc": None, "tracks": tracks, "title": title, "rain": {"songs": songs, "icon": icon, "more": more}}
+        self.now = {"doc": None, "tracks": tracks, "title": title,
+                    "rain": {"songs": songs, "icon": icon, "more": more, "collection": collection}}
         self.mpv.play([t["src"] for t in tracks], 0)
         self.say(f"{icon} {len(tracks)} to start; more come as it goes", 8)
         self.push_queue()
@@ -1675,7 +1749,8 @@ class App:
     def rain_more(self):
         """Called from the main loop when the last queued song starts: add a few more."""
         r = self.now["rain"]
-        more = self.rain_tracks(r["more"], r["songs"], r["icon"], avoid={t["src"] for t in self.now["tracks"]})
+        more = self.rain_tracks(r["more"], r["songs"], r["icon"], avoid={t["src"] for t in self.now["tracks"]},
+                                collection=r.get("collection") or gd.DEFAULT_COLLECTION)
         for t in more:
             self.mpv.cmd("loadfile", t["src"], "append")
         self.now["tracks"].extend(more)
@@ -1788,6 +1863,39 @@ class App:
             return f"  {song}{who}"[:w]
         lvl = Level("tears", "Tears", TEARS_LIST, render, {"tears": True})
         self.push(lvl, 0)
+
+    # ---- find a song
+
+    def push_find(self):
+        """Type a song title, or pick one looked for before: its list comes straight from the cache."""
+        def render(r, w):
+            if r == FIND_TYPE:
+                return ("  Type a song title...".ljust(30)
+                        + "  every recording of it from archive.org, one row per night"[:max(0, w - 30)])
+            coll = r.get("collection") or gd.DEFAULT_COLLECTION
+            who = "" if coll == gd.DEFAULT_COLLECTION else f"   ({COLLECTIONS[coll]['title']})"
+            right = f" {r.get('count') or 0:>4} nights   {ago(r.get('when')):>13} "
+            left = f"  {r['song']}{who}"
+            return left[:max(0, w - len(right))].ljust(w - len(right)) + right
+        items = [FIND_TYPE] + load_searches()
+        lvl = Level("find", "🔍 Find a song", items, render, {"find": True})
+        self.push(lvl, 0)
+
+    def find_song(self, play=False):
+        """f anywhere, or the Find a song menu: `play` streams random versions instead of listing them."""
+        song = self.prompt("song")
+        if song:
+            if play:
+                self.rain([song], f"♪ {song}", "♪", batch=2, more=1, collection=self.collection())
+            else:
+                self.push_songs(song)
+
+    def forget_search(self, lvl, i):
+        if i is None or i >= len(lvl.items) or lvl.items[i] == FIND_TYPE:
+            return
+        gone = lvl.items.pop(i)
+        save_searches([r for r in lvl.items if r != FIND_TYPE])
+        self.say(f"forgot {gone.get('song')} (its index stays in the cache)", 4)
 
     # ---- this day
 
@@ -2518,6 +2626,9 @@ class App:
         srch = lvl.ctx.get("search")
         if time.time() < self.msg_until and self.msg:
             self.put(y + 3, 0, f" {self.msg}"[:w - 1], curses.color_pair(3))
+        elif srch and not srch.done and srch.stale:
+            self.put(y + 3, 0, f" from the cache; looking for new nights: {srch.checked}/{srch.total or '?'} dates checked, "
+                               f"{srch.new} new"[:w - 1], curses.color_pair(3))
         elif srch and not srch.done:
             self.put(y + 3, 0, f" searching: {srch.checked}/{srch.total or '?'} dates checked, "
                                f"{len(srch.results)} shows so far"[:w - 1], curses.color_pair(3))
@@ -2525,7 +2636,9 @@ class App:
             self.put(y + 3, 0, f" search failed: {srch.error}"[:w - 1], curses.color_pair(3))
         else:
             if lvl.kind == "songs":
-                keys = " ↵ open at song  p play from song  a all versions  ␣ pause  n/b trk  / filter  d fetch  q quit"
+                keys = " ↵ open at song  p play from song  a all versions in order  z random ones, on and on  / filter  d fetch  q quit"
+            elif lvl.kind == "find":
+                keys = " ↵ every recording, one row per night  p random ones, one after another  x forget  h back  q quit"
             elif lvl.kind == "radio":
                 keys = " ↵/p tune  i probe (codec, rate, now playing)  ␣ pause  s stop  h back  q quit (music stays)"
             elif lvl.kind == "tears":
@@ -2604,6 +2717,12 @@ class App:
             self.push_albums(item)
         elif lvl.kind == "home" and item == TEARS:
             self.push_tears()
+        elif lvl.kind == "home" and item == FIND:
+            self.push_find()
+        elif lvl.kind == "find" and item == FIND_TYPE:
+            self.find_song()
+        elif lvl.kind == "find":
+            self.push_songs(item["song"], item.get("collection") or gd.DEFAULT_COLLECTION)
         elif lvl.kind == "home" and item == HIST:
             self.push_history()
         elif lvl.kind in ("history", "bookmarks"):
@@ -2702,6 +2821,13 @@ class App:
             self.push_albums(item)
         elif lvl.kind == "home" and item == TEARS:
             self.push_tears()
+        elif lvl.kind == "home" and item == FIND:
+            self.find_song(play=True)
+        elif lvl.kind == "find" and item == FIND_TYPE:
+            self.find_song(play=True)
+        elif lvl.kind == "find":
+            coll = item.get("collection") or gd.DEFAULT_COLLECTION
+            self.rain([item["song"]], f"♪ {item['song']}", "♪", batch=2, more=1, collection=coll)
         elif lvl.kind == "home" and item == HIST:
             self.push_history()
         elif lvl.kind in ("history", "bookmarks"):
@@ -2781,11 +2907,6 @@ class App:
                 self.say(f"metadata: {e}")
                 return
             self.play_doc(item, idx)
-
-    def find_song(self):
-        song = self.prompt("song")
-        if song:
-            self.push_songs(song)
 
     def goto(self):
         s = self.prompt("go to (YYYY or YYYY-MM-DD)")
@@ -2913,6 +3034,12 @@ class App:
             self.delete_bookmark(lvl, i)
         elif ch == ord("a") and lvl.kind == "songs":
             self.play_all_versions(lvl)
+        elif ch == ord("z") and lvl.kind == "songs":
+            song, coll = lvl.ctx["song"], lvl.ctx.get("collection") or gd.DEFAULT_COLLECTION
+            self.rain([song], f"♪ {song}", "♪", batch=2, more=1, collection=coll)
+        elif ch == ord("x") and lvl.kind == "find":
+            i, item = self.current()
+            self.forget_search(lvl, i)
         elif ch == ord("/"):
             lvl.filter = self.prompt("filter")
             lvl.cursor = 0
