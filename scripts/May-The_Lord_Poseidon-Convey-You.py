@@ -86,7 +86,9 @@ Keys:
                 show is on the screen, and with the list on the screen until
                 DISPLAY_SLEEP_SECS past the last key; after that the screen sleeps as the
                 desktop says, on its own settings, which are never touched. 0 disables
-                and hands the screen back.
+                and hands the screen back. With the lid closed nothing is held: a shut
+                laptop's panel is lighting the inside of its own lid, so the show is being
+                watched somewhere else (over ssh) and the panel may sleep.
   t             sleep timer: minutes, or 'track' (the end of this track) or 'show' (the end
                 of the playlist); the gain fades over the last minute, then playback pauses
                 and the gain comes back. 0 cancels. The status line shows 💤 and what is left.
@@ -1172,12 +1174,21 @@ class KeepAwake(threading.Thread):
     unwinding cannot pin the inhibitor past the window it was asked for. Whatever is
     missing is skipped, and a machine with neither keeps the behaviour it had.
 
+    None of it while the lid is closed (since 2026-09-27). tiro went into a cabinet with
+    the lid shut and the light show is watched over ssh, on the machine that logged in,
+    so the hold was keeping a panel lit inside a closed lid: heat for nobody. The kernel
+    reports the lid switch at /proc/acpi/button/lid/*/state, readable by anyone, so
+    every poll asks it first and a closed lid releases the hold as the music stopping
+    would. A machine with no lid switch (a desktop) reports nothing and is held as
+    before; the hold comes back on its own the moment the lid is opened.
+
     This has to be a thread: light_show() blocks in deadviz's frame loop until a key is
     pressed, which is exactly the stretch the panel must stay lit for, so the UI loop is
     in no position to do the poking.
     """
 
     POLL = 15                                 # has to stay well under any blanker's timeout
+    LID = "/proc/acpi/button/lid"             # one directory per lid switch, each with a `state` file
 
     def __init__(self, mpv, idle_since, showing=lambda: False):
         super().__init__(daemon=True)
@@ -1194,7 +1205,8 @@ class KeepAwake(threading.Thread):
             return
         while not self.stopping.wait(self.POLL):
             try:
-                if self.playing() and (self.showing() or time.time() - self.idle_since() < DISPLAY_SLEEP_SECS):
+                if (not self.lid_closed() and self.playing()
+                        and (self.showing() or time.time() - self.idle_since() < DISPLAY_SLEEP_SECS)):
                     self.hold()
                 else:
                     self.release()
@@ -1258,6 +1270,26 @@ class KeepAwake(threading.Thread):
         except OSError:
             socks = []
         return ":" + socks[0][1:] if socks else None
+
+    @classmethod
+    def lid_closed(cls):
+        """True when the kernel reports a lid switch and every one of them says closed.
+
+        Each file reads `state:      closed` (or open). No lid directory, or none
+        readable, means no lid to speak of, and the panel is held as it always was.
+        """
+        states = []
+        try:
+            lids = os.listdir(cls.LID)
+        except OSError:
+            return False
+        for lid in lids:
+            try:
+                with open(os.path.join(cls.LID, lid, "state")) as f:
+                    states.append(f.read().split()[-1])
+            except (OSError, IndexError):
+                pass
+        return bool(states) and all(s == "closed" for s in states)
 
     @staticmethod
     def xset(display, *args):
