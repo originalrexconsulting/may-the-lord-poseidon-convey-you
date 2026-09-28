@@ -121,7 +121,14 @@ the light show is on the screen, the 90 minutes past the last key bounding the l
 only, after tiro went dark mid-show again with nobody touching a key for hours; the
 little owl's markings, pale scowling brows, spots over the crown, a hooked beak, navy
 pupils and gold feet; a small touch to Althea; all four runners in 85 seconds end to end,
-the slowest the Intel Mac at 65, the publish job in 10, six assets).
+the slowest the Intel Mac at 65, the publish job in 10, six assets) and `v2026.09.27` (Find a song on the
+home screen, the song index kept for good, and z streams random versions of a song; the
+panel hold stands down while the lid is closed: tiro is shut in a cabinet now with the
+show watched over ssh, so `KeepAwake` reads `/proc/acpi/button/lid/*/state` on every poll
+and a closed lid releases the hold as the music stopping does, the box side, never
+suspend on the lid and `xrandr --output eDP-1 --off` at login, living in ansible-homelab;
+all four runners in 114 seconds end to end, the slowest the Intel Mac at 97, the publish
+job in 8, six assets).
 
 ## If CI cannot publish
 
