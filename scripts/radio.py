@@ -9,9 +9,9 @@ later runs switch to it and replace its contents with the new station.
 PipeWire follows the stream's rate, so a 48 kHz station (CRo D-dur) should
 show rate: 48000 in /proc/asound/R20/pcm0p/sub0/hw_params. `now` checks that.
 
-Stations were verified live with ffprobe on 2026-09-11 (the FLAC ones),
-2026-09-13 (CRo Vltava FLAC and the first lossy tier) and 2026-09-20 (everything
-from KDFC down, ffprobe plus a few seconds of mpv --ao=null each). Dead ones:
+Stations were verified live with ffprobe between 2026-09-11 and 2026-09-20, the
+later ones with a few seconds of mpv --ao=null each. (Dates are no longer per
+tier: STATIONS is sorted by quality, so a tier is not a batch.) Dead ones:
 Mother Earth Klassik (24/192, station closed), AZPM Classical 90.3 KUAT (HLS
 FLAC, connection timed out from Oakland), Radio Klassik Stephansdom (I/O error),
 WCRB Boston, WETA Washington, WRTI Philadelphia, WCLV Cleveland (every guessed
@@ -41,6 +41,12 @@ import time
 
 STATIONS = {
     # key: (name, url, nominal format, notes)
+    #
+    # Ordered by what it sounds like, not by the printed number: AAC buys roughly
+    # 1.5x MP3 at these rates, so AAC 192 outranks MP3 320. Lossless first, then
+    # descending MP3-equivalent. A new station goes in the tier its codec and rate
+    # put it in, never at the end. "home turf" is the one deliberate exception.
+    # ---- lossless
     "naim":  ("Naim Classical", "http://mscp3.live-streams.nl:8250/class-flac.flac",
               "FLAC 16/44.1", "Naim Audio (UK). Curated, mainstream repertoire."),
     "ddur":  ("CRo D-dur", "http://amp.cesnet.cz:8000/cro-d-dur.flac",
@@ -53,7 +59,16 @@ STATIONS = {
               "FLAC 24/44.1", "Russian. 24-bit container; depth of source unknown."),
     "vltava": ("CRo Vltava", "http://amp.cesnet.cz:8000/cro3.flac",
               "FLAC 16/48", "Czech Radio culture channel: classical, opera, spoken word between."),
-    # ---- lossy, but the best of the big classical broadcasters (verified 2026-09-13)
+    # ---- home turf: local, whatever the bitrate
+    "kdfc": ("KDFC", "https://playerservices.streamtheworld.com/api/livestream-redirect/KDFCFMAAC96",
+              "AAC 96/44.1", "San Francisco, Classical California. 96 kbps is all StreamTheWorld serves now."),
+    "kusc": ("KUSC", "https://playerservices.streamtheworld.com/api/livestream-redirect/KUSCAAC96",
+              "AAC 96/44.1", "Los Angeles, KDFC's sister station."),
+    "king": ("Classical KING FM", "https://classicalking.streamguys1.com/king-fm-aac",
+              "AAC 256/44.1", "Seattle. Best-sounding US stream in the list."),
+    # ---- best lossy: AAC 192 and up, MP3 320
+    "abc": ("ABC Classic", "https://streaming.abc-cdn.net.au/audio/hls/classicnsw.m3u8",
+              "AAC 256/44.1", "Australia (Sydney feed), HLS. Daytime there is night here."),
     "fmusique": ("France Musique", "https://icecast.radiofrance.fr/francemusique-hifi.aac",
               "AAC 192/48", "Radio France's classical network, live concerts most evenings."),
     "fmbaroque": ("France Musique Baroque", "https://icecast.radiofrance.fr/francemusiquebaroque-hifi.aac",
@@ -62,28 +77,19 @@ STATIONS = {
               "AAC 192/48", "Radio France's own orchestras and choir, concert recordings only."),
     "fmopera": ("France Musique Opéra", "https://icecast.radiofrance.fr/francemusiqueopera-hifi.aac",
               "AAC 192/48", "Opera, whole works."),
+    "fmclassiqueplus": ("France Musique Classique+", "https://icecast.radiofrance.fr/francemusiqueclassiqueplus-hifi.aac",
+              "AAC 192/48", "The core repertoire, no talk."),
+    "fmpianozen": ("France Musique Piano Zen", "https://icecast.radiofrance.fr/francemusiquepianozen-hifi.aac",
+              "AAC 192/48", "Solo piano, all day."),
+    "fmcontemporaine": ("France Musique Contemp.", "https://icecast.radiofrance.fr/francemusiquelacontemporaine-hifi.aac",
+              "AAC 192/48", "Twentieth century onward."),
     "linn": ("Linn Classical", "http://radio.linn.co.uk:8004/autodj",
               "MP3 320/44.1", "Linn Records (Scotland): their own catalogue, so whole movements."),
-    "npo4": ("NPO Radio 4", "https://icecast.omroep.nl/radio4-bb-mp3",
-              "MP3 192/48", "Dutch public classical."),
-    "wqxr": ("WQXR", "https://stream.wqxr.org/wqxr",
-              "MP3 128/48", "New York."),
-    "wfmt": ("WFMT", "https://wfmt.streamguys1.com/main-mp3",
-              "MP3 128/48", "Chicago. Fine presenters."),
-    "venice": ("Venice Classic Radio", "https://uk2.streamingpulse.com/ssl/vcr1",
-              "MP3 128/44.1", "Italian, all-day chamber and baroque, no talk."),
-    # ---- home turf (verified 2026-09-20)
-    "kdfc": ("KDFC", "https://playerservices.streamtheworld.com/api/livestream-redirect/KDFCFMAAC96",
-              "AAC 96/44.1", "San Francisco, Classical California. 96 kbps is all StreamTheWorld serves now."),
-    "kusc": ("KUSC", "https://playerservices.streamtheworld.com/api/livestream-redirect/KUSCAAC96",
-              "AAC 96/44.1", "Los Angeles, KDFC's sister station."),
-    "king": ("Classical KING FM", "https://classicalking.streamguys1.com/king-fm-aac",
-              "AAC 256/44.1", "Seattle. Best-sounding US stream in the list."),
-    # ---- lossy, 192 kbps and up (verified 2026-09-20)
     "rai3": ("Rai Radio 3", "https://icestreaming.rai.it/3.mp3",
               "MP3 320/44.1", "Italy's culture channel: classical, opera, spoken word between."),
     "musiq3": ("Musiq3", "https://radios.rtbf.be/musiq3-128.mp3",
               "MP3 320/44.1", "Belgian French-language classical (RTBF); mount says 128, serves 320."),
+    # ---- MP3 256
     "brklassik": ("BR-Klassik", "https://dispatcher.rndfnk.com/br/brklassik/live/mp3/high",
               "MP3 256/48", "Bavarian Radio: its own symphony orchestra and chorus, many concerts."),
     "wdr3": ("WDR 3", "https://wdr-wdr3-live.icecastssl.wdr.de/wdr/wdr3/live/mp3/256/stream.mp3",
@@ -94,16 +100,11 @@ STATIONS = {
               "MP3 256/48", "Stuttgart and Baden-Baden; the old SWR2."),
     "concertzender": ("Concertzender", "https://streams.greenhost.nl:8006/live",
               "MP3 256/48", "Dutch volunteer station, deep catalogue, early music to contemporary."),
-    "abc": ("ABC Classic", "https://streaming.abc-cdn.net.au/audio/hls/classicnsw.m3u8",
-              "AAC 256/44.1", "Australia (Sydney feed), HLS. Daytime there is night here."),
     "baroque1fm": ("1.FM Otto's Baroque", "http://strm112.1.fm/baroque_mobile_mp3",
               "MP3 256/44.1", "All baroque, no talk; commercial, so the odd advert."),
-    "fmclassiqueplus": ("France Musique Classique+", "https://icecast.radiofrance.fr/francemusiqueclassiqueplus-hifi.aac",
-              "AAC 192/48", "The core repertoire, no talk."),
-    "fmpianozen": ("France Musique Piano Zen", "https://icecast.radiofrance.fr/francemusiquepianozen-hifi.aac",
-              "AAC 192/48", "Solo piano, all day."),
-    "fmcontemporaine": ("France Musique Contemp.", "https://icecast.radiofrance.fr/francemusiquelacontemporaine-hifi.aac",
-              "AAC 192/48", "Twentieth century onward."),
+    # ---- MP3 192
+    "npo4": ("NPO Radio 4", "https://icecast.omroep.nl/radio4-bb-mp3",
+              "MP3 192/48", "Dutch public classical."),
     "nrk": ("NRK Klassisk", "https://lyd.nrk.no/nrk_radio_klassisk_mp3_h",
               "MP3 192/48", "Norwegian public classical, little talk."),
     "oe1": ("Ö1", "https://orf-live.ors-shoutcast.at/oe1-q2a",
@@ -112,9 +113,15 @@ STATIONS = {
               "MP3 192/48", "Berlin."),
     "klassikradio": ("Klassik Radio", "https://stream.klassikradio.de/live/mp3-192/",
               "MP3 192/44.1", "German commercial: light classics and film music, adverts."),
-    # ---- lossy, 128 kbps (verified 2026-09-20)
+    # ---- MP3 128, and HE-AAC 96 (which sounds about the same)
     "bbc3": ("BBC Radio 3", "https://a.files.bbci.co.uk/ms6/live/3441A116-B12E-4D2F-ACA8-C1984642FA4B/audio/simulcast/hls/nonuk/pc_hd_abr_v2/ak/bbc_radio_three.m3u8",
               "AAC 96/48", "The world feed (HLS); the 320 one is UK-only. Proms in summer."),
+    "wqxr": ("WQXR", "https://stream.wqxr.org/wqxr",
+              "MP3 128/48", "New York."),
+    "wfmt": ("WFMT", "https://wfmt.streamguys1.com/main-mp3",
+              "MP3 128/48", "Chicago. Fine presenters."),
+    "venice": ("Venice Classic Radio", "https://uk2.streamingpulse.com/ssl/vcr1",
+              "MP3 128/44.1", "Italian, all-day chamber and baroque, no talk."),
     "swissclassic": ("Radio Swiss Classic", "http://stream.srg-ssr.ch/m/rsc_de/mp3_128",
               "MP3 128/48", "Swiss, no talk, no news."),
     "radioclassique": ("Radio Classique", "https://radioclassique.ice.infomaniak.ch/radioclassique-high.mp3",
