@@ -20,6 +20,7 @@ import it (for user_agent, library_dir), so that would be a cycle.
 """
 import functools
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -149,6 +150,67 @@ def _terminfo_status():
         return f"FAILED: {e}"
 
 
+def _best_output_profile(profiles):
+    """The highest-priority available profile that would give a card a sink, or None."""
+    best, best_priority = None, -1
+    for key, rest in profiles:
+        if key == "off":
+            continue
+        m = re.search(r"sinks: (\d+).*priority: (\d+).*available: (\w+)", rest)
+        if not m:
+            continue
+        sinks, priority, available = int(m.group(1)), int(m.group(2)), m.group(3)
+        if sinks and available == "yes" and priority > best_priority:
+            best, best_priority = key, priority
+    return best
+
+
+def _parse_cards(text):
+    """`pactl list cards` -> [{name, description, profiles, active}]. One tab is a key on
+    the card, two is a line inside the block the last one-tab key opened."""
+    cards, card, block = [], None, None
+    for line in text.splitlines():
+        key = line.strip()
+        if line.startswith("Card #"):
+            card = {"name": "", "description": "", "profiles": [], "active": ""}
+            cards.append(card)
+            block = None
+        elif card is None:
+            continue
+        elif not line.startswith("\t\t"):          # any one-tab key closes the block before it
+            block = key if key in ("Profiles:", "Properties:") else None
+            if key.startswith("Name:"):
+                card["name"] = key.partition(":")[2].strip()
+            elif key.startswith("Active Profile:"):
+                card["active"] = key.partition(":")[2].strip()
+        elif block == "Properties:" and key.startswith("device.description = "):
+            card["description"] = key.partition("=")[2].strip().strip('"')
+        elif block == "Profiles:" and ":" in key:
+            name, _, rest = key.partition(":")
+            card["profiles"].append((name.strip(), rest))
+    return cards
+
+
+def _audio_status():
+    """A card parked at profile `off` is plugged in and enumerated but has no sink, so
+    mpv silently lands on the fallback device instead: connected, and no sound."""
+    if not shutil.which("pactl"):
+        return "pactl not found (no check)"
+    try:
+        r = subprocess.run(["pactl", "list", "cards"], capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return "pactl failed (no check)"
+    if r.returncode != 0:
+        return "no pipewire/pulse server (no check)"
+    cards = _parse_cards(r.stdout)
+    off = [(c, _best_output_profile(c["profiles"])) for c in cards if c["active"] == "off"]
+    off = [(c, p) for c, p in off if p]            # off with no way out is not actionable
+    if not off:
+        return f"{len(cards)} card(s), none parked at off"
+    return "; ".join(f"{c['description'] or c['name']} is OFF, no sink -- "
+                     f"pactl set-card-profile {c['name']} {p}" for c, p in off)
+
+
 def doctor():
     """One "key: value" line each; always exits 0. CI greps the lines it needs."""
     lib = library_dir()
@@ -164,6 +226,7 @@ def doctor():
     for exe in ("mpv", "ffmpeg", "ffprobe", "parec"):
         lines.append((exe, shutil.which(exe) or "not found"))
     lines += [
+        ("audio cards", _audio_status()),
         ("library", f"{lib} ({'exists' if os.path.isdir(lib) else 'created on first fetch'})"),
         ("cache", CACHE),
         ("socket", os.path.join(sock_dir, "deadtui-mpv.sock")),
