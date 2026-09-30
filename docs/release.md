@@ -128,7 +128,13 @@ show watched over ssh, so `KeepAwake` reads `/proc/acpi/button/lid/*/state` on e
 and a closed lid releases the hold as the music stopping does, the box side, never
 suspend on the lid and `xrandr --output eDP-1 --off` at login, living in ansible-homelab;
 all four runners in 114 seconds end to end, the slowest the Intel Mac at 97, the publish
-job in 8, six assets).
+job in 8, six assets) and `v2026.09.29` (`poseidon doctor` flags an audio card parked at
+PipeWire's `off` profile — plugged in and enumerated but given no sink, so every stream
+lands on the fallback device, which is how the Rotel went silent with nothing looking
+broken; and the station list sorted by what it sounds like rather than by the printed
+number, AAC weighted at about 1.5x MP3 so the France Musique streams outrank the MP3
+320s; all four runners in 80 seconds end to end, the slowest the Intel Mac at 63, the
+publish job in 8, six assets).
 
 ## If CI cannot publish
 
