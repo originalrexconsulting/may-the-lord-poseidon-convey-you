@@ -9,12 +9,17 @@ the TUI's mpv over $XDG_RUNTIME_DIR/deadtui-mpv.sock (start the TUI first, or it
 the mpv this leaves behind). To take a snapshot of what is playing now:
 
   scripts/restore-playlist.py --snapshot dead/playlist-$(date +%F).json
+
+With POSEIDON_HOST=tiro it talks to tiro's mpv through the socket a running
+`poseidon --host tiro` forwards here (the file names in the snapshot are tiro's).
 """
 import json, os, socket, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or os.path.expanduser("~/.cache/deadtui"), "deadtui-mpv.sock")
+HOST = os.environ.get("POSEIDON_HOST")   # the box the TUI drives: its mpv, through the TUI's forwarded socket
+SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or os.path.expanduser("~/.cache/deadtui"),
+                    f"deadtui-mpv@{HOST}.sock" if HOST else "deadtui-mpv.sock")
 
 
 def main():
@@ -25,6 +30,8 @@ def main():
     except OSError:
         if args and args[0] == "--snapshot":
             sys.exit("no player running on " + SOCK)
+        if HOST:
+            sys.exit(f"no TUI driving {HOST} (its forwarded socket {SOCK} is not up); start poseidon --host {HOST} first")
         # no TUI and no player: start the same mpv the TUI starts, detached, so the
         # TUI adopts it later
         import subprocess

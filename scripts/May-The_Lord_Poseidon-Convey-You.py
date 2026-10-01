@@ -108,7 +108,9 @@ Keys:
                 and the box's own adopt the same player. The light show's parec runs
                 there too and its stream is read here: the FFT and the drawing cost this
                 machine, the box stays idle. Remembered in state.json; --no-host forgets.
-                Until the box's disk is indexed everything streams from archive.org.
+                The box's shows on disk are indexed over ssh at start and after a fetch
+                (--host-library PATH says where it keeps them) and play from there; d
+                fetches on the box (--host-fetch CMD is how to run poseidon there).
                 State, history and the phone remote live here now. `poseidon doctor`
                 shows what the box has; the status line shows @NAME, and says when the
                 link is down and being brought back (the music never stops for that).
@@ -146,6 +148,7 @@ import random
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -838,26 +841,82 @@ class Library:
         return os.path.realpath(src)
 
 
-class EmptyLibrary(Library):
-    """A --host box's disk before it is indexed: nothing is on it, everything streams."""
+class RemoteLibrary(Library):
+    """The --host box's disk: one `find` over ssh at start and after a fetch, kept in
+    ~/.cache/deadtui/library-<host>.json so a start on a bad link still shows the * marks.
+    Paths are the box's own, which is what its mpv plays. Nothing is on it until the first index."""
+
+    def __init__(self, host):
+        super().__init__(host.library)
+        self.host = host
+        self.cache = os.path.join(CACHE, f"library-{host.name}.json")
+        self.dirs = {}            # "shows/1977/1977-05-08.<id>" -> [file names]
+        try:
+            with open(self.cache) as f:
+                saved = json.load(f)
+            self.root, self.dirs = saved["root"], saved["dirs"]
+        except (OSError, ValueError, KeyError):
+            pass
+
+    def refresh(self):
+        """Ask the box; False when it could not be reached (the last index stands)."""
+        r = self.host.run("cd " + self.host.quote(self.host.library) + " 2>/dev/null && pwd && for d in shows jgb lp; do "
+                          "[ -d \"$d\" ] && find \"$d\" -mindepth 3 -maxdepth 3 -type f \\( -name '*.flac' -o -name '*.mp3' "
+                          "-o -name '*.ogg' -o -name '*.shn' \\) ! -name '*.part'; done; true", timeout=60)
+        lines = r.stdout.splitlines()
+        if r.returncode != 0 or not lines:
+            return False
+        dirs = {}
+        for path in lines[1:]:
+            d, _, name = path.rpartition("/")
+            dirs.setdefault(d, []).append(name)
+        self.root, self.dirs = lines[0], dirs
+        os.makedirs(CACHE, exist_ok=True)
+        with open(self.cache + ".tmp", "w") as f:
+            json.dump({"root": self.root, "dirs": self.dirs}, f)
+        os.replace(self.cache + ".tmp", self.cache)
+        return True
+
+    def refresh_later(self):
+        threading.Thread(target=self.refresh, daemon=True).start()
+
+    def key(self, doc):
+        date = doc["date"]
+        return f"{gd.collection_dir(doc)}/{date[:4]}/{date}.{doc['identifier']}"
+
+    def show_dir(self, doc):
+        return f"{self.root}/{self.key(doc)}"
 
     def has(self, doc):
-        return False
+        return self.key(doc) in self.dirs
 
     def files(self, doc):
-        return {}
+        out, key = {}, self.key(doc)
+        for name in self.dirs.get(key, ()):
+            ext = os.path.splitext(name)[1].lower()
+            if ext in gd.AUDIO:
+                out.setdefault(os.path.splitext(name)[0], {})[ext] = f"{self.root}/{key}/{name}"
+        return out
 
     def count(self, subdir, year):
-        return 0
+        return sum(1 for k in self.dirs if k.startswith(f"{subdir}/{year}/"))
 
     def night_on_disk(self, date):
-        return False
+        return any(k.startswith(f"shows/{date[:4]}/{date}") for k in self.dirs)
 
     def realpath(self, src):
         return src
 
 
 LIB = Library()
+
+
+def remote_fetch_argv(host, ident):
+    """For Host.popen: poseidon on the box fetching ident into its library, under a login shell
+    (so ~/.local/bin and a .profile's POSEIDON_LIBRARY count); --dest is explicit so the TUI's
+    idea of the library and the fetch's agree."""
+    cmd = f"{host.fetch_cmd} gdarchive fetch --dest {host.quote(host.library)} {shlex.quote(ident)}"
+    return ["bash", "-lc", shlex.quote(cmd)]
 
 
 def source_rank(doc):
@@ -2856,10 +2915,14 @@ class App:
             return
         os.makedirs(CACHE, exist_ok=True)
         log = os.path.join(CACHE, f"fetch-{doc['identifier']}.log")
-        p = subprocess.Popen(poseidon.self_command(["gdarchive", "fetch", doc["identifier"]]), stdin=subprocess.DEVNULL,
-                             stdout=open(log, "w"), stderr=subprocess.STDOUT, start_new_session=True)
+        if self.host:                 # on the box, into its library; the log still lands here
+            p = self.host.popen(remote_fetch_argv(self.host, doc["identifier"]), stdin=subprocess.DEVNULL,
+                                stdout=open(log, "w"), stderr=subprocess.STDOUT, start_new_session=True)
+        else:
+            p = subprocess.Popen(poseidon.self_command(["gdarchive", "fetch", doc["identifier"]]), stdin=subprocess.DEVNULL,
+                                 stdout=open(log, "w"), stderr=subprocess.STDOUT, start_new_session=True)
         self.fetches.append((doc["identifier"], p, log))
-        self.say(f"fetching {doc['identifier']} (log: {log})", 6)
+        self.say(f"fetching {doc['identifier']}" + (f" on {self.host.name}" if self.host else "") + f" (log: {log})", 6)
 
     # ---- drawing
 
@@ -3396,10 +3459,18 @@ class App:
             self.say(f"mpv failed to start: {e}", 30)
         if self.state.get("remote"):
             self.toggle_remote()               # it was on last time: back on, same port
+        if self.host:
+            LIB.refresh_later()                # the box's disk; the cached index shows until it answers
+        fetched = set()
         try:
             while True:
                 if self.host and not self.mpv.sock:
                     self.reconnect()
+                for ident, p, _ in self.fetches:
+                    if p.poll() is not None and ident not in fetched:
+                        fetched.add(ident)
+                        if self.host:
+                            LIB.refresh_later()    # the new show's * mark, and its files for play
                 st = self.mpv.status() if self.mpv.sock else None
                 if st and self.now and self.now.get("rain") and st["count"] == len(self.now["tracks"]) \
                         and st["pos"] >= st["count"] - 1 and not st["paused"] \
@@ -3701,6 +3772,9 @@ def _cli_play(a, mpv):
         print(f"tuning {s_['name']} ({s_['fmt']})")
         return
     doc, entry = cli_doc(a.what, a.source)
+    if mpv.host:
+        mpv.host.ensure()
+        LIB.refresh()                 # the box's files first, as in the TUI
     tracks, meta = tracks_for(doc)
     if not tracks:
         sys.exit(f"{doc['identifier']}: no playable files")
@@ -3782,7 +3856,7 @@ def main():
     global LIB
     argv = poseidon.pop_host_flags(sys.argv[1:])
     if poseidon.host():
-        LIB = EmptyLibrary(poseidon.host().library)   # the box's disk: not indexed yet, so everything streams
+        LIB = RemoteLibrary(poseidon.host())   # the box's disk, from the cached index until it is asked
     if argv and argv[0] == "play":
         return cli_play(argv[1:])
     if argv and argv[0] == "remote":
