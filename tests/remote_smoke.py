@@ -130,6 +130,27 @@ def main():
             with open(os.environ["FAKE_SSH_LOG"]) as f:
                 check("-- parec --raw --format=s16le" in f.read(), "the tap: parec on the box, over the master")
 
+        show = os.path.join(sb, "dead", "shows", "1977", "1977-05-08.gd77-05-08.sbd.hicks.4982.sbeok.shnf")
+        os.makedirs(show)
+        for name in ("gd77-05-08d1t01.flac", "gd77-05-08d1t02.flac", "gd77-05-08d1t03.flac.part"):
+            open(os.path.join(show, name), "w").close()
+        doc = {"date": "1977-05-08", "identifier": "gd77-05-08.sbd.hicks.4982.sbeok.shnf", "collection": ["GratefulDead"]}
+        lib = tui.RemoteLibrary(host)
+        check(not lib.has(doc), "library: nothing until the box is asked")
+        check(lib.refresh(), "library: the box answers")
+        check(lib.root == os.path.join(sb, "dead") and lib.has(doc), "library: the box's own root, the show on it")
+        files = lib.files(doc)
+        check(sorted(files) == ["gd77-05-08d1t01", "gd77-05-08d1t02"] and files["gd77-05-08d1t01"][".flac"] == os.path.join(show, "gd77-05-08d1t01.flac"),
+              "library: the box's paths for the tracks, the .part left out", str(files))
+        check(lib.count("shows", 1977) == 1 and lib.count("jgb", 1977) == 0 and lib.night_on_disk("1977-05-08") and not lib.night_on_disk("1977-05-09"),
+              "library: counts and nights")
+        again = tui.RemoteLibrary(host)
+        check(again.has(doc) and again.root == lib.root, "library: the cached index serves a start on a bad link")
+        host.library = "~/dead"
+        check(lib.refresh() and lib.root == os.path.join(sb, "dead"), "library: ~/ is the box's home")
+        argv = tui.remote_fetch_argv(host, "gd77-05-08.sbd.hicks.4982.sbeok.shnf")
+        check(argv[:2] == ["bash", "-lc"] and "gdarchive fetch --dest " in argv[2] and "$HOME" in argv[2], "fetch: poseidon on the box, into its library", str(argv))
+
         hw = os.path.join(sb, "hw_params")
         with open(hw, "w") as f:
             f.write("access: MMAP_INTERLEAVED\nformat: S32_LE\nrate: 44100 (44100/1)\n")
