@@ -127,6 +127,9 @@ remote (`R`) is served from this machine's address. The panel-awake hold now gua
 machine's screen, which is where the show is. `POSEIDON_HOST=tiro` in your profile does
 the same as the flag. Do not name the machine you are sitting at as `--host`.
 
-Shows on the box's disk: not seen yet, everything streams from archive.org until the
-box's library is indexed over ssh (`--host-library PATH` says where it keeps them,
-`--host-fetch CMD` how to run poseidon there for `d`).
+Shows on the box's disk are indexed over ssh when the TUI starts and after every fetch,
+and play from there, lossless, as they would on the box; `--host-library PATH` says where
+it keeps them (default `~/Music/dead` there, what a downloaded build uses). `d` fetches on
+the box, into that library; `--host-fetch CMD` is how to run poseidon there (default
+`poseidon` on its login shell's PATH; `poseidon doctor` says when that is not found). Both
+are remembered with the host.
