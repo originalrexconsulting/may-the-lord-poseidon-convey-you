@@ -209,6 +209,8 @@ program for a machine that already has Python 3.11+ on PATH: it uses the system'
 Shows fetched with `d` land in `~/Music/dead`; `POSEIDON_LIBRARY=/path/to/dead` moves
 the library. From a clone the library is `dead/` next to `scripts/`.
 
+**Or drive it from another machine.** If the box wired to the DAC is shut in a cabinet, run the TUI where you are sitting: `poseidon --host tiro` (ssh key auth to the box; nothing to install there beyond mpv and `pulseaudio-utils`). mpv runs on the box, reached over one ssh connection; the light show's `parec` runs there too and its stream comes back over the same connection, so the FFT and the drawing cost your machine and the box stays idle, the show within a frame of the speakers. The box is remembered; `--no-host` forgets it. `docs/setup-linux.md` has the details.
+
 **Or clone.** Per-OS guides: [Linux](docs/setup-linux.md), [macOS](docs/setup-macos.md),
 [Windows](docs/setup-windows.md) (WSL 2). The short version:
 
