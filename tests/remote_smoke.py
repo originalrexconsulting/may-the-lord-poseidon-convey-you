@@ -110,6 +110,35 @@ def main():
         check(mpv.reconnect() and mpv.get("playlist-count") == 0, "reconnect: new master, forward, adopted")
         check(alive(pid_in(host.ctl)) and pid_in(host.ctl) != master, "reconnect: a new master")
 
+        try:
+            import deadviz
+        except ImportError:
+            deadviz = None
+            print("skip the tap: numpy is missing")
+        if deadviz:
+            os.environ["FAKE_SSH_PAREC"] = "sine"
+            cap = deadviz.Capture(host)
+            cap.start()
+            deadline = time.time() + 5
+            while time.time() < deadline and not cap.samples().any():
+                time.sleep(0.1)
+            an = deadviz.Analyzer()
+            an.update(cap.samples())
+            check(cap.error is None and an.rms > 0.1 and an.bass > an.treble, f"the tap: a 60 Hz sine from the box reads as bass (rms {an.rms:.2f})")
+            cap.stop()
+            os.environ.pop("FAKE_SSH_PAREC")
+            with open(os.environ["FAKE_SSH_LOG"]) as f:
+                check("-- parec --raw --format=s16le" in f.read(), "the tap: parec on the box, over the master")
+
+        hw = os.path.join(sb, "hw_params")
+        with open(hw, "w") as f:
+            f.write("access: MMAP_INTERLEAVED\nformat: S32_LE\nrate: 44100 (44100/1)\n")
+        tui.HW_PARAMS = hw
+        rates = [tui.dac_rate(host) for _ in range(5)]
+        with open(os.environ["FAKE_SSH_LOG"]) as f:
+            cats = f.read().count("-- cat " + hw)
+        check(rates == [44100] * 5 and cats == 1, f"DAC rate from the box, read once for five asks ({cats} reads)")
+
         mpv.stop()
         check(mpv.probe() is None, "stop: nothing answers on the box any more")
         check(not os.path.exists(remote_sock), "stop: the file mpv left behind is gone")

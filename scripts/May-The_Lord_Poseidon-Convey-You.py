@@ -520,13 +520,18 @@ def quality(st):
     return out
 
 
-def dac_rate():
-    """What the Rotel is actually clocked at, or None when absent/closed."""
+def dac_rate(host=None):
+    """What the Rotel is actually clocked at, or None when absent/closed. With a host, read on
+    the box over ssh, at most every 10 s (the status line asks twice a second)."""
     try:
-        with open(HW_PARAMS) as f:
-            for line in f:
-                if line.startswith("rate:"):
-                    return int(line.split()[1])
+        if host:
+            text = host.read(HW_PARAMS, ttl=10) or ""
+        else:
+            with open(HW_PARAMS) as f:
+                text = f.read()
+        for line in text.splitlines():
+            if line.startswith("rate:"):
+                return int(line.split()[1])
     except (OSError, ValueError):
         pass
     return None
@@ -2833,7 +2838,7 @@ class App:
                 return False
             return True
 
-        viz = deadviz.Viz(self.scr, title_fn=title, on_key=on_key, mode=self.viz_mode)
+        viz = deadviz.Viz(self.scr, title_fn=title, on_key=on_key, mode=self.viz_mode, host=self.host)
         self.showing = True
         try:
             viz.run()
@@ -2900,7 +2905,7 @@ class App:
         if self.now and st:
             t = self.now["tracks"][st["pos"]] if st["pos"] < len(self.now["tracks"]) else {"title": "?", "how": ""}
             state = "⏸" if st["paused"] else ("…" if st["buffering"] or st["time"] is None else "▶")
-            rate = dac_rate()
+            rate = dac_rate(self.host)
             dac = f"  DAC {rate / 1000:g}k" if rate else ""
             dac += volume_tag(st) + sleep_tag(self.sleep, st) + self.host_tag()
             if self.now.get("radio"):
