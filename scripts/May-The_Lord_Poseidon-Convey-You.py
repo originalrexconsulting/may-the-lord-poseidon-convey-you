@@ -99,6 +99,15 @@ Keys:
   s             stop            q         quit; the music keeps playing and the next
                                           start adopts it (see below)
                                 Q         quit and stop the music
+  --host NAME   (command line, any verb) the player is on another box: mpv runs there,
+                reached over one ssh master that forwards its socket here, so this TUI
+                and the box's own adopt the same player. The light show's parec runs
+                there too and its stream is read here: the FFT and the drawing cost this
+                machine, the box stays idle. Remembered in state.json; --no-host forgets.
+                Until the box's disk is indexed everything streams from archive.org.
+                State, history and the phone remote live here now. `poseidon doctor`
+                shows what the box has; the status line shows @NAME, and says when the
+                link is down and being brought back (the music never stops for that).
 
 The command line, no TUI (`poseidon play ...`, the next TUI start adopts the player):
   poseidon play 1977-05-08 [--song "Morning Dew"] [--source aud] [--track 3] [--volume 60]
@@ -694,7 +703,8 @@ def onair_doc(identifier):
     return next((d for d in ONAIR_DOCS if d["identifier"] == identifier), None)
 
 
-SETTINGS = ("viz_mode", "volume", "remote", "screensaver")   # state keys that outlive what was last played
+SETTINGS = ("viz_mode", "volume", "remote", "screensaver",    # state keys that outlive what was last played
+            "host", "host_library", "host_fetch")              # --host: the box the player is on
 
 
 def load_state():
@@ -724,7 +734,7 @@ def show_state(old, doc, track_i, time_pos=None):
 def best_source(date_entry):
     """The source to play for a date: on disk first, then matrix > sbd > aud, rating, reviews."""
     items = date_entry["items"]
-    local = [d for d in items if os.path.isdir(local_show_dir(d))]
+    local = [d for d in items if LIB.has(d)]
     return sorted(local or items, key=source_rank)[0]
 
 
@@ -760,10 +770,62 @@ def reviews(doc):
         return 0
 
 
-def local_show_dir(doc):
-    date = doc["date"]
-    return os.path.join(gd.DEFAULT_DEST, gd.collection_dir(doc), date[:4],
-                        f"{date}.{doc['identifier']}")
+class Library:
+    """The shows on disk, as this process sees them: the library on this machine. With --host the
+    player is on another box and plays that box's files, so main() swaps in a view of its disk."""
+
+    def __init__(self, root=None):
+        self.root = root or gd.DEFAULT_DEST
+
+    def show_dir(self, doc):
+        date = doc["date"]
+        return os.path.join(self.root, gd.collection_dir(doc), date[:4], f"{date}.{doc['identifier']}")
+
+    def has(self, doc):
+        return os.path.isdir(self.show_dir(doc))
+
+    def files(self, doc):
+        """{base: {ext: path}} of the audio on disk for doc, downloads in progress (.part) left out."""
+        out, d = {}, self.show_dir(doc)
+        if os.path.isdir(d):
+            for name in os.listdir(d):
+                ext = os.path.splitext(name)[1].lower()
+                if ext in gd.AUDIO and not name.endswith(".part"):
+                    out.setdefault(os.path.splitext(name)[0], {})[ext] = os.path.join(d, name)
+        return out
+
+    def count(self, subdir, year):
+        d = os.path.join(self.root, subdir, str(year))
+        return len(os.listdir(d)) if os.path.isdir(d) else 0
+
+    def night_on_disk(self, date):
+        d = os.path.join(self.root, "shows", date[:4])
+        return os.path.isdir(d) and any(n.startswith(date) for n in os.listdir(d))
+
+    def realpath(self, src):
+        return os.path.realpath(src)
+
+
+class EmptyLibrary(Library):
+    """A --host box's disk before it is indexed: nothing is on it, everything streams."""
+
+    def has(self, doc):
+        return False
+
+    def files(self, doc):
+        return {}
+
+    def count(self, subdir, year):
+        return 0
+
+    def night_on_disk(self, date):
+        return False
+
+    def realpath(self, src):
+        return src
+
+
+LIB = Library()
 
 
 def source_rank(doc):
@@ -784,7 +846,7 @@ def group_dates(docs):
         venue = ", ".join(x for x in (best.get("venue"), best.get("coverage")) if x)
         out.append({"date": date, "items": items, "venue": venue,
                     "kinds": kinds, "rating": max(rating(i) for i in items),
-                    "local": any(os.path.isdir(local_show_dir(i)) for i in items)})
+                    "local": any(LIB.has(i) for i in items)})
     return out
 
 
@@ -839,13 +901,7 @@ def tracks_for(doc):
     by_base = {}
     for f in files:
         by_base.setdefault(os.path.splitext(f["name"])[0], {})[f["ext"]] = f
-    show_dir = local_show_dir(doc)
-    local = {}
-    if os.path.isdir(show_dir):
-        for name in os.listdir(show_dir):
-            ext = os.path.splitext(name)[1].lower()
-            if ext in gd.AUDIO and not name.endswith(".part"):
-                local.setdefault(os.path.splitext(name)[0], {})[ext] = os.path.join(show_dir, name)
+    local = LIB.files(doc)
     order = STREAM_ORDER_RESTRICTED if stream_only else STREAM_ORDER_OPEN
     if doc.get("lp") and not stream_only:
         # LP transfers: "<id>_disc1side1.flac" (untitled 24-bit original) next to
@@ -921,7 +977,7 @@ class SongSearch(threading.Thread):
 
     def rank(self, d):
         kind = PREFER.index(d["kind"]) if d["kind"] in PREFER else len(PREFER)
-        return (not os.path.isdir(local_show_dir(d)), kind, not gd.doc_lossless_downloadable(d),
+        return (not LIB.has(d), kind, not gd.doc_lossless_downloadable(d),
                 -rating(d), -reviews(d))
 
     def pick(self, cands):
@@ -987,9 +1043,11 @@ class SongSearch(threading.Thread):
 # --------------------------------------------------------------------------- mpv
 
 class Mpv:
-    def __init__(self):
+    def __init__(self, host=None):
+        self.host = host              # poseidon.Host: the player is on another box, its socket forwarded here
         run = os.environ.get("XDG_RUNTIME_DIR") or CACHE
-        self.path = os.path.join(run, "deadtui-mpv.sock")
+        os.makedirs(run, exist_ok=True)   # mpv cannot bind its socket in a directory that is not there yet
+        self.path = host.local_sock if host else os.path.join(run, "deadtui-mpv.sock")
         self.proc = None
         self.sock = None
         self.rid = 0
@@ -1000,14 +1058,26 @@ class Mpv:
     def start(self, detach=False):
         """Adopt the mpv on the socket, else start one. detach=True (the command line) puts it in its
         own session so it outlives the shell that started it; the next TUI adopts it."""
+        if self.host:
+            # the same steps on the box: the forward's local socket always exists, so never unlink
+            # it; a connect through it to a missing socket fails, which adopt() reads as "nothing there"
+            self.host.ensure()
+            if self.adopt():
+                return
+            self.host.sock_unlink()       # whatever is there, nothing answers on it
+            self.host.start_mpv()
+            for _ in range(100):
+                if self.adopt():
+                    self.adopted = False      # ours, not inherited: the saved volume applies
+                    return
+                time.sleep(0.05)
+            raise OSError(f"mpv on {self.host.name} did not answer")
         if os.path.exists(self.path) and self.adopt():
             return
         if os.path.exists(self.path):
             os.unlink(self.path)
         self.proc = subprocess.Popen(
-            ["mpv", "--no-video", "--no-terminal", "--idle=yes", "--force-window=no", "--audio-display=no",
-             "--gapless-audio=yes", "--prefetch-playlist=yes", "--cache=yes", "--demuxer-max-bytes=64MiB",
-             "--user-agent=" + gd.UA, "--input-ipc-server=" + self.path],
+            poseidon.mpv_argv(self.path),
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=detach)
         for _ in range(100):
             if os.path.exists(self.path):
@@ -1023,6 +1093,16 @@ class Mpv:
         mpv keeps its playlist and keeps playing when the TUI dies; only q stops it. Rather
         than start a second player over it, take it over: same socket, same commands.
         """
+        sock = self.probe()
+        if not sock:
+            return False
+        sock.settimeout(0.3)
+        self.sock, self.adopted, self.proc = sock, True, None
+        return True
+
+    def probe(self):
+        """A fresh connection, if an mpv answers on the socket; None when nothing does (mpv leaves
+        its socket file behind when it quits, so the file alone says nothing)."""
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.settimeout(0.5)
@@ -1036,12 +1116,16 @@ class Mpv:
                 data += chunk
             ok = any(json.loads(l).get("request_id") == 1 for l in data.split(b"\n") if l)
         except (OSError, ValueError):
-            return False
+            return None
         if not ok:
-            return False
-        sock.settimeout(0.3)
-        self.sock, self.adopted, self.proc = sock, True, None
-        return True
+            sock.close()
+            return None
+        return sock
+
+    def reconnect(self):
+        """The link to the box dropped: the master back up, the player adopted again. It never stopped."""
+        self.host.ensure()
+        return self.adopt()
 
     def cmd(self, *args):
         if not self.sock:
@@ -1052,6 +1136,7 @@ class Mpv:
             try:
                 self.sock.sendall(json.dumps({"command": list(args), "request_id": rid}).encode() + b"\n")
             except OSError:
+                self.sock = None          # closed under us (mpv quit, or the ssh link went): say so
                 return None
             deadline = time.time() + 3
             while time.time() < deadline:
@@ -1068,8 +1153,10 @@ class Mpv:
                 except socket.timeout:
                     continue
                 except OSError:
+                    self.sock = None
                     return None
                 if not data:
+                    self.sock = None
                     return None
                 self.buf += data
         return None
@@ -1107,19 +1194,25 @@ class Mpv:
         return level
 
     def stop(self):
-        if self.sock:
+        told = bool(self.sock)
+        if told:
             self.cmd("quit")
         if self.proc:
             try:
                 self.proc.wait(2)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
-        elif self.adopted:
-            for _ in range(20):   # the adopted mpv is not our child; wait for its socket to go
-                if not os.path.exists(self.path):
+        elif told:
+            for _ in range(20):   # an adopted (or remote) mpv is not our child; wait until nothing answers
+                sock = self.probe()
+                if not sock:
                     break
+                sock.close()
                 time.sleep(0.1)
-        if os.path.exists(self.path):
+        if self.host:
+            if told:
+                self.host.sock_unlink()       # the file mpv left behind on the box
+        elif os.path.exists(self.path):
             os.unlink(self.path)
 
 
@@ -1314,7 +1407,10 @@ class Level:
 class App:
     def __init__(self, stdscr):
         self.scr = stdscr
-        self.mpv = Mpv()
+        self.host = poseidon.host()   # the box the player is on, or None: here
+        self.mpv = Mpv(self.host)
+        self.reconnecting = None      # the thread bringing the ssh link back, while it is down
+        self.last_reconnect = 0
         self.stack = []
         self.msg = ""
         self.msg_until = 0
@@ -1325,6 +1421,13 @@ class App:
         self.sleep = None         # the sleep timer: {"mode": "minutes"|"track"|"show", ...}
         self.remote = None        # the phone remote's server thread, when R has turned it on
         self.state = self.load_state()
+        if "POSEIDON_HOST" in os.environ:     # --host NAME / --no-host on the command line: remembered
+            if os.environ["POSEIDON_HOST"]:
+                self.state.update({k: os.environ[e] for k, e in poseidon.HOST_KEYS if os.environ.get(e)})
+            else:
+                for k, _ in poseidon.HOST_KEYS:
+                    self.state.pop(k, None)
+            self.write_state()
         curses.curs_set(0)
         curses.use_default_colors()
         curses.init_pair(1, curses.COLOR_CYAN, -1)
@@ -1705,10 +1808,7 @@ class App:
         subdir = gd.collection_dir(collection)
 
         def render(y, w):
-            n = 0
-            d = os.path.join(gd.DEFAULT_DEST, subdir, str(y))
-            if os.path.isdir(d):
-                n = len(os.listdir(d))
+            n = LIB.count(subdir, y)
             return f"  {y}" + (f"    {n} on disk" if n else "")
         items = list(COLLECTIONS[collection]["years"])
         lvl = Level("years", COLLECTIONS[collection]["title"], items, render, {"collection": collection})
@@ -1733,7 +1833,7 @@ class App:
         docs = list(docs or cached(key, fetch) or [])
         self.rng.shuffle(docs)
         if self.rng.random() < 0.4:                                         # some of the time, what is on disk first
-            docs.sort(key=lambda d: not os.path.isdir(local_show_dir(d)))
+            docs.sort(key=lambda d: not LIB.has(d))
         for d in docs[:10]:
             try:
                 files, _, _ = gd.choose_files(item_meta(d["identifier"]), "best", song)
@@ -1792,8 +1892,7 @@ class App:
 
     @staticmethod
     def night_on_disk(date):
-        d = os.path.join(gd.DEFAULT_DEST, "shows", date[:4])
-        return os.path.isdir(d) and any(n.startswith(date) for n in os.listdir(d))
+        return LIB.night_on_disk(date)
 
     def push_nights(self, key):
         """A song's section (NIGHTS): the famous ones, a random one after another, every one."""
@@ -1817,7 +1916,7 @@ class App:
             if it == "random":
                 return "  ≋ A random Seastones, then another, and another"
             if isinstance(it, dict):
-                loc = "*" if os.path.isdir(local_show_dir(it)) else " "
+                loc = "*" if LIB.has(it) else " "
                 return f"{loc} {it['date']}  {it['venue']}. {it['note']}"[:w]
             date, why = it
             return f"{'*' if self.night_on_disk(date) else ' '} {date}  {why}"[:w]
@@ -1839,7 +1938,7 @@ class App:
             self.say(f"{date} is not in the index")
             return
         items = sorted(entry["items"], key=source_rank)
-        items.sort(key=lambda d: not os.path.isdir(local_show_dir(d)))
+        items.sort(key=lambda d: not LIB.has(d))
         for doc in items[:8]:
             try:
                 meta = item_meta(doc["identifier"])
@@ -1878,7 +1977,7 @@ class App:
 
     def push_albums(self, menu=FIRESIGN, select_id=None):
         def render(d, w):
-            loc = "*" if os.path.isdir(local_show_dir(d)) else " "
+            loc = "*" if LIB.has(d) else " "
             if d.get("clip"):
                 return f"{loc} ✂ {d['title']}   {d['date']} at {fmt_time(d['start'])}: {d['note']}"[:w]
             who = "" if menu == FIRESIGN else f"{d['artist']:18} "
@@ -2018,7 +2117,7 @@ class App:
 
     def push_onair(self, select_id=None):
         def render(d, w):
-            loc = "*" if os.path.isdir(local_show_dir(d)) else " "
+            loc = "*" if LIB.has(d) else " "
             return f"{loc} {d['date'][:4]}  {d['title']:44} {d['note']}"[:w]
         items = list(ONAIR_DOCS)
         lvl = Level("onair", "📻 On the air", items, render, {"onair": True})
@@ -2180,9 +2279,9 @@ class App:
 
     def doc_for_src(self, src):
         """Best-effort doc for a playlist entry: a local show dir under dead/, or an archive.org URL."""
-        dest = os.path.realpath(gd.DEFAULT_DEST)
+        dest = LIB.realpath(LIB.root)
         if not src.startswith(("http://", "https://")):
-            src = os.path.realpath(src)
+            src = LIB.realpath(src)
         if src.startswith(dest + os.sep):
             rel = os.path.relpath(os.path.dirname(src), dest).split(os.sep)
             if len(rel) == 3 and "." in rel[2]:
@@ -2227,14 +2326,14 @@ class App:
                     try:
                         tracks, meta = tracks_for(docs[key])
                         docs[key] = (docs[key], show_title(docs[key], meta))
-                        by_src.update({(t["src"] if t["src"].startswith("http") else os.path.realpath(t["src"])): t
+                        by_src.update({(t["src"] if t["src"].startswith("http") else LIB.realpath(t["src"])): t
                                        for t in tracks})
                     except Exception:
                         docs[key] = None
         combined = []
         for e in pl:
             src = e.get("filename") or ""
-            key = src if src.startswith("http") else os.path.realpath(src)
+            key = src if src.startswith("http") else LIB.realpath(src)
             t = dict(by_src.get(key) or {"title": os.path.basename(src), "src": src, "length": None,
                                           "how": "stream" if src.startswith("http") else "local " + src.rsplit(".", 1)[-1]})
             shows = docs.get(os.path.dirname(src))
@@ -2391,7 +2490,7 @@ class App:
     def push_sources(self, date_entry, select_id=None):
         def render(d, w):
             r = f"{rating(d):.2f}" if rating(d) else "  -  "
-            local = "local " if os.path.isdir(local_show_dir(d)) else "      "
+            local = "local " if LIB.has(d) else "      "
             so = "stream" if "stream_only" in (d.get("collection") or []) else "dl    "
             return f"  {KIND_SHORT[d['kind']]:3}  {r} ({reviews(d):>3})  {so}  {local} {d['identifier']}"[:w]
         items = date_entry["items"]
@@ -2426,7 +2525,7 @@ class App:
         def render(d, w):
             venue = ", ".join(x for x in (d.get("venue"), d.get("coverage")) if x)
             r = f"{rating(d):.1f}" if rating(d) else " - "
-            loc = "*" if os.path.isdir(local_show_dir(d)) else " "
+            loc = "*" if LIB.has(d) else " "
             so = "mp3 " if "stream_only" in (d.get("collection") or []) else "    "
             right = f" {KIND_SHORT[d['kind']]:3} {r:>3} {so}"
             left = f"{loc} {d['date']}  {venue}"
@@ -2576,8 +2675,7 @@ class App:
             self.last_key = time.time()
 
     def download(self, doc):
-        if os.path.isdir(local_show_dir(doc)) and any(
-                n.endswith((".flac", ".mp3", ".ogg")) for n in os.listdir(local_show_dir(doc))):
+        if any(e in (".flac", ".mp3", ".ogg") for exts in LIB.files(doc).values() for e in exts):
             self.say("already on disk (re-fetch with poseidon gdarchive fetch <id> to re-tag)")
             return
         os.makedirs(CACHE, exist_ok=True)
@@ -2633,7 +2731,7 @@ class App:
             state = "⏸" if st["paused"] else ("…" if st["buffering"] or st["time"] is None else "▶")
             rate = dac_rate()
             dac = f"  DAC {rate / 1000:g}k" if rate else ""
-            dac += volume_tag(st) + sleep_tag(self.sleep, st)
+            dac += volume_tag(st) + sleep_tag(self.sleep, st) + self.host_tag()
             if self.now.get("radio"):
                 icy = st.get("media_title") or ""
                 if not icy or icy in t["src"]:  # FLAC Icecast streams carry no ICY title; mpv falls back to the filename
@@ -2653,7 +2751,7 @@ class App:
             self.put(y + 1, 0, line1[:w - 1], curses.color_pair(2))
             self.put(y + 2, 0, line2[:w - 1])
         else:
-            self.put(y + 1, 0, " stopped", curses.A_DIM)
+            self.put(y + 1, 0, " stopped" + self.host_tag(), curses.A_DIM)
         active = [f for f in self.fetches if f[1].poll() is None]
         srch = lvl.ctx.get("search")
         if time.time() < self.msg_until and self.msg:
@@ -3087,6 +3185,26 @@ class App:
             pass
         return True
 
+    def host_tag(self):
+        """'  @tiro' on the status line while the player is on another box; says when the link is down."""
+        if not self.host:
+            return ""
+        return f"  @{self.host.name}" + ("" if self.mpv.sock else ": reconnecting")
+
+    def reconnect(self):
+        """The ssh link to the box is down: bring it back off the UI thread, at most every 5 s."""
+        if (self.reconnecting and self.reconnecting.is_alive()) or time.time() - self.last_reconnect < 5:
+            return
+        self.last_reconnect = time.time()
+
+        def go():
+            try:
+                self.mpv.reconnect()
+            except OSError:
+                pass
+        self.reconnecting = threading.Thread(target=go, daemon=True)
+        self.reconnecting.start()
+
     def run(self):
         try:
             self.mpv.start()
@@ -3102,6 +3220,8 @@ class App:
             self.toggle_remote()               # it was on last time: back on, same port
         try:
             while True:
+                if self.host and not self.mpv.sock:
+                    self.reconnect()
                 st = self.mpv.status() if self.mpv.sock else None
                 if st and self.now and self.now.get("rain") and st["count"] == len(self.now["tracks"]) \
                         and st["pos"] >= st["count"] - 1 and not st["paused"] \
@@ -3149,11 +3269,17 @@ class App:
         if self.detach:
             if self.mpv.sock:
                 self.mpv.sock.close()
-            print("music left playing; start again to adopt it, or quit it with:")
-            print(f"  echo '{{\"command\":[\"quit\"]}}' | socat - UNIX-CONNECT:{self.mpv.path}")
-            print("  or: poseidon play stop")
+            if self.host:
+                print(f"music left playing on {self.host.name}; start again to adopt it, or quit it with:")
+                print(f"  poseidon play stop --host {self.host.name}")
+            else:
+                print("music left playing; start again to adopt it, or quit it with:")
+                print(f"  echo '{{\"command\":[\"quit\"]}}' | socat - UNIX-CONNECT:{self.mpv.path}")
+                print("  or: poseidon play stop")
         else:
             self.mpv.stop()
+        if self.host:
+            self.host.close()
         return [f for f in self.fetches if f[1].poll() is None]
 
 
@@ -3341,17 +3467,24 @@ def cli_play(argv):
     p.add_argument("--source", choices=["matrix", "sbd", "aud"], help="insist on this kind of source for a date")
     p.add_argument("--volume", type=int, help="mpv's software gain, 0-100")
     a = p.parse_args(argv)
-    mpv = Mpv()
+    mpv = Mpv(poseidon.host())
     try:
         return _cli_play(a, mpv)
-    except FileNotFoundError:
-        sys.exit("mpv is not installed (apt install mpv / brew install mpv)")
+    except FileNotFoundError as e:
+        sys.exit(str(e) if mpv.host else "mpv is not installed (apt install mpv / brew install mpv)")
+    except OSError as e:                      # the ssh link to the box
+        sys.exit(str(e))
+    finally:
+        if mpv.host:
+            mpv.host.close()
 
 
 def _cli_play(a, mpv):
     if a.what in ("stop", "pause", "next", "prev", "status"):
-        if not (os.path.exists(mpv.path) and mpv.adopt()):
-            sys.exit("nothing is playing")
+        if mpv.host:
+            mpv.host.ensure()
+        if not mpv.adopt():
+            sys.exit("nothing is playing" + (f" on {mpv.host.name}" if mpv.host else ""))
         if a.what == "stop":
             mpv.cmd("quit")
             print("stopped")
@@ -3414,8 +3547,11 @@ def cli_remote(argv):
     p = argparse.ArgumentParser(prog="poseidon remote", description="Serve the phone remote for the running mpv until Ctrl-C.")
     p.add_argument("--port", type=int, default=REMOTE_PORT)
     a = p.parse_args(argv)
-    mpv = Mpv()
-    mpv.start(detach=True)
+    mpv = Mpv(poseidon.host())
+    try:
+        mpv.start(detach=True)
+    except OSError as e:
+        sys.exit(str(e))
 
     def describe():
         pl = mpv.get("playlist") or []
@@ -3434,6 +3570,9 @@ def cli_remote(argv):
             time.sleep(1)
     except KeyboardInterrupt:
         r.shutdown()
+    finally:
+        if mpv.host:
+            mpv.host.close()
 
 
 def on_signal(signum, frame):
@@ -3450,7 +3589,10 @@ def on_signal(signum, frame):
 
 
 def main():
-    argv = sys.argv[1:]
+    global LIB
+    argv = poseidon.pop_host_flags(sys.argv[1:])
+    if poseidon.host():
+        LIB = EmptyLibrary(poseidon.host().library)   # the box's disk: not indexed yet, so everything streams
     if argv and argv[0] == "play":
         return cli_play(argv[1:])
     if argv and argv[0] == "remote":
