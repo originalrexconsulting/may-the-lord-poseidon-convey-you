@@ -166,13 +166,14 @@ def _best_output_profile(profiles):
 
 
 def _parse_cards(text):
-    """`pactl list cards` -> [{name, description, profiles, active}]. One tab is a key on
-    the card, two is a line inside the block the last one-tab key opened."""
+    """`pactl list cards` -> [{index, name, description, profiles, active}]. One tab is a
+    key on the card, two is a line inside the block the last one-tab key opened."""
     cards, card, block = [], None, None
     for line in text.splitlines():
         key = line.strip()
         if line.startswith("Card #"):
-            card = {"name": "", "description": "", "profiles": [], "active": ""}
+            card = {"index": key[len("Card #"):], "name": "", "description": "",
+                    "profiles": [], "active": ""}
             cards.append(card)
             block = None
         elif card is None:
@@ -191,24 +192,75 @@ def _parse_cards(text):
     return cards
 
 
+def _parse_sinks(text):
+    """`pactl list sinks` -> [{name, device}], device being the `device.id` property, which
+    pipewire-pulse sets to the owning card's index."""
+    sinks, sink = [], None
+    for line in text.splitlines():
+        key = line.strip()
+        if line.startswith("Sink #"):
+            sink = {"name": "", "device": ""}
+            sinks.append(sink)
+        elif sink is None:
+            continue
+        elif key.startswith("Name:") and not line.startswith("\t\t"):
+            sink["name"] = key.partition(":")[2].strip()
+        elif key.startswith("device.id = "):
+            sink["device"] = key.partition("=")[2].strip().strip('"')
+    return sinks
+
+
+def _card_has_sink(card, sinks):
+    """By device.id, else by name: `alsa_card.X` owns `alsa_output.X.<profile device>`."""
+    stem = card["name"].partition(".")[2]
+    return any(s["device"] == card["index"] or
+               (stem and s["name"].partition(".")[2].startswith(stem + "."))
+               for s in sinks)
+
+
+def _active_sinks(card):
+    """How many sinks the card's active profile promises, per `pactl list cards`."""
+    for key, rest in card["profiles"]:
+        if key == card["active"]:
+            m = re.search(r"sinks: (\d+)", rest)
+            return int(m.group(1)) if m else 0
+    return 0
+
+
 def _audio_status():
-    """A card parked at profile `off` is plugged in and enumerated but has no sink, so
-    mpv silently lands on the fallback device instead: connected, and no sound."""
+    """Two ways a card is plugged in and enumerated yet gives mpv nothing, so it silently
+    lands on the fallback device -- connected, and no sound. Parked at profile `off`
+    (the Rotel, 2026-09-29): the fix is a set-card-profile. Or on an output profile
+    whose sink node never got built (2026-10-01, WirePlumber on a hot-plug: "Object
+    activation aborted"): the profile reads fine, so only the sink list shows it, and
+    the fix is forcing the node to be recreated."""
     if not shutil.which("pactl"):
         return "pactl not found (no check)"
     try:
         r = subprocess.run(["pactl", "list", "cards"], capture_output=True, text=True, timeout=3)
+        s = subprocess.run(["pactl", "list", "sinks"], capture_output=True, text=True, timeout=3)
     except (OSError, subprocess.SubprocessError):
         return "pactl failed (no check)"
     if r.returncode != 0:
         return "no pipewire/pulse server (no check)"
     cards = _parse_cards(r.stdout)
-    off = [(c, _best_output_profile(c["profiles"])) for c in cards if c["active"] == "off"]
-    off = [(c, p) for c, p in off if p]            # off with no way out is not actionable
-    if not off:
-        return f"{len(cards)} card(s), none parked at off"
-    return "; ".join(f"{c['description'] or c['name']} is OFF, no sink -- "
-                     f"pactl set-card-profile {c['name']} {p}" for c, p in off)
+    sinks = _parse_sinks(s.stdout) if s.returncode == 0 else None
+    faults = []
+    for c in cards:
+        label = c["description"] or c["name"]
+        if c["active"] == "off":
+            p = _best_output_profile(c["profiles"])
+            if p:                                   # off with no way out is not actionable
+                faults.append(f"{label} is OFF, no sink -- pactl set-card-profile {c['name']} {p}")
+        elif sinks is not None and _active_sinks(c) and not _card_has_sink(c, sinks):
+            faults.append(f"{label} is on {c['active']} but has no sink (node never built) -- "
+                          f"systemctl --user restart wireplumber, or pactl set-card-profile "
+                          f"{c['name']} off && pactl set-card-profile {c['name']} {c['active']}")
+    if faults:
+        return "; ".join(faults)
+    if sinks is None:
+        return f"{len(cards)} card(s), none parked at off (sink list unavailable)"
+    return f"{len(cards)} card(s), every output profile has its sink"
 
 
 def doctor():
