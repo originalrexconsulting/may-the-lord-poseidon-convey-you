@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import types
 
 HERE = os.path.dirname(os.path.realpath(__file__))   # realpath: a symlink elsewhere still finds the siblings
@@ -166,14 +167,14 @@ def _best_output_profile(profiles):
 
 
 def _parse_cards(text):
-    """`pactl list cards` -> [{index, name, description, profiles, active}]. One tab is a
+    """`pactl list cards` -> [{index, name, description, profiles, active, pinned}]. One tab is a
     key on the card, two is a line inside the block the last one-tab key opened."""
     cards, card, block = [], None, None
     for line in text.splitlines():
         key = line.strip()
         if line.startswith("Card #"):
             card = {"index": key[len("Card #"):], "name": "", "description": "",
-                    "profiles": [], "active": ""}
+                    "profiles": [], "active": "", "pinned": ""}
             cards.append(card)
             block = None
         elif card is None:
@@ -186,6 +187,8 @@ def _parse_cards(text):
                 card["active"] = key.partition(":")[2].strip()
         elif block == "Properties:" and key.startswith("device.description = "):
             card["description"] = key.partition("=")[2].strip().strip('"')
+        elif block == "Properties:" and key.startswith("device.profile = "):
+            card["pinned"] = key.partition("=")[2].strip().strip('"')   # a monitor.alsa.rules pin
         elif block == "Profiles:" and ": " in key:
             name, _, rest = key.partition(": ")    # names like output:analog-stereo hold a colon
             card["profiles"].append((name.strip(), rest))
@@ -218,22 +221,24 @@ def _card_has_sink(card, sinks):
                for s in sinks)
 
 
-def _active_sinks(card):
-    """How many sinks the card's active profile promises, per `pactl list cards`."""
+def _sink_count(card, profile):
+    """How many sinks the named profile promises, per `pactl list cards`; 0 if unknown."""
     for key, rest in card["profiles"]:
-        if key == card["active"]:
+        if key == profile:
             m = re.search(r"sinks: (\d+)", rest)
             return int(m.group(1)) if m else 0
     return 0
 
 
-def _audio_status():
+def _audio_check():
     """Two ways a card is plugged in and enumerated yet gives mpv nothing, so it silently
     lands on the fallback device -- connected, and no sound. Parked at profile `off`
-    (the Rotel, 2026-09-29): the fix is a set-card-profile. Or on an output profile
-    whose sink node never got built (2026-10-01, WirePlumber on a hot-plug: "Object
-    activation aborted"): the profile reads fine, so only the sink list shows it, and
-    the fix is forcing the node to be recreated."""
+    (the Rotel, 2026-09-29), or on an output profile whose sink node never got built
+    (2026-10-01, WirePlumber on a hot-plug: "Object activation aborted"); the profile
+    reads fine there, so only the sink list shows it. Either one hits the Rotel about one
+    power-on in eight (2026-10-03). Returns (cards, faults, sinks_known) or a "(no check)"
+    string; a fault is (card, "off", profile to set) or (card, "nosink", active profile).
+    A switched-off amp is gone from USB, so it is no card and no fault."""
     if not shutil.which("pactl"):
         return "pactl not found (no check)"
     try:
@@ -247,20 +252,81 @@ def _audio_status():
     sinks = _parse_sinks(s.stdout) if s.returncode == 0 else None
     faults = []
     for c in cards:
-        label = c["description"] or c["name"]
         if c["active"] == "off":
-            p = _best_output_profile(c["profiles"])
+            p = (c["pinned"] if c["pinned"] != "off" and _sink_count(c, c["pinned"])
+                 else _best_output_profile(c["profiles"]))
             if p:                                   # off with no way out is not actionable
-                faults.append(f"{label} is OFF, no sink -- pactl set-card-profile {c['name']} {p}")
-        elif sinks is not None and _active_sinks(c) and not _card_has_sink(c, sinks):
-            faults.append(f"{label} is on {c['active']} but has no sink (node never built) -- "
-                          f"systemctl --user restart wireplumber, or pactl set-card-profile "
-                          f"{c['name']} off && pactl set-card-profile {c['name']} {c['active']}")
-    if faults:
-        return "; ".join(faults)
-    if sinks is None:
-        return f"{len(cards)} card(s), none parked at off (sink list unavailable)"
-    return f"{len(cards)} card(s), every output profile has its sink"
+                faults.append((c, "off", p))
+        elif sinks is not None and _sink_count(c, c["active"]) and not _card_has_sink(c, sinks):
+            faults.append((c, "nosink", c["active"]))
+    return cards, faults, sinks is not None
+
+
+def _fault_text(card, kind, profile):
+    label = card["description"] or card["name"]
+    if kind == "off":
+        return f"{label} is OFF, no sink"
+    return f"{label} is on {profile} but has no sink (node never built)"
+
+
+def _quiet(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _fix_audio(faults):
+    """Apply the remedy; returns what was done, in words. A card at `off` gets its profile
+    set: the card's own pin (`device.profile`, the Rotel's pro-audio) when it has one,
+    else the best by priority. A restart would not do, since WirePlumber saves a profile
+    choice and puts a remembered `off` straight back (2026-10-03). A missing node wants
+    WirePlumber restarted: after a failed build its device bookkeeping can be stale
+    (alsa.lua threw on the unplug, 2026-10-02), so toggling the profile is only the
+    fallback for a session without the user service."""
+    done = []
+    for c, kind, p in faults:
+        if kind == "off":
+            ok = _quiet(["pactl", "set-card-profile", c["name"], p])
+            done.append(f"set profile {p}" + ("" if ok else " (failed)"))
+    nosink = [(c, p) for c, kind, p in faults if kind == "nosink"]
+    if nosink and shutil.which("systemctl") and _quiet(["systemctl", "--user", "is-active", "--quiet", "wireplumber"]):
+        ok = _quiet(["systemctl", "--user", "restart", "wireplumber"])
+        done.append("restarted wireplumber" + ("" if ok else " (failed)"))
+    elif nosink:
+        for c, p in nosink:
+            ok = (_quiet(["pactl", "set-card-profile", c["name"], "off"]) and
+                  _quiet(["pactl", "set-card-profile", c["name"], p]))
+            done.append(f"toggled profile {p}" + ("" if ok else " (failed)"))
+    return done
+
+
+def _audio_status():
+    """Check, and on a fault fix it and check again: doctor is where the no-sound case
+    gets looked at, so it repairs what it finds rather than printing the command."""
+    got = _audio_check()
+    if isinstance(got, str):
+        return got
+    cards, faults, sinks_known = got
+    if not faults:
+        if not sinks_known:
+            return f"{len(cards)} card(s), none parked at off (sink list unavailable)"
+        return f"{len(cards)} card(s), every output profile has its sink"
+    was = "; ".join(_fault_text(*f) for f in faults)
+    done = ", ".join(_fix_audio(faults))
+    for _ in range(20):                             # WirePlumber takes a second or two to rebuild
+        time.sleep(0.5)
+        got = _audio_check()
+        if isinstance(got, str) or not got[1]:
+            break
+    if isinstance(got, str):
+        return f"{was} -- {done}; recheck failed: {got}"
+    if not got[1]:
+        return f"{was} -- fixed ({done})"
+    left = "; ".join(_fault_text(*f) for f in got[1])
+    hint = ("unplug and replug it" if "restarted wireplumber" in done
+            else "try systemctl --user restart wireplumber")
+    return f"{was} -- tried: {done}; still: {left}; {hint}"
 
 
 def doctor():

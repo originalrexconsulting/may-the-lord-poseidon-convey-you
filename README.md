@@ -196,7 +196,8 @@ show its audio tap.
 ```
 curl -fLo poseidon https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases/download/v<ver>/poseidon-<ver>-linux-x86_64
 chmod +x poseidon
-./poseidon doctor        # what this build is and what it found: mpv, ffmpeg, library, terminfo
+./poseidon doctor        # what this build is and what it found: mpv, ffmpeg, library, terminfo;
+                         # an amp plugged in but given no sound output is fixed on the spot
 ./poseidon               # the TUI; ./poseidon gdarchive ..., ./poseidon radio list, ./poseidon --help
 ```
 
