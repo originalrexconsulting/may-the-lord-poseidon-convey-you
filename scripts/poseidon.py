@@ -186,8 +186,8 @@ def _parse_cards(text):
                 card["active"] = key.partition(":")[2].strip()
         elif block == "Properties:" and key.startswith("device.description = "):
             card["description"] = key.partition("=")[2].strip().strip('"')
-        elif block == "Profiles:" and ":" in key:
-            name, _, rest = key.partition(":")
+        elif block == "Profiles:" and ": " in key:
+            name, _, rest = key.partition(": ")    # names like output:analog-stereo hold a colon
             card["profiles"].append((name.strip(), rest))
     return cards
 
