@@ -134,7 +134,13 @@ lands on the fallback device, which is how the Rotel went silent with nothing lo
 broken; and the station list sorted by what it sounds like rather than by the printed
 number, AAC weighted at about 1.5x MP3 so the France Musique streams outrank the MP3
 320s; all four runners in 80 seconds end to end, the slowest the Intel Mac at 63, the
-publish job in 8, six assets).
+publish job in 8, six assets) and `v2026.10.02` (`poseidon doctor` also flags a card on
+an output profile whose sink was never built, the Rotel twice on 2026-10-01 and 10-02:
+WirePlumber's open raced the hot-plugged device, got EBUSY and never retried, and a power
+cycle did not clear it, `systemctl --user restart wireplumber` did; and profile names that
+hold a colon, like `output:analog-stereo`, are no longer cut to `output`; all four runners
+in 70 seconds end to end, the slowest the Intel Mac at 51, the publish job in 12, six
+assets).
 
 ## If CI cannot publish
 
