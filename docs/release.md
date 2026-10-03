@@ -140,7 +140,12 @@ WirePlumber's open raced the hot-plugged device, got EBUSY and never retried, an
 cycle did not clear it, `systemctl --user restart wireplumber` did; and profile names that
 hold a colon, like `output:analog-stereo`, are no longer cut to `output`; all four runners
 in 70 seconds end to end, the slowest the Intel Mac at 51, the publish job in 12, six
-assets).
+assets) and `v2026.10.03` (`poseidon doctor` fixes the audio faults it finds and checks
+again: a missing node gets WirePlumber restarted, a card at `off` gets its pinned profile
+set, since WirePlumber restores a remembered `off` across a restart; the Rotel loses its
+sink about one power-on in eight, reproduced by re-attaching the USB device in software,
+and dropping the pro-audio pin only swaps that for the `off` failure; all four runners in
+89 seconds end to end, the slowest the Intel Mac at 72, the publish job in 8, six assets).
 
 ## If CI cannot publish
 
