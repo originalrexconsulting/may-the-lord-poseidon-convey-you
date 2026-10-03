@@ -14,13 +14,20 @@ A symlink named after a tool (gdarchive, deadtui, ...) runs that tool directly.
   poseidon doctor                           # what this build is, what it found
   POSEIDON_LIBRARY=/path/to/dead poseidon   # where shows are kept (default: dead/ beside
                                             # scripts/ in a checkout, else ~/Music/dead)
+  poseidon --host tiro                      # the player is on another box: mpv (and the light show's
+                                            # parec) run there over ssh, the TUI and the show here.
+                                            # Works with every verb; remembered, --no-host forgets.
+                                            # --host-library and --host-fetch say where its shows
+                                            # are and how to run poseidon there (fetches).
 
 This file is stdlib only and imports nothing from its siblings at module level: they
 import it (for user_agent, library_dir), so that would be a cycle.
 """
 import functools
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -75,6 +82,175 @@ def library_dir():
     if os.path.isdir(checkout):
         return checkout
     return os.path.expanduser("~/Music/dead")
+
+
+# --------------------------------------------------------------------------- the player on another box
+
+MPV_FLAGS = ["--no-video", "--no-terminal", "--idle=yes", "--force-window=no", "--audio-display=no",
+             "--gapless-audio=yes", "--prefetch-playlist=yes", "--cache=yes", "--demuxer-max-bytes=64MiB"]
+HOST_KEYS = (("host", "POSEIDON_HOST"), ("host_library", "POSEIDON_HOST_LIBRARY"), ("host_fetch", "POSEIDON_HOST_FETCH"))
+HOST_FLAGS = {"--host": "POSEIDON_HOST", "--host-library": "POSEIDON_HOST_LIBRARY", "--host-fetch": "POSEIDON_HOST_FETCH"}
+
+
+def mpv_argv(sock):
+    """The player every tool starts: idle, no window, answering JSON IPC on `sock`."""
+    return ["mpv", *MPV_FLAGS, "--user-agent=" + user_agent(), "--input-ipc-server=" + sock]
+
+
+def pop_host_flags(argv):
+    """Take --host NAME, --host-library PATH, --host-fetch CMD and --no-host out of argv and into
+    the environment (POSEIDON_HOST, ...), so every tool reads the one place. Returns the rest."""
+    out, it = [], iter(argv)
+    for a in it:
+        flag, eq, val = a.partition("=")
+        if flag in HOST_FLAGS:
+            os.environ[HOST_FLAGS[flag]] = val if eq else next(it, "")
+        elif a == "--no-host":
+            os.environ["POSEIDON_HOST"] = ""
+        else:
+            out.append(a)
+    return out
+
+
+def host_settings():
+    """{host, host_library, host_fetch}: the environment (the command line, via pop_host_flags) over
+    state.json, so a bare `poseidon` keeps driving the box named last time. POSEIDON_HOST set but
+    empty (--no-host) means this machine."""
+    try:
+        with open(os.path.join(CACHE, "state.json")) as f:
+            state = json.load(f)
+    except (OSError, ValueError):
+        state = {}
+    return {key: os.environ[env] if env in os.environ else state.get(key) for key, env in HOST_KEYS}
+
+
+@functools.lru_cache(maxsize=None)
+def host():
+    """The Host named by --host / POSEIDON_HOST / state.json, or None: the player is on this machine."""
+    s = host_settings()
+    return Host(s["host"], s["host_library"], s["host_fetch"]) if s["host"] else None
+
+
+class Host:
+    """Another box's player, reached over one ssh master (key auth; nothing to install there).
+
+    mpv keeps its socket on the box (<its XDG_RUNTIME_DIR>/deadtui-mpv.sock, the same name the
+    box's own TUI uses, so either side adopts the same player) and ssh forwards it to local_sock:
+    the JSON IPC is byte-identical through the forward. parec runs there too, its raw stream read
+    here by the light show (deadviz), so the FFT and the drawing cost this machine, not the box.
+    The master is a -N child of this process and dies with it; mpv on the box plays on.
+    """
+    MASTER = ["-o", "ConnectTimeout=5", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
+              "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "StreamLocalBindUnlink=yes",
+              "-o", "ExitOnForwardFailure=yes", "-N"]
+
+    def __init__(self, name, library=None, fetch_cmd=None):
+        self.name = name
+        self.library = library or "~/Music/dead"     # where the box keeps its shows (a built artifact's default)
+        self.fetch_cmd = fetch_cmd or "poseidon"      # how to run poseidon there, on a login shell's PATH
+        run = os.environ.get("XDG_RUNTIME_DIR") or CACHE
+        self.ctl = os.path.join(run, f"deadtui-ssh-{name}")
+        self.local_sock = os.path.join(run, f"deadtui-mpv@{name}.sock")
+        self.remote_run = None        # the box's XDG_RUNTIME_DIR, asked once per master
+        self.remote_sock = None
+        self.proc = None
+        self.reads = {}               # path -> (when, text), for read()
+
+    def ssh(self, *args):
+        return ["ssh", "-o", "BatchMode=yes", "-o", "ControlPath=" + self.ctl, *args]
+
+    def exec_prefix(self):
+        """argv that runs a command on the box through the master (straight to it if the master is gone)."""
+        return self.ssh("-o", "ControlMaster=no", "-o", "ConnectTimeout=5", self.name, "--")
+
+    def quote(self, path):
+        """path, quoted for the box's shell; a leading ~/ is the box's home, not this one's."""
+        return '"$HOME"/' + shlex.quote(path[2:]) if path.startswith("~/") else shlex.quote(path)
+
+    def alive(self):
+        if self.proc and self.proc.poll() is not None:
+            return False              # our master exited (the link went); reaped here
+        if not os.path.exists(self.ctl):
+            return False
+        try:
+            return subprocess.run(self.ssh("-O", "check", self.name), capture_output=True, timeout=5).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def ensure(self):
+        """The master up, the box's runtime dir known, its socket forwarded. Idempotent; raises OSError."""
+        if not self.alive():
+            os.makedirs(os.path.dirname(self.ctl), exist_ok=True)
+            if os.path.exists(self.ctl):
+                os.unlink(self.ctl)          # left by a master that died
+            self.proc = subprocess.Popen(self.ssh(*self.MASTER, self.name), stdin=subprocess.DEVNULL,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            for _ in range(200):
+                if os.path.exists(self.ctl):
+                    break
+                if self.proc.poll() is not None:
+                    raise OSError(f"ssh {self.name}: {self.proc.stderr.read().strip() or 'exited'}")
+                time.sleep(0.05)
+            else:
+                self.proc.kill()
+                raise OSError(f"ssh {self.name}: no control socket after 10 s")
+            self.remote_run = None
+        if self.remote_run is None:
+            r = self.run('printf %s "${XDG_RUNTIME_DIR:-$HOME/.cache/deadtui}"')
+            if r.returncode != 0 or not r.stdout.strip():
+                raise OSError(f"ssh {self.name}: {r.stderr.strip() or 'no runtime dir'}")
+            self.remote_run = r.stdout.strip()
+            self.remote_sock = self.remote_run + "/deadtui-mpv.sock"
+            r = subprocess.run(self.ssh("-O", "forward", "-L", f"{self.local_sock}:{self.remote_sock}", self.name),
+                               capture_output=True, text=True, timeout=10)
+            if r.returncode != 0:
+                raise OSError(f"ssh {self.name}: forward: {r.stderr.strip()}")
+        return self
+
+    def run(self, cmd, timeout=10):
+        """A shell command on the box; a CompletedProcess with text output (rc 255: ssh itself failed)."""
+        try:
+            return subprocess.run(self.exec_prefix() + [cmd], capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(cmd, 255, "", "timed out")
+
+    def popen(self, argv, **kw):
+        """A command on the box as a Popen: its stdout is the raw stream (the audio tap, a fetch's log)."""
+        return subprocess.Popen(self.exec_prefix() + list(argv), **kw)
+
+    def start_mpv(self):
+        """The player, in its own session on the box so it outlives this ssh channel (and this TUI)."""
+        r = self.run("setsid -f " + shlex.join(mpv_argv(self.remote_sock)) + " </dev/null >/dev/null 2>&1")
+        if r.returncode != 0:
+            raise OSError(f"mpv on {self.name}: {r.stderr.strip() or 'did not start'}")
+
+    def sock_present(self):
+        return self.run("test -S " + shlex.quote(self.remote_sock)).returncode == 0
+
+    def sock_unlink(self):
+        self.run("rm -f " + shlex.quote(self.remote_sock))
+
+    def read(self, path, ttl=10):
+        """The text of a file on the box, re-read at most every ttl seconds; None when it is not there."""
+        when, text = self.reads.get(path, (0, None))
+        if time.time() - when > ttl:
+            r = self.run("cat " + shlex.quote(path))
+            text = r.stdout if r.returncode == 0 else None
+            self.reads[path] = (time.time(), text)
+        return text
+
+    def close(self):
+        """Take down the master this process started, the forward with it; one another process
+        started (the TUI's, while `poseidon play status` runs beside it) is left alone. mpv on the
+        box plays on either way."""
+        if self.proc:
+            try:
+                subprocess.run(self.ssh("-O", "exit", self.name), capture_output=True, timeout=5)
+                self.proc.wait(2)
+            except (OSError, subprocess.SubprocessError):
+                self.proc.kill()
+            self.proc = None
+        self.remote_run = None
 
 
 def running_as():
@@ -329,10 +505,37 @@ def _audio_status():
     return f"{was} -- tried: {done}; still: {left}; {hint}"
 
 
+def _host_status(h):
+    """What the TUI will find on the box, in one ssh round trip."""
+    lib, fetch = h.quote(h.library), shlex.quote(h.fetch_cmd.split()[0])
+    script = ('run="${XDG_RUNTIME_DIR:-$HOME/.cache/deadtui}"; echo "name=$(uname -n)"; echo "run=$run"; '
+              'echo "mpv=$(command -v mpv)"; echo "parec=$(command -v parec)"; '
+              'test -S "$run/deadtui-mpv.sock" && echo sock=present || echo sock=absent; '
+              f'test -d {lib} && echo lib=exists || echo lib=missing; '
+              f'echo "fetch=$(bash -lc {shlex.quote("command -v " + fetch)} 2>/dev/null)"; '
+              'echo "dac=$(grep -m1 ^rate: /proc/asound/R20/pcm0p/sub0/hw_params 2>/dev/null)"')
+    r = h.run(script, timeout=20)
+    if r.returncode != 0:
+        return [("host ssh", f"FAILED: {r.stderr.strip() or r.returncode}")]
+    got = dict(line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
+    found = lambda k: got.get(k) or "not found"   # noqa: E731
+    return [
+        ("host ssh", f"ok ({got.get('name', '?')})"),
+        ("host runtime dir", got.get("run", "?")),
+        ("host mpv", found("mpv")),
+        ("host parec", found("parec")),
+        ("host socket", f"{got.get('run', '?')}/deadtui-mpv.sock ({'present' if got.get('sock') == 'present' else 'absent'})"),
+        ("host library", f"{h.library} ({'exists' if got.get('lib') == 'exists' else 'missing: --host-library PATH'})"),
+        ("host fetch", f"{h.fetch_cmd} ({got['fetch'] if got.get('fetch') else 'not on its login PATH: --host-fetch CMD'})"),
+        ("host DAC", got["dac"].split()[-1] if got.get("dac") else "closed"),
+    ]
+
+
 def doctor():
     """One "key: value" line each; always exits 0. CI greps the lines it needs."""
     lib = library_dir()
     sock_dir = os.environ.get("XDG_RUNTIME_DIR") or CACHE
+    h = host()
     lines = [
         ("version", version()),
         ("running as", running_as()),
@@ -353,12 +556,15 @@ def doctor():
         ("terminfo", _terminfo_status()),
         ("re-exec", str(self_command(["gdarchive", "fetch", "<id>"]))),
     ]
+    if h:
+        lines.append(("host", f"{h.name} ({'the command line' if 'POSEIDON_HOST' in os.environ else 'remembered in state.json'})"))
+        lines += _host_status(h)
     for k, v in lines:
         print(f"{k}: {v}")
 
 
 def main(argv=None):
-    argv = list(sys.argv[1:] if argv is None else argv)
+    argv = pop_host_flags(sys.argv[1:] if argv is None else argv)
     _terminfo_fallback()
     tool = _tool_from_argv0()
     if tool:
