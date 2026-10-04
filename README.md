@@ -76,7 +76,12 @@ address (R), On the air, Bookmarks:
 The Jokes menu and the radio list:
 
 <img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
-<img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations">
+<img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations; Naim Classical playing, the piece named in the status line">
+
+The status line names the piece even on the FLAC stations, whose streams carry no
+title: the station publishes it out of band (its Icecast status page, a broadcaster's
+now-playing API) and the player asks there. `poseidon radio title` lists what every
+station with a feed is playing right now.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
@@ -225,7 +230,8 @@ make a Multi-Output Device in Audio MIDI Setup with the DAC and BlackHole, set i
 output, and the tap reads BlackHole back through ffmpeg (`DEADVIZ_DEVICE` names it if
 yours is not "BlackHole 2ch"). The status line's DAC rate readout is Linux-only and
 stays blank. `radio.py`'s own commands (`play`, `now`) drive Strawberry over D-Bus and
-are Linux-only; the station list itself is used by the TUI everywhere.
+are Linux-only; the station list and `title` (the piece from each station's feed) work
+everywhere.
 
 Windows: run it under WSL 2 as Linux, with the linux-x86_64 download or the Debian
 recipe above. Native Windows would need `windows-curses` and a named pipe for mpv; not
