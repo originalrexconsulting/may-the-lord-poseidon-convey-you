@@ -191,7 +191,15 @@ quit, so `Mpv.probe()` asks whether anything answers instead, and a sandbox with
 `XDG_RUNTIME_DIR` never created the directory mpv binds in; `make check-remote` runs 33
 checks against a stand-in `ssh`; the three PRs were merged into their base branches
 rather than main, so the README PR carried two of them over; all four runners in 67
-seconds end to end, the slowest the Intel Mac at 44, the publish job in 11, six assets).
+seconds end to end, the slowest the Intel Mac at 44, the publish job in 11, six assets) and
+`v2026.10.04.5` (the first run from rexdev showed `stopped  @tiro: reconnecting` and nothing
+else: rexdev's `~/.ssh/config` entry for tiro carries LocalForward lines the interactive
+session already held, the TUI's master inherited them, could not bind the ports and, with
+`ExitOnForwardFailure`, exited before forwarding the mpv socket; `ClearAllForwardings=yes` on
+every connection the TUI opens; the reason now stays on the message row in red until the box
+answers and each retry restarts a player a rebooted box lost; `poseidon stop | pause | next |
+prev | status` without the `play`; all four runners in 74 seconds end to end, the slowest the
+Intel Mac at 57, the publish job in 9, six assets).
 
 ## If CI cannot publish
 
