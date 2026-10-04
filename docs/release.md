@@ -177,7 +177,21 @@ nota-160 and nota-mp3 and the site's own nowplaying-nota.txt sat frozen for an h
 half while the Jazz channel's moved, and a wrong piece is worse than the placeholder; the
 README says classical radio beside the Dead collection, counts the 52 stations, and
 catches up with `o` and the volume keys; all four runners in 91 seconds end to end, the
-slowest the Intel Mac at 70, the publish job in 12, six assets).
+slowest the Intel Mac at 70, the publish job in 12, six assets) and `v2026.10.04.4` (the
+player on another box: `poseidon --host tiro` runs the TUI, `play` and `remote` on the
+machine in front of the owner while mpv runs on the box, reached over one ssh master that
+forwards the box's mpv socket here with `-O forward`, so either side adopts the same player;
+the light show's parec runs on the box too and its stream comes back over the same master,
+so the FFT and the drawing cost the controller and the box runs mpv, parec and sshd only,
+the show within a frame of the speakers as before; the box's shows on disk are indexed over
+ssh and play from there, `d` fetches onto it, `poseidon doctor` says what the box has, the
+status line says `@tiro` and `@tiro: reconnecting` while a dropped link is brought back
+with the music never stopping; found on the way, mpv 0.40 leaves its socket file behind on
+quit, so `Mpv.probe()` asks whether anything answers instead, and a sandbox without
+`XDG_RUNTIME_DIR` never created the directory mpv binds in; `make check-remote` runs 33
+checks against a stand-in `ssh`; the three PRs were merged into their base branches
+rather than main, so the README PR carried two of them over; all four runners in 67
+seconds end to end, the slowest the Intel Mac at 44, the publish job in 11, six assets).
 
 ## If CI cannot publish
 
