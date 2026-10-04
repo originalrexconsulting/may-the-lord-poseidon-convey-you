@@ -63,6 +63,9 @@ scripts/May-The_Lord_Poseidon-Convey-You.py   # (or scripts/deadtui.py) ↵ open
                        # in date order (/ filter first, e.g. "1977", to narrow what a queues), z streams
                        # random versions one after another; 🔍 Find a song on the home screen is the same
                        # search with the songs looked for before under it, straight from the cache
+                       # o the night the playing song came from, from this second on (a stream of versions
+                       # plays one track per show; o trades it for that whole show at the same spot, and the
+                       # set list goes on); on a row of the queue (w), that row's night
                        # c classical radio, i taper's notes and reviews (probes a station in the radio list), * pin a bookmark,
                        # t sleep timer (minutes / track / show, fades over the last minute), R phone remote on :8402,
                        # v light show (v again cycles its 24 modes, Esc returns), V stops it starting by itself after 3 idle minutes
