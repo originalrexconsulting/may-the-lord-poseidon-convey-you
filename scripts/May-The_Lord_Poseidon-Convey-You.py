@@ -71,6 +71,10 @@ Keys:
   r             resume the last thing played, at the position it was at
   w             what's playing: the whole current playlist (also the first top-level
                 row while something plays); ▶ marks the track, Enter jumps to one
+  o             the night this song came from, from this second on: a song stream (a
+                random Dark Star after another, every version in order, Rain and Snow)
+                plays one track per show; o trades the stream for that whole show at
+                the same spot, so the set list goes on. On a queue row, that row's night.
   v             light show (deadviz.py): patterns driven by an FFT of what the
                 Rotel is playing. Inside it v steps to the next of 24 modes
                 (bars, plasma, scope, rings, waterfall, fire, rain, stars, wave,
@@ -735,6 +739,16 @@ def append_history(rec):
             f.write(json.dumps(rec) + "\n")
     except OSError:
         pass
+
+
+DOC_KEYS = ("identifier", "date", "collection", "kind", "venue", "coverage", "lp", "artist", "title",
+            "seastones", "onair")
+
+
+def slim_doc(doc):
+    """The part of a search doc that plays it again: enough for play_doc, show_title and
+    state.json, small enough to ride along on every track of a queue and in history.jsonl."""
+    return {k: doc.get(k) for k in DOC_KEYS if doc.get(k) is not None}
 
 
 def doc_collection(doc):
@@ -1424,7 +1438,7 @@ class App:
             self.state = {**self.state, "last": "queue",
                           "queue": {"title": self.now["title"], "pos": st["pos"], "time": st.get("time"),
                                     "rain": self.now.get("rain"),
-                                    "tracks": [{k: t.get(k) for k in ("title", "src", "how", "length")}
+                                    "tracks": [{k: t.get(k) for k in ("title", "src", "how", "length", "doc", "track")}
                                                for t in self.now["tracks"]]}}
             self.write_state()
 
@@ -1762,6 +1776,7 @@ class App:
             seen.add(tracks[idx]["src"])
             t = dict(tracks[idx])
             t["title"] = f"{show_title(doc, meta)}: {t['title']}"
+            t["doc"], t["track"] = slim_doc(doc), idx          # the night it came from, for o
             out.append(t)
         return out
 
@@ -2043,6 +2058,8 @@ class App:
             return item["doc"]
         if lvl.kind in ("queue", "home") and self.now and self.now.get("doc"):
             return self.now["doc"]
+        if lvl.kind == "queue" and isinstance(item, dict) and (item.get("doc") or {}).get("identifier"):
+            return item["doc"]                 # a song stream: the night this track came from
         return None
 
     def push_notes(self, doc):
@@ -2257,15 +2274,18 @@ class App:
     # ---- history
 
     def log_history(self, track):
-        """Append what just started playing. Enough is kept to play it again from History."""
+        """Append what just started playing. Enough is kept to play it again from History:
+        a track of a song stream carries its own night, so ↵ on it plays that night from the song on."""
         doc = self.now.get("doc")
         rec = {"ts": time.strftime("%Y-%m-%d %H:%M"), "show": self.now.get("title"), "title": track.get("title"),
                "src": track.get("src"), "how": track.get("how"), "radio": self.now.get("radio"),
                "length": track.get("length")}
         if doc:
-            rec["doc"] = {k: doc.get(k) for k in ("identifier", "date", "collection", "kind", "lp", "artist", "title",
-                                                   "seastones", "onair")}
+            rec["doc"] = slim_doc(doc)
             rec["track"] = self.last_status["pos"] if self.last_status else 0
+        elif track.get("doc"):
+            rec["doc"] = slim_doc(track["doc"])
+            rec["track"] = int(track.get("track") or 0)
         append_history(rec)
 
     def history(self):
@@ -2325,6 +2345,48 @@ class App:
         lvl = Level("queue", f"▶ {self.now['title']}", tracks, render, {"queue": True, "now": self.now})
         st = self.last_status
         self.push(lvl, st["pos"] if st else 0)
+
+    def open_night(self):
+        """o: the night this song came from, from this second on.
+
+        A song stream (a random Dark Star after another, every version in date order, Rain
+        and Snow) plays one track per show, and each track knows its night (slim_doc, set
+        where the stream is built). o trades the stream for that whole show, at the same track
+        and the same second, so the set list goes on from the song. On a row of the queue it
+        is that row's night; anywhere else, the one playing. A show playing already is its own
+        night: o just shows the queue, like w."""
+        lvl = self.stack[-1]
+        st = self.last_status
+        track, playing = None, False
+        if lvl.kind == "queue":
+            i, item = self.current()
+            if isinstance(item, dict) and item.get("src"):
+                track, playing = item, bool(st and st["pos"] == i)
+        elif self.now and st and st["pos"] < len(self.now.get("tracks") or []):
+            track, playing = self.now["tracks"][st["pos"]], True
+        if not track:
+            self.say("o opens the night a song came from: while one plays, or on a row of the queue")
+            return
+        if self.now.get("doc"):
+            if lvl.kind == "queue":
+                self.say("this is the whole night already")
+            else:
+                self.push_queue()
+            return
+        doc = track.get("doc")
+        if not doc or not doc.get("identifier"):
+            self.say("this track does not say which night it came from")
+            return
+        seek = st.get("time") if playing and st else None
+        idx = int(track.get("track") or 0)
+        self.loading(f"{doc.get('date', doc['identifier'])}: the whole night from here...")
+        self.play_doc(doc, idx, seek_to=seek)
+        if self.now and self.now.get("doc") is doc:                # it took: the stream's queue is gone
+            if lvl.kind == "queue":
+                self.pop()
+            self.push_queue()
+            self.stack[-1].cursor = min(idx, len(self.now["tracks"]) - 1)   # the status still says the stream's row
+            self.say(f"{doc.get('date') or doc['identifier']} from the song on; the stream is over", 8)
 
     def play_clip(self, c):
         self.loading(f"loading {c['identifier']}...")
@@ -2463,6 +2525,7 @@ class App:
             t = dict(tracks[i])
             venue = d.get("venue") or d.get("coverage") or ""
             t["title"] = f"{d['date']} {venue}: {t['title']}"
+            t["doc"], t["track"] = slim_doc(d), i             # the night it came from, for o
             combined.append(t)
         if not combined:
             self.say("nothing playable")
@@ -2692,9 +2755,9 @@ class App:
             elif lvl.kind in ("notes", "stats"):
                 keys = " ↑↓ scroll  / filter  ␣ pause  n/b trk  h back  q quit (music stays)"
             elif lvl.kind == "home":
-                keys = " ↵ open  p play  w now playing  c radio  f song  g goto  r resume  v show  * pin  q quit (music stays)  Q stop & quit"
+                keys = " ↵ open  p play  w now playing  o its night  c radio  f song  g goto  r resume  v show  * pin  q quit (music stays)  Q stop & quit"
             elif lvl.kind == "queue":
-                keys = " ↵/p jump to track  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  * pin  i notes  / filter  h back  q quit (music stays)  Q quit and stop"
+                keys = " ↵/p jump to track  o its night from here  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  * pin  i notes  / filter  h back  q quit (music stays)  Q quit and stop"
             else:
                 keys = " ↵ open  p play  ␣ pause  n/b trk  ←→ seek  +/- vol  m mute  / filter  f song  g goto  v show  d fetch  i notes  * pin  r resume  q quit (music stays)  Q stop & quit"
             if active:
@@ -3032,6 +3095,8 @@ class App:
         elif ch == ord("w"):
             if lvl.kind != "queue":
                 self.push_queue()
+        elif ch == ord("o"):
+            self.open_night()
         elif ch == ord("g"):
             self.goto()
         elif ch == ord("f"):
