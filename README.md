@@ -17,7 +17,9 @@ thinks for a second before every screen. Everything else here sits on top of tha
 scripts/poseidon.py                           # one door to every tool: bare = the TUI,
                                               # poseidon gdarchive|deadviz|radio|restore-playlist ..., poseidon doctor,
                                               # poseidon play 1977-05-08 (no TUI; random, an identifier, radio <station|random>, stop),
-                                              # poseidon remote (the phone remote for a player started that way)
+                                              # poseidon remote (the phone remote for a player started that way),
+                                              # poseidon --host tiro (the player is on another box: mpv there, the TUI and
+                                              # the light show here, over one ssh connection)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
 scripts/deadviz.py                            # the light show: 24 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
@@ -41,8 +43,10 @@ History adds up to) and Now Playing; shows the taper's notes and the reviews of 
 list goes on (`o`); steps the volume (`+`/`-`, `m` mutes, the level is remembered); has a
 sleep timer that fades the gain over its last minute (`t`) and a phone
 remote on the LAN (`R`: play, pause, next, seek, volume, sleep and the queue on one page);
-adopts an mpv it finds already running (q keeps the music, Q stops it); and starts with
-Poseidon, trident raised. `poseidon play 1977-05-08` plays without the TUI, so cron can
+adopts an mpv it finds already running (q keeps the music, Q stops it); drives the player
+on another box over ssh (`--host tiro`: mpv and its parec run there, the TUI and the light
+show here, in sync, the box's CPU flat, its shows on disk still playing lossless and `d`
+still fetching onto it); and starts with Poseidon, trident raised. `poseidon play 1977-05-08` plays without the TUI, so cron can
 run `poseidon play random` at seven and `poseidon play stop` at eight.
 
 ## Screenshots
@@ -218,6 +222,15 @@ program for a machine that already has Python 3.11+ on PATH: it uses the system'
 
 Shows fetched with `d` land in `~/Music/dead`; `POSEIDON_LIBRARY=/path/to/dead` moves
 the library. From a clone the library is `dead/` next to `scripts/`.
+
+**Or drive it from another machine.** If the box wired to the DAC is shut in a cabinet, run the
+TUI where you are sitting: `poseidon --host tiro` (ssh key auth to the box; nothing to install
+there beyond mpv and `pulseaudio-utils`). mpv runs on the box, reached over one ssh connection;
+the light show's `parec` runs there too and its stream comes back over the same connection, so
+the FFT and the drawing cost your machine and the box stays idle, the show within a frame of the
+speakers. The box's shows on disk are indexed over ssh and play from there, `d` fetches onto it,
+and `poseidon doctor` says what the box has. The box is remembered; `--no-host` forgets it.
+`docs/setup-linux.md` section 7 has the details.
 
 **Or clone.** Per-OS guides: [Linux](docs/setup-linux.md), [macOS](docs/setup-macos.md),
 [Windows](docs/setup-windows.md) (WSL 2). The short version:

@@ -110,6 +110,56 @@ def main():
         check(mpv.reconnect() and mpv.get("playlist-count") == 0, "reconnect: new master, forward, adopted")
         check(alive(pid_in(host.ctl)) and pid_in(host.ctl) != master, "reconnect: a new master")
 
+        try:
+            import deadviz
+        except ImportError:
+            deadviz = None
+            print("skip the tap: numpy is missing")
+        if deadviz:
+            os.environ["FAKE_SSH_PAREC"] = "sine"
+            cap = deadviz.Capture(host)
+            cap.start()
+            deadline = time.time() + 5
+            while time.time() < deadline and not cap.samples().any():
+                time.sleep(0.1)
+            an = deadviz.Analyzer()
+            an.update(cap.samples())
+            check(cap.error is None and an.rms > 0.1 and an.bass > an.treble, f"the tap: a 60 Hz sine from the box reads as bass (rms {an.rms:.2f})")
+            cap.stop()
+            os.environ.pop("FAKE_SSH_PAREC")
+            with open(os.environ["FAKE_SSH_LOG"]) as f:
+                check("-- parec --raw --format=s16le" in f.read(), "the tap: parec on the box, over the master")
+
+        show = os.path.join(sb, "dead", "shows", "1977", "1977-05-08.gd77-05-08.sbd.hicks.4982.sbeok.shnf")
+        os.makedirs(show)
+        for name in ("gd77-05-08d1t01.flac", "gd77-05-08d1t02.flac", "gd77-05-08d1t03.flac.part"):
+            open(os.path.join(show, name), "w").close()
+        doc = {"date": "1977-05-08", "identifier": "gd77-05-08.sbd.hicks.4982.sbeok.shnf", "collection": ["GratefulDead"]}
+        lib = tui.RemoteLibrary(host)
+        check(not lib.has(doc), "library: nothing until the box is asked")
+        check(lib.refresh(), "library: the box answers")
+        check(lib.root == os.path.join(sb, "dead") and lib.has(doc), "library: the box's own root, the show on it")
+        files = lib.files(doc)
+        check(sorted(files) == ["gd77-05-08d1t01", "gd77-05-08d1t02"] and files["gd77-05-08d1t01"][".flac"] == os.path.join(show, "gd77-05-08d1t01.flac"),
+              "library: the box's paths for the tracks, the .part left out", str(files))
+        check(lib.count("shows", 1977) == 1 and lib.count("jgb", 1977) == 0 and lib.night_on_disk("1977-05-08") and not lib.night_on_disk("1977-05-09"),
+              "library: counts and nights")
+        again = tui.RemoteLibrary(host)
+        check(again.has(doc) and again.root == lib.root, "library: the cached index serves a start on a bad link")
+        host.library = "~/dead"
+        check(lib.refresh() and lib.root == os.path.join(sb, "dead"), "library: ~/ is the box's home")
+        argv = tui.remote_fetch_argv(host, "gd77-05-08.sbd.hicks.4982.sbeok.shnf")
+        check(argv[:2] == ["bash", "-lc"] and "gdarchive fetch --dest " in argv[2] and "$HOME" in argv[2], "fetch: poseidon on the box, into its library", str(argv))
+
+        hw = os.path.join(sb, "hw_params")
+        with open(hw, "w") as f:
+            f.write("access: MMAP_INTERLEAVED\nformat: S32_LE\nrate: 44100 (44100/1)\n")
+        tui.HW_PARAMS = hw
+        rates = [tui.dac_rate(host) for _ in range(5)]
+        with open(os.environ["FAKE_SSH_LOG"]) as f:
+            cats = f.read().count("-- cat " + hw)
+        check(rates == [44100] * 5 and cats == 1, f"DAC rate from the box, read once for five asks ({cats} reads)")
+
         mpv.stop()
         check(mpv.probe() is None, "stop: nothing answers on the box any more")
         check(not os.path.exists(remote_sock), "stop: the file mpv left behind is gone")

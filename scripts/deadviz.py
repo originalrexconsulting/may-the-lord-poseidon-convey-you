@@ -7,6 +7,9 @@ in curses. Used by May-The_Lord_Poseidon-Convey-You.py, formerly deadtui.py (key
 its own for testing:
 
     deadviz.py            # v next mode (V previous), 1-9/0 pick the first ten, Esc quits
+    deadviz.py --host tiro   # the music plays on another box: parec runs there over ssh and
+                             # its stream is read here, so the FFT and the drawing cost this
+                             # machine (poseidon --host; POSEIDON_HOST and state.json remember)
 
 Modes:
   bars       mirrored spectrum with peak markers
@@ -119,6 +122,7 @@ CHUNK = 1024          # samples per parec read
 WINDOW = 2048         # FFT size
 BANDS = 48
 FPS = 24
+TAP_LATENCY_MS = 40   # parec's buffer: how far the show trails the speakers, plus up to one frame
 REF_H, REF_W = 40, 140   # the terminal the cell-counted modes were drawn for; Viz.density() scales them from here
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
@@ -133,23 +137,29 @@ GLYPHS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇ�
 # --------------------------------------------------------------------------- audio
 
 class Capture(threading.Thread):
-    """Keeps the last WINDOW stereo samples from the default sink monitor."""
+    """Keeps the last WINDOW stereo samples from the default sink monitor: this machine's, or
+    with a host (poseidon.Host) the box the music plays on, its parec run over ssh and the raw
+    stream read from the pipe. The box pays for parec and ssh; the FFT happens here."""
 
-    def __init__(self):
+    PAREC = ["parec", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=2",
+             "-d", "@DEFAULT_MONITOR@", f"--latency-msec={TAP_LATENCY_MS}"]
+
+    def __init__(self, host=None):
         super().__init__(daemon=True)
+        self.host = host
         self.buf = np.zeros((WINDOW, 2), dtype=np.float32)
         self.lock = threading.Lock()
         self.proc = None
         self.error = None
         self.alive = True
 
-    @staticmethod
-    def backend():
-        """(name, command) for the audio tap on this machine, or (None, why)."""
+    def backend(self):
+        """(name, command) for the audio tap, or (None, why)."""
+        if self.host:
+            return f"parec@{self.host.name}", self.host.exec_prefix() + self.PAREC
         want = os.environ.get("DEADVIZ_CAPTURE", "auto")
         if want in ("auto", "parec") and shutil.which("parec"):
-            return "parec", ["parec", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=2",
-                             "-d", "@DEFAULT_MONITOR@", "--latency-msec=40"]
+            return "parec", list(self.PAREC)
         if want in ("auto", "ffmpeg") and shutil.which("ffmpeg") and (sys.platform == "darwin" or want == "ffmpeg"):
             # macOS: no monitor source exists, so route output through a loopback device
             # (BlackHole, free) set as the system output, and read that device back.
@@ -174,7 +184,8 @@ class Capture(threading.Thread):
         while self.alive:
             data = self.proc.stdout.read(need)
             if not data:
-                self.error = (f"{name} ended (is a sink present?)" if name == "parec"
+                self.error = (f"{name} ended (the ssh link, or no sink there?)" if self.host
+                              else f"{name} ended (is a sink present?)" if name == "parec"
                               else f"{name} ended (is the loopback device present? DEADVIZ_DEVICE)")
                 return
             frames = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
@@ -458,12 +469,12 @@ def _grow(m, n):
 # --------------------------------------------------------------------------- renderers
 
 class Viz:
-    def __init__(self, scr, title_fn=None, on_key=None, mode="bars"):
+    def __init__(self, scr, title_fn=None, on_key=None, mode="bars", host=None):
         self.scr = scr
         self.title_fn = title_fn or (lambda: "")
         self.on_key = on_key or (lambda ch: False)
         self.mode = mode if mode in MODES else MODES[0]
-        self.cap = Capture()
+        self.cap = Capture(host)
         self.an = Analyzer()
         self.t0 = time.time()
         self.t = 0.0
@@ -2834,11 +2845,29 @@ class Viz:
 
 
 def main():
+    import argparse
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import poseidon                       # here, not at the top: the TUI imports this module for Viz alone
+    argv = poseidon.pop_host_flags(sys.argv[1:])
+    argparse.ArgumentParser(description="The light show on its own, against whatever is playing (--host NAME: on that box).").parse_args(argv)
+    host = poseidon.host()
+    where = f"{host.name}'s sink" if host else "the sink here"
+
     def go(scr):
         curses.use_default_colors()
-        Viz(scr, title_fn=lambda: "deadviz standalone  (v next mode, V previous, 1-9/0 pick, ↑↓ waterfall direction, Esc quits)").run()
+        Viz(scr, title_fn=lambda: f"deadviz standalone, {where}  (v next mode, V previous, 1-9/0 pick, ↑↓ waterfall direction, Esc quits)",
+            host=host).run()
     os.environ.setdefault("ESCDELAY", "25")
-    curses.wrapper(go)
+    if host:
+        try:
+            host.ensure()                 # shares a running TUI's master, or opens its own
+        except OSError as e:
+            sys.exit(str(e))
+    try:
+        curses.wrapper(go)
+    finally:
+        if host:
+            host.close()
 
 
 if __name__ == "__main__":

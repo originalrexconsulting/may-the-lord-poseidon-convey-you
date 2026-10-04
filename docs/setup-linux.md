@@ -98,3 +98,38 @@ docstring at the top of the script and in `SYSTEM.md`.
 The station list in `scripts/radio.py` is used by the TUI (`c`). `radio.py`'s own
 commands (`play`, `now`, `back`) drive the Strawberry music player over D-Bus and need
 `busctl` (systemd) and Strawberry running; they are a separate, Linux-only convenience.
+
+## 7. Driving a box from another machine
+
+The box wired to the DAC (tiro, say) only has to play. Run the TUI on the machine in front
+of you, with the player there:
+
+```
+ssh tiro true                      # key auth must already work; nothing is installed on the box
+poseidon --host tiro               # the TUI here, mpv there; remembered, so plain `poseidon` keeps it
+poseidon play 1977-05-08 --host tiro   # the command line too; poseidon play status, poseidon remote
+poseidon doctor                    # host ssh / mpv / parec / socket / library / DAC, in one round trip
+poseidon --no-host                 # back to playing here
+```
+
+What runs where: mpv on the box, started with `setsid -f` over one ssh master (a `-N` child
+of the TUI; `ControlPersist=no`, so it dies with the TUI and the music does not), its control
+socket `$XDG_RUNTIME_DIR/deadtui-mpv.sock` forwarded to `deadtui-mpv@tiro.sock` here. The
+light show's `parec` runs on the box (so it needs `pulseaudio-utils`, like a local show) and
+its raw stream comes back over the same master; the FFT and the drawing happen here, so the
+box's CPU stays flat and the show trails the speakers by parec's 40 ms buffer plus up to one
+frame, as it does on the box itself. When the link drops the status line says
+`@tiro: reconnecting` and the TUI brings it back every 5 s; the box's mpv never stopped.
+
+What moves with the TUI: `~/.cache/deadtui/` (state, history, bookmarks) is now on this
+machine; copy `history.jsonl` and `bookmarks.json` over once if you want them. The phone
+remote (`R`) is served from this machine's address. The panel-awake hold now guards this
+machine's screen, which is where the show is. `POSEIDON_HOST=tiro` in your profile does
+the same as the flag. Do not name the machine you are sitting at as `--host`.
+
+Shows on the box's disk are indexed over ssh when the TUI starts and after every fetch,
+and play from there, lossless, as they would on the box; `--host-library PATH` says where
+it keeps them (default `~/Music/dead` there, what a downloaded build uses). `d` fetches on
+the box, into that library; `--host-fetch CMD` is how to run poseidon there (default
+`poseidon` on its login shell's PATH; `poseidon doctor` says when that is not found). Both
+are remembered with the host.
