@@ -1250,11 +1250,60 @@ class Mpv:
                     self.sock = None
                     return None
                 self.buf += data
+            if self.host:
+                self.sock = None          # three seconds without an answer over the link: treat it as down
         return None
 
     def get(self, prop, default=None):
         r = self.cmd("get_property", prop)
         return r["data"] if r and r.get("error") == "success" else default
+
+    def get_many(self, props):
+        """{prop: value or None} for several properties in one round trip: all the requests go out
+        together and mpv answers them in order. Twelve round trips are nothing on a unix socket
+        and a visible stall over a forwarded one (the --host link), so status() uses this."""
+        if not self.sock:
+            return {}
+        with self.lock:
+            rids = {}
+            out = b""
+            for p in props:
+                self.rid += 1
+                rids[self.rid] = p
+                out += json.dumps({"command": ["get_property", p], "request_id": self.rid}).encode() + b"\n"
+            try:
+                self.sock.sendall(out)
+            except OSError:
+                self.sock = None
+                return {}
+            got = {}
+            deadline = time.time() + 3
+            while time.time() < deadline and len(got) < len(rids):
+                while b"\n" in self.buf:
+                    line, self.buf = self.buf.split(b"\n", 1)
+                    try:
+                        msg = json.loads(line)
+                    except ValueError:
+                        continue
+                    p = rids.get(msg.get("request_id"))
+                    if p:
+                        got[p] = msg.get("data") if msg.get("error") == "success" else None
+                if len(got) == len(rids):
+                    break
+                try:
+                    data = self.sock.recv(65536)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    self.sock = None
+                    return got
+                if not data:
+                    self.sock = None
+                    return got
+                self.buf += data
+            if len(got) < len(rids) and self.host:
+                self.sock = None
+            return got
 
     def play(self, srcs, start=0):
         """Replace the playlist with srcs, starting at index `start`, without a blip of track 0."""
@@ -1282,16 +1331,20 @@ class Mpv:
         """The path or URL mpv is playing now, as it was given."""
         return self.get("path")
 
+    STATUS_PROPS = ("playlist-pos", "playlist-count", "time-pos", "duration", "pause", "paused-for-cache",
+                    "media-title", "audio-codec-name", "audio-params", "audio-bitrate", "volume", "mute")
+
     def status(self):
-        pos = self.get("playlist-pos", -1)
-        if pos is None or pos < 0:
+        g = self.get_many(self.STATUS_PROPS)
+        pos = g.get("playlist-pos", -1)
+        if "playlist-pos" not in g or pos is None or pos < 0:
             return None
-        return {"pos": pos, "count": self.get("playlist-count", 0), "time": self.get("time-pos"),
-                "dur": self.get("duration"), "paused": bool(self.get("pause", False)),
-                "buffering": bool(self.get("paused-for-cache", False)),
-                "media_title": self.get("media-title"), "codec": self.get("audio-codec-name"),
-                "params": self.get("audio-params") or {}, "bitrate": self.get("audio-bitrate"),
-                "volume": self.get("volume"), "mute": bool(self.get("mute", False))}
+        return {"pos": pos, "count": g.get("playlist-count") or 0, "time": g.get("time-pos"),
+                "dur": g.get("duration"), "paused": bool(g.get("pause")),
+                "buffering": bool(g.get("paused-for-cache")),
+                "media_title": g.get("media-title"), "codec": g.get("audio-codec-name"),
+                "params": g.get("audio-params") or {}, "bitrate": g.get("audio-bitrate"),
+                "volume": g.get("volume"), "mute": bool(g.get("mute"))}
 
     def set_volume(self, level):
         """Software gain, 0-100. 100 is unity: mpv would go to 130 but that only clips the DAC."""
@@ -2869,8 +2922,15 @@ class App:
             self.say("light show needs python3-numpy (apt install python3-numpy)", 8)
             return
 
+        cache = {"at": 0, "st": None}
+
         def title():
-            st = self.mpv.status() if self.mpv.sock else None
+            # asked once per frame, 24 times a second; mpv's answer is good for half a second, and over
+            # the --host link every ask is a network round trip (the show's keys sat behind them)
+            if time.time() - cache["at"] > 0.5:
+                cache["st"] = self.mpv.status() if self.mpv.sock else None
+                cache["at"] = time.time()
+            st = cache["st"]
             if not (st and self.now):
                 return "stopped"
             t = self.now["tracks"][st["pos"]] if st["pos"] < len(self.now["tracks"]) else {"title": "?"}
