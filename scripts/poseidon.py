@@ -10,6 +10,7 @@ A symlink named after a tool (gdarchive, deadtui, ...) runs that tool directly.
   poseidon radio list
   poseidon play 1977-05-08 --song "Morning Dew"   # play without the TUI (also random, an identifier,
   poseidon play random | stop | pause | status    # radio <station|random>); the next TUI adopts the player
+  poseidon stop | pause | next | prev | status    # the same controls without the "play"
   poseidon remote                           # the phone remote on the LAN, for a player started without the TUI
   poseidon doctor                           # what this build is, what it found
   POSEIDON_LIBRARY=/path/to/dead poseidon   # where shows are kept (default: dead/ beside
@@ -42,6 +43,7 @@ TOOLS = {"tui": TUI, "deadtui": TUI, "may-the_lord_poseidon-convey-you": TUI,
          "restore-playlist": "restore-playlist.py"}
 SUBCOMMANDS = ("gdarchive", "deadviz", "radio", "restore-playlist", "tui")
 TUI_VERBS = ("play", "remote")   # poseidon play ..., poseidon remote: the TUI's own command line
+CONTROLS = ("stop", "pause", "next", "prev", "status")   # poseidon stop == poseidon play stop
 # python-build-standalone links ncurses statically and may not know the host's terminfo
 # location; these are the usual ones (Debian's /lib/terminfo, Homebrew's, ...).
 TERMINFO_DIRS = ("/usr/share/terminfo", "/lib/terminfo", "/etc/terminfo", "/usr/lib/terminfo",
@@ -140,9 +142,12 @@ class Host:
     here by the light show (deadviz), so the FFT and the drawing cost this machine, not the box.
     The master is a -N child of this process and dies with it; mpv on the box plays on.
     """
+    # ClearAllForwardings: the owner's ~/.ssh/config for the box carries LocalForward lines that an
+    # interactive session already holds; inherited here they failed to bind and, with
+    # ExitOnForwardFailure, took the master down before it did anything (2026-10-04).
     MASTER = ["-o", "ConnectTimeout=5", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
               "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "StreamLocalBindUnlink=yes",
-              "-o", "ExitOnForwardFailure=yes", "-N"]
+              "-o", "ClearAllForwardings=yes", "-o", "ExitOnForwardFailure=yes", "-N"]
 
     def __init__(self, name, library=None, fetch_cmd=None):
         self.name = name
@@ -160,8 +165,9 @@ class Host:
         return ["ssh", "-o", "BatchMode=yes", "-o", "ControlPath=" + self.ctl, *args]
 
     def exec_prefix(self):
-        """argv that runs a command on the box through the master (straight to it if the master is gone)."""
-        return self.ssh("-o", "ControlMaster=no", "-o", "ConnectTimeout=5", self.name, "--")
+        """argv that runs a command on the box through the master (straight to it if the master is gone,
+        and then without the config's forwards, which would only fail and complain)."""
+        return self.ssh("-o", "ControlMaster=no", "-o", "ConnectTimeout=5", "-o", "ClearAllForwardings=yes", self.name, "--")
 
     def quote(self, path):
         """path, quoted for the box's shell; a leading ~/ is the box's home, not this one's."""
@@ -581,8 +587,10 @@ def main(argv=None):
         return run(TOOLS[argv[0]], argv[1:])
     if argv and argv[0] in TUI_VERBS:
         return run(TUI, argv)
+    if argv and argv[0] in CONTROLS:
+        return run(TUI, ["play", *argv])      # poseidon stop: the running player's controls, without "play"
     if argv:
-        sys.exit(f"poseidon: unknown tool {argv[0]!r}; one of {', '.join(SUBCOMMANDS + TUI_VERBS)}, doctor, --version")
+        sys.exit(f"poseidon: unknown tool {argv[0]!r}; one of {', '.join(SUBCOMMANDS + TUI_VERBS + CONTROLS)}, doctor, --version")
     return run(TUI, [])
 
 
