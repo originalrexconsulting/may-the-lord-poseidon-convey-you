@@ -140,9 +140,12 @@ class Host:
     here by the light show (deadviz), so the FFT and the drawing cost this machine, not the box.
     The master is a -N child of this process and dies with it; mpv on the box plays on.
     """
+    # ClearAllForwardings: the owner's ~/.ssh/config for the box carries LocalForward lines that an
+    # interactive session already holds; inherited here they failed to bind and, with
+    # ExitOnForwardFailure, took the master down before it did anything (2026-10-04).
     MASTER = ["-o", "ConnectTimeout=5", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
               "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "StreamLocalBindUnlink=yes",
-              "-o", "ExitOnForwardFailure=yes", "-N"]
+              "-o", "ClearAllForwardings=yes", "-o", "ExitOnForwardFailure=yes", "-N"]
 
     def __init__(self, name, library=None, fetch_cmd=None):
         self.name = name
@@ -160,8 +163,9 @@ class Host:
         return ["ssh", "-o", "BatchMode=yes", "-o", "ControlPath=" + self.ctl, *args]
 
     def exec_prefix(self):
-        """argv that runs a command on the box through the master (straight to it if the master is gone)."""
-        return self.ssh("-o", "ControlMaster=no", "-o", "ConnectTimeout=5", self.name, "--")
+        """argv that runs a command on the box through the master (straight to it if the master is gone,
+        and then without the config's forwards, which would only fail and complain)."""
+        return self.ssh("-o", "ControlMaster=no", "-o", "ConnectTimeout=5", "-o", "ClearAllForwardings=yes", self.name, "--")
 
     def quote(self, path):
         """path, quoted for the box's shell; a leading ~/ is the box's home, not this one's."""
