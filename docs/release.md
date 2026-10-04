@@ -145,7 +145,14 @@ again: a missing node gets WirePlumber restarted, a card at `off` gets its pinne
 set, since WirePlumber restores a remembered `off` across a restart; the Rotel loses its
 sink about one power-on in eight, reproduced by re-attaching the USB device in software,
 and dropping the pro-audio pin only swaps that for the `off` failure; all four runners in
-89 seconds end to end, the slowest the Intel Mac at 72, the publish job in 8, six assets).
+89 seconds end to end, the slowest the Intel Mac at 72, the publish job in 8, six assets)
+and `v2026.10.04` (`o` plays the night a streamed song came from, from this second on: a
+song stream, a random Dark Star after another, every version in date order, Rain and Snow,
+plays one track per show and now carries each track's night, so `o` trades the stream for
+that whole show at the same track and the same second and the set list goes on; on a row
+of the queue, that row's night; the night rides in the saved queue and in History, where
+↵ on a streamed song plays its night from the song on; all four runners in 80 seconds end
+to end, the slowest the Intel Mac at 78, the publish job in 15, six assets).
 
 ## If CI cannot publish
 
