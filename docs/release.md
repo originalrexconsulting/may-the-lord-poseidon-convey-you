@@ -199,7 +199,13 @@ session already held, the TUI's master inherited them, could not bind the ports 
 every connection the TUI opens; the reason now stays on the message row in red until the box
 answers and each retry restarts a player a rebooted box lost; `poseidon stop | pause | next |
 prev | status` without the `play`; all four runners in 74 seconds end to end, the slowest the
-Intel Mac at 57, the publish job in 9, six assets).
+Intel Mac at 57, the publish job in 9, six assets) and `v2026.10.04.6` (the show's keys sat dead
+from rexdev: its title bar asked `mpv.status()` every frame, twelve `get_property` round trips
+each over the forwarded socket, and a stalled link made every one wait out three seconds;
+`Mpv.get_many()` pipelines the twelve into one round trip, the title bar keeps the answer for
+half a second, and over the link three silent seconds mark the socket dead so the reconnect
+takes over; locally fifty status calls went from 12 to 6 ms; all four runners in 132 seconds
+end to end, the slowest the Intel Mac at 113, the publish job in 10, six assets).
 
 ## If CI cannot publish
 
