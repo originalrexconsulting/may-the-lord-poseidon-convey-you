@@ -223,7 +223,11 @@ class Host:
             return subprocess.CompletedProcess(cmd, 255, "", "timed out")
 
     def popen(self, argv, **kw):
-        """A command on the box as a Popen: its stdout is the raw stream (the audio tap, a fetch's log)."""
+        """A command on the box as a Popen: its stdout is the raw stream (the audio tap, a fetch's log).
+        stdin is /dev/null unless the caller says otherwise: ssh forwards its stdin to the command,
+        and inherited from the TUI that is the terminal, so the light show's parec took half the
+        keys typed during a show (2026-10-04)."""
+        kw.setdefault("stdin", subprocess.DEVNULL)
         return subprocess.Popen(self.exec_prefix() + list(argv), **kw)
 
     def start_mpv(self):
@@ -231,6 +235,21 @@ class Host:
         r = self.run("setsid -f " + shlex.join(mpv_argv(self.remote_sock)) + " </dev/null >/dev/null 2>&1")
         if r.returncode != 0:
             raise OSError(f"mpv on {self.name}: {r.stderr.strip() or 'did not start'}")
+
+    def mpv_alive(self):
+        """Is an mpv holding our socket path on the box: True, False, or None when the box did not
+        answer (the link). Asked before anything would replace the player: a probe through the
+        forward says "nothing there" for a stalled link or a reply that came behind one of mpv's
+        broadcast events, and on that word the socket was unlinked and a second mpv started over
+        the one still playing (tiro, 2026-10-04: two mpvs, the music on the one nobody could reach)."""
+        # anchored on the mpv word so the shell carrying this very command line does not match itself
+        pat = "(^|/)mpv .*--input-ipc-server=" + re.escape(self.remote_sock) + "( |$)"
+        r = self.run("pgrep -f -- " + shlex.quote(pat) + " >/dev/null")
+        if r.returncode == 0:
+            return True
+        if r.returncode == 1:
+            return False
+        return None
 
     def sock_present(self):
         return self.run("test -S " + shlex.quote(self.remote_sock)).returncode == 0
