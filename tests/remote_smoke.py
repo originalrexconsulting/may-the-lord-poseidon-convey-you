@@ -79,6 +79,11 @@ def main():
         check("host ssh: ok" in out, "doctor reaches it", out)
         check("host socket: " + remote_sock + " (absent)" in out, "doctor: no player there yet", out)
         check("host library: " + os.path.join(sb, "dead") + " (missing" in out, "doctor: library missing", out)
+        dac = out.split("host DAC: ")[1].splitlines()[0] if "host DAC: " in out else ""
+        check(dac == "closed" or dac.isdigit(), f"doctor: the box's DAC rate or closed, not the fraction ({dac!r})", out)
+        check("\nhost audio cards: " in out and "(no check)" in out.split("host audio cards: ")[1].splitlines()[0]
+              or "host audio cards: " in out and "card(s)" in out.split("host audio cards: ")[1].splitlines()[0],
+              "doctor: the audio check ran on the box", out)
 
         r = cli("play", "status")
         check(r.returncode != 0 and "nothing is playing on fakehost" in r.stderr, "play status with no player", r.stderr)

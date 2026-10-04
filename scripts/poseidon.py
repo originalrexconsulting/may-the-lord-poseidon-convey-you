@@ -213,10 +213,12 @@ class Host:
                 raise OSError(f"ssh {self.name}: forward: {r.stderr.strip()}")
         return self
 
-    def run(self, cmd, timeout=10):
-        """A shell command on the box; a CompletedProcess with text output (rc 255: ssh itself failed)."""
+    def run(self, cmd, timeout=10, input=None):
+        """A shell command on the box; a CompletedProcess with text output (rc 255: ssh itself failed).
+        `input` is the command's stdin there (ssh carries it), else nothing."""
         try:
-            return subprocess.run(self.exec_prefix() + [cmd], capture_output=True, text=True, timeout=timeout)
+            return subprocess.run(self.exec_prefix() + [cmd], capture_output=True, text=True, timeout=timeout,
+                                  **({"input": input} if input is not None else {"stdin": subprocess.DEVNULL}))
         except subprocess.TimeoutExpired:
             return subprocess.CompletedProcess(cmd, 255, "", "timed out")
 
@@ -333,6 +335,9 @@ def _terminfo_status():
         return f"FAILED: {e}"
 
 
+# == audio check == From here to "== end audio check ==" is shipped to the box verbatim by
+# `doctor --host` and run by its python3 (see _remote_audio_status), so it must stay
+# self-contained: stdlib only (re, shutil, subprocess, time), nothing from the rest of this file.
 def _best_output_profile(profiles):
     """The highest-priority available profile that would give a card a sink, or None."""
     best, best_priority = None, -1
@@ -509,10 +514,43 @@ def _audio_status():
     hint = ("unplug and replug it" if "restarted wireplumber" in done
             else "try systemctl --user restart wireplumber")
     return f"{was} -- tried: {done}; still: {left}; {hint}"
+# == end audio check ==
+
+
+AUDIO_CHECK_MARKS = ("# == audio check ==", "# == end audio check ==")
+
+
+def _audio_check_source():
+    """The audio-check section of this file as a stand-alone script that prints _audio_status().
+    Read through the module's loader, so a pex (zipimport) serves it as a checkout does."""
+    import inspect
+    try:
+        src = inspect.getsource(sys.modules[__name__])
+    except (OSError, TypeError):
+        with open(__file__) as f:
+            src = f.read()
+    start, end = (src.index(m) for m in AUDIO_CHECK_MARKS)
+    return "import re, shutil, subprocess, time\n" + src[start:end] + "\nprint(_audio_status())\n"
+
+
+def _remote_audio_status(h):
+    """The audio check, and its fix, on the box: `doctor --host` is run from the chair the music
+    is heard from, and the amp with no sink is on the box (the Rotel, 2026-10-04, from rexdev:
+    the local check said every card was fine while tiro played to its own speakers). The box's
+    python3 runs the section above from stdin; nothing is installed there."""
+    try:
+        r = h.run("python3 -", timeout=45, input=_audio_check_source())
+    except (OSError, ValueError) as e:
+        return f"(no check: {e})"
+    if r.returncode == 127 or (r.returncode and "python3" in r.stderr and "not found" in r.stderr):
+        return "python3 not found on the box (no check)"
+    if r.returncode != 0:
+        return f"FAILED: {r.stderr.strip().splitlines()[-1] if r.stderr.strip() else r.returncode}"
+    return r.stdout.strip() or "(no output)"
 
 
 def _host_status(h):
-    """What the TUI will find on the box, in one ssh round trip."""
+    """What the TUI will find on the box, in one ssh round trip (two with the audio check)."""
     lib, fetch = h.quote(h.library), shlex.quote(h.fetch_cmd.split()[0])
     script = ('run="${XDG_RUNTIME_DIR:-$HOME/.cache/deadtui}"; echo "name=$(uname -n)"; echo "run=$run"; '
               'echo "mpv=$(command -v mpv)"; echo "parec=$(command -v parec)"; '
@@ -533,7 +571,8 @@ def _host_status(h):
         ("host socket", f"{got.get('run', '?')}/deadtui-mpv.sock ({'present' if got.get('sock') == 'present' else 'absent'})"),
         ("host library", f"{h.library} ({'exists' if got.get('lib') == 'exists' else 'missing: --host-library PATH'})"),
         ("host fetch", f"{h.fetch_cmd} ({got['fetch'] if got.get('fetch') else 'not on its login PATH: --host-fetch CMD'})"),
-        ("host DAC", got["dac"].split()[-1] if got.get("dac") else "closed"),
+        ("host DAC", got["dac"].split()[1] if got.get("dac") else "closed"),   # "rate: 44100 (44100/1)"
+        ("host audio cards", _remote_audio_status(h)),
     ]
 
 
