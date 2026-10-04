@@ -25,7 +25,7 @@ TUI's status line said "(no now-playing metadata on this stream)" through a whol
 symphony. FEEDS names where each such station publishes the piece out of band, and
 piece() fetches it (stock urllib, no key): the Icecast server's own status-json.xsl,
 where the sibling MP3/AAC mount of the same programme carries the title the FLAC
-mount lacks (Naim, Rondo Klasu, Sector); Triton's nowplaying XML (KDFC, KUSC);
+mount lacks (Naim, Rondo Klasu; Sector's is frozen, see FEEDS); Triton's nowplaying XML (KDFC, KUSC);
 Radio France's livemeta (France Musique and its webradios); WNYC's whats_on (WQXR,
 Operavore); ABC's plays API; NPO Klassiek's tracks; BBC's segments; Czech Radio's
 playlist API (D-dur and Vltava answer "quiet" more often than not). Identifying the
@@ -193,7 +193,12 @@ FEEDS = {
     "naim": ("icecast", "class-high"),
     "klasu": ("icecast", "klasu-hi"),
     "klasupro": ("icecast", "klasupro-hi"),
-    "sector": ("icecast", "nota-160"),         # nota-mp3 showed another piece the same minute; check by ear
+    # Sector Nota has no row: its three mounts carry one programme (the FLAC 2.5 s behind
+    # the MP3s, by envelope correlation), but the titles on nota-160 and nota-mp3 and the
+    # site's nowplaying-nota.txt sat frozen on a one-minute recitative and a five-minute
+    # movement for an hour and a half on 2026-10-04 while the Jazz channel's moved. A wrong
+    # piece is worse than the placeholder. Re-probe http://sectorradio.com/nowplaying-nota.txt
+    # some day; the Icecast mount would be nota-160.
     "ddur": ("rozhlas", "d-dur"),              # answered "quiet" all afternoon; wired in hope
     "vltava": ("rozhlas", "vltava"),
     "kdfc": ("triton", "KDFCFMAAC96"),
