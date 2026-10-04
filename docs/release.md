@@ -159,7 +159,19 @@ heard as a short pause; mpv's `playlist-clear` keeps the playing entry, so `Mpv.
 puts the night's tracks before and after it and the file plays on untouched, the clock
 running 300.3, 300.5, 301.0 through the keypress on a sandboxed mpv against real
 archive.org streams; all four runners in 63 seconds end to end, the slowest the Intel Mac
-at 62, the publish job in 12, six assets).
+at 62, the publish job in 12, six assets) and `v2026.10.04.2` (the piece on the status
+line: a FLAC Icecast mount, HLS and Radio France's AAC carry no in-band title, so the line
+said "(no now-playing metadata on this stream)" through a whole symphony; the station
+publishes the piece out of band all the same, `radio.py`'s `FEEDS` says where, the
+sibling MP3 mount's title on the same Icecast status page for Naim, Rondo and Sector,
+Triton for KDFC and KUSC, Radio France's livemeta, WNYC's whats_on, ABC, NPO, BBC and
+Czech Radio, and the TUI's `NowPlaying` thread polls it every 20 s for the status line,
+the light show's title bar, the remote, `i` and `poseidon play status`; `radio.py title`
+lists it from the shell; identification by ear was dropped since AcoustID cannot match a
+clip from the middle of a movement; and the splash screenshot retaken with Poseidon's
+eyes the colour of the water, as the code has had them since `v2026.09.19.2`; all four
+runners in 79 seconds end to end, the slowest the Intel Mac at 60, the publish job in
+10, six assets).
 
 ## If CI cannot publish
 
