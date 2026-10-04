@@ -19,10 +19,24 @@ mount 404). KDFC's 256 kbps StreamTheWorld mount is gone for good ("Invalid
 Mount"); KDFCFMAAC96 is what the station serves now. BBC Radio 3's 320 kbps
 feed is UK-only (403 from here); the world feed is 96 kbps HE-AAC.
 
+The piece (2026-10-04). A FLAC Icecast mount carries no in-band title, and HLS and
+Radio France's AAC carry none either, so mpv's media-title is the filename and the
+TUI's status line said "(no now-playing metadata on this stream)" through a whole
+symphony. FEEDS names where each such station publishes the piece out of band, and
+piece() fetches it (stock urllib, no key): the Icecast server's own status-json.xsl,
+where the sibling MP3/AAC mount of the same programme carries the title the FLAC
+mount lacks (Naim, Rondo Klasu, Sector); Triton's nowplaying XML (KDFC, KUSC);
+Radio France's livemeta (France Musique and its webradios); WNYC's whats_on (WQXR,
+Operavore); ABC's plays API; NPO Klassiek's tracks; BBC's segments; Czech Radio's
+playlist API (D-dur and Vltava answer "quiet" more often than not). Identifying the
+music by ear was looked at and dropped: AcoustID cannot match a clip from the middle
+of a movement, by design, and the alternatives are unofficial or paid.
+
 Examples:
 
   radio.py list                 # stations
   radio.py probe                # codec / rate / depth / now-playing for each
+  radio.py title                # the piece on every station with a feed; title naim for one
   radio.py play naim            # start Naim Classical in the Radio tab
   radio.py play random          # any station, the dice decide
   radio.py now                  # what Strawberry plays + the DAC's actual rate
@@ -30,7 +44,9 @@ Examples:
 """
 
 import argparse
+import datetime
 import glob
+import json
 import os
 import random
 import re
@@ -38,6 +54,15 @@ import sqlite3
 import subprocess
 import sys
 import time
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
+try:
+    import poseidon
+    UA = poseidon.user_agent()
+except Exception:                              # run from a copy without the dispatcher beside it
+    UA = "may-the-lord-poseidon-convey-you (+https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you)"
 
 STATIONS = {
     # key: (name, url, nominal format, notes)
@@ -161,6 +186,214 @@ PLAYLIST = "Radio"
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
 DB = os.path.expanduser("~/.local/share/strawberry/strawberry/strawberry.db")
 
+FEEDS = {
+    # key: (kind, arg). Where the station says what it is playing, outside the stream.
+    # icecast: the server's status-json.xsl; arg is the sibling mount whose title to
+    # take (the FLAC mount's own is empty). Verified 2026-10-04, each of these.
+    "naim": ("icecast", "class-high"),
+    "klasu": ("icecast", "klasu-hi"),
+    "klasupro": ("icecast", "klasupro-hi"),
+    "sector": ("icecast", "nota-160"),         # nota-mp3 showed another piece the same minute; check by ear
+    "ddur": ("rozhlas", "d-dur"),              # answered "quiet" all afternoon; wired in hope
+    "vltava": ("rozhlas", "vltava"),
+    "kdfc": ("triton", "KDFCFMAAC96"),
+    "kusc": ("triton", "KUSCAAC96"),
+    "fmusique": ("radiofrance", 4),            # the music programmes list the piece; talk shows do not
+    "fmclassiqueplus": ("radiofrance", 402),
+    "fmconcerts": ("radiofrance", 403),
+    "fmcontemporaine": ("radiofrance", 406),
+    "fmbaroque": ("radiofrance", 408),         # Opéra and Piano Zen: no livemeta id found (401-440 scanned)
+    "wqxr": ("wnyc", "wqxr"),
+    "operavore": ("wnyc", "operavore"),
+    "abc": ("abc", "classic"),
+    "npo4": ("npo", None),
+    "bbc3": ("bbc", "bbc_radio_three"),        # empty from here on 2026-10-04; may be UK-only or programme-bound
+}
+FEED_TIMEOUT = 8
+
+
+def _fetch(url, timeout=FEED_TIMEOUT):
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json, text/xml, */*"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def _get_json(url, timeout=FEED_TIMEOUT):
+    return json.loads(_fetch(url, timeout).decode("utf-8", "replace"))
+
+
+def _clean(s):
+    """A feed string fit for one status line: no double spaces, listener counts or trailing [place] notes."""
+    s = re.sub(r"^\s*\d{1,2}\s*[-.]\s+", "", s or "")                 # Naim leads with the track number: "07 - "
+    s = re.sub(r"\s*,?\s*Kuuntel\w*:\s*\d+\s*$", "", s)              # Rondo appends its listener count
+    s = re.sub(r"\s*\[[^\]]*\]\s*$", "", s)                          # Sector appends "[Salzburg • ...]"
+    s = re.sub(r"\s*\((1[0-9]{3}|20[0-9]{2})\s*-\s*(1[0-9]{3}|20[0-9]{2})?\)", "", s)   # composer dates
+    return re.sub(r"\s+", " ", s).strip(" -·,")
+
+
+def _names(v):
+    """A string from the shapes feeds use for people: str, {name}, [{name}], [{musician: {name}}]."""
+    if not v:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, dict):
+        return _names(v.get("name") or v.get("musician") or v.get("title") or "")
+    return ", ".join(n for n in (_names(x) for x in v) if n)
+
+
+def _feed_icecast(key, mount):
+    u = urllib.parse.urlsplit(STATIONS[key][1])
+    d = _get_json(f"{u.scheme}://{u.netloc}/status-json.xsl")
+    src = d.get("icestats", {}).get("source", [])
+    for s in [src] if isinstance(src, dict) else src:
+        if os.path.basename(urllib.parse.urlsplit(s.get("listenurl", "")).path).startswith(mount):
+            raw = _clean((s.get("title") or "").replace("~", ": "))
+            return {"raw": raw} if raw else None
+    return None
+
+
+def _feed_triton(_key, mount):
+    xml = _fetch(f"https://np.tritondigital.com/public/nowplaying?mountName={mount}&numberToFetch=1&eventType=track")
+    info = ET.fromstring(xml).find("nowplaying-info")
+    if info is None:
+        return None
+    p = {e.get("name"): (e.text or "").strip() for e in info.findall("property")}
+    until = None
+    try:
+        until = int(p["cue_time_start"]) / 1000 + float(p["cue_time_duration"])
+    except (KeyError, ValueError):
+        pass
+    return {"composer": _clean(p.get("track_artist_name")), "work": _clean(p.get("cue_title")), "until": until}
+
+
+def _feed_radiofrance(_key, sid):
+    d = _get_json(f"https://api.radiofrance.fr/livemeta/pull/{sid}")
+    now = time.time()
+    steps = [s for s in d.get("steps", {}).values() if s.get("start", 0) <= now <= s.get("end", 0)]
+    songs = [s for s in steps if s.get("embedType") == "song"] or []
+    if not songs:
+        return None
+    s = max(songs, key=lambda s: s.get("depth", 0))
+    return {"composer": _clean(s.get("composers")), "work": _clean(s.get("title")),
+            "performers": _clean(s.get("performers") or ""), "album": _clean(s.get("titreAlbum")),
+            "until": s.get("end")}
+
+
+def _feed_wnyc(_key, slug):
+    d = _get_json(f"https://api.wnyc.org/api/v1/whats_on/{slug}/")
+    item = d.get("current_playlist_item") or {}
+    ce = item.get("catalog_entry") or {}
+    if not ce.get("title"):
+        return None
+    who = [_names(ce.get("soloists")), _names(ce.get("ensemble")), _names(ce.get("conductor"))]
+    until = None
+    if item.get("start_time_ts") and ce.get("length"):
+        until = item["start_time_ts"] + ce["length"]
+    return {"composer": _clean(_names(ce.get("composer"))), "work": _clean(ce["title"]),
+            "performers": ", ".join(w for w in who if w), "album": _clean(_names(ce.get("reclabel"))), "until": until}
+
+
+def _feed_abc(_key, service):
+    d = _get_json(f"https://music.abcradio.net.au/api/v1/plays/{service}/now.json")
+    s = (d.get("now") or {}).get("summary") or {}
+    if not s.get("title"):
+        return None
+    until = None
+    try:
+        until = datetime.datetime.fromisoformat(d["next_updated"]).timestamp()
+    except (KeyError, ValueError, TypeError):
+        pass
+    return {"composer": _clean(s.get("artist")), "work": _clean(s.get("title")),
+            "performers": _clean((s.get("properties") or {}).get("performers")),
+            "album": _clean((s.get("properties") or {}).get("label")), "until": until}
+
+
+def _feed_npo(_key, _arg):
+    d = _get_json("https://www.npoklassiek.nl/api/tracks")
+    t = (d.get("data") or [None])[0]                                  # newest first
+    if not t or not t.get("title"):
+        return None
+    until = None
+    try:
+        import zoneinfo
+        until = datetime.datetime.fromisoformat(t["stopdatetime"]).replace(
+            tzinfo=zoneinfo.ZoneInfo("Europe/Amsterdam")).timestamp()
+        if until < time.time() - 30:
+            return None                                               # the last track is over; nothing listed since
+    except Exception:
+        pass
+    who = [t.get("soloistsEnsemble"), t.get("orchestra"), t.get("director")]
+    composer = t.get("composer_name") or t.get("artist") or ""
+    if "," in composer:                                               # "Mendelssohn-Bartholdy, Felix"
+        last, first = composer.split(",", 1)
+        composer = f"{first.strip()} {last.strip()}"
+    if "[" in composer:                                               # "Anastasia [cello] Kobekina" is the soloist, whatever the field says
+        who.insert(0, re.sub(r"\s*\[[^\]]*\]", "", composer))
+        composer = ""
+    return {"composer": _clean(composer), "work": _clean(t["title"]),
+            "performers": ", ".join(_clean(w) for w in who if w), "album": _clean(t.get("label")), "until": until}
+
+
+def _feed_bbc(_key, service):
+    d = _get_json(f"https://rms.api.bbc.co.uk/v2/services/{service}/segments/latest")
+    items = [i for i in d.get("data") or [] if (i.get("offset") or {}).get("now_playing", True)]
+    if not items:
+        return None
+    t = items[0].get("titles") or {}
+    return {"composer": _clean(t.get("primary")), "work": _clean(t.get("secondary")),
+            "performers": _clean(t.get("tertiary"))}
+
+
+def _feed_rozhlas(_key, sid):
+    d = (_get_json(f"https://api.rozhlas.cz/data/v2/playlist/now/{sid}.json") or {}).get("data") or {}
+    if d.get("status") == "quiet" or not (d.get("track") or d.get("title")):
+        return None
+    until = None
+    try:
+        until = datetime.datetime.fromisoformat(d["till"]).timestamp()
+    except (KeyError, ValueError, TypeError):
+        pass
+    return {"composer": _clean(d.get("interpret") or d.get("composer")), "work": _clean(d.get("track") or d.get("title")),
+            "until": until}
+
+
+_FEED_KINDS = {"icecast": _feed_icecast, "triton": _feed_triton, "radiofrance": _feed_radiofrance,
+               "wnyc": _feed_wnyc, "abc": _feed_abc, "npo": _feed_npo, "bbc": _feed_bbc, "rozhlas": _feed_rozhlas}
+
+
+def piece(key, timeout=FEED_TIMEOUT):
+    """What the station says it is playing, from its feed: {composer, work, performers, album, until, raw}.
+
+    None when the station has no feed, the feed is quiet (talk, news, between pieces) or
+    anything at all goes wrong: a status line must never trip over a web service. `until`
+    is the epoch second the piece ends, when the feed knows, for the caller's next poll.
+    `raw` is the station's own one-line string where it has no fields to split.
+    """
+    kind, arg = FEEDS.get(key, (None, None))
+    if kind is None:
+        return None
+    try:
+        p = _FEED_KINDS[kind](key, arg)
+    except Exception:
+        return None
+    if not p or not (p.get("raw") or p.get("work")):
+        return None
+    out = {"composer": "", "work": "", "performers": "", "album": "", "until": None, "raw": ""}
+    out.update({k: v for k, v in p.items() if v})
+    out["kind"] = kind
+    return out
+
+
+def fmt_piece(p):
+    """One line: 'Composer: Work · performers', or the station's own string."""
+    if not p:
+        return ""
+    if p.get("raw") and not p.get("work"):
+        return p["raw"]
+    s = f"{p['composer']}: {p['work']}" if p.get("composer") else p["work"]
+    return s + (f"  ·  {p['performers']}" if p.get("performers") else "")
+
 
 def die(msg, code=1):
     print(msg, file=sys.stderr)
@@ -265,12 +498,39 @@ def cmd_list(_):
         print(f"{'':9} {url}")
 
 
+def station_key(key):
+    """The STATIONS key for what station() accepts (a key, a unique substring, random)."""
+    s = station(key)
+    return next(k for k, v in STATIONS.items() if v is s)
+
+
 def cmd_probe(args):
-    keys = [args.station] if args.station else list(STATIONS)
+    keys = [station_key(args.station)] if args.station else list(STATIONS)
     for k in keys:
-        name, url, fmt, _ = station(k)
+        name, url, fmt, _ = STATIONS[k]
         kv, err = ffprobe(url)
-        print(f"{name:24} {'DOWN: ' + err if err else fmt_probe(kv)}")
+        line = f"{name:24} {'DOWN: ' + err if err else fmt_probe(kv)}"
+        p = piece(k)
+        print(line + (f"  piece: {fmt_piece(p)}" if p else ""))
+
+
+def cmd_title(args):
+    """The piece on each station with a feed, the way the TUI's status line shows it."""
+    keys = [station_key(args.station)] if args.station else [k for k in STATIONS if k in FEEDS]
+    for k in keys:
+        name = STATIONS[k][0]
+        if k not in FEEDS:
+            print(f"{name:24} (no feed; the stream's own title is all there is)")
+            continue
+        p = piece(k)
+        if not p:
+            print(f"{name:24} (quiet, or the feed did not answer)")
+            continue
+        print(f"{name:24} {fmt_piece(p)}")
+        extra = [f"album: {p['album']}" if p.get("album") else "",
+                 f"ends {time.strftime('%H:%M:%S', time.localtime(p['until']))}" if p.get("until") else ""]
+        if any(extra):
+            print(f"{'':24} {'  '.join(e for e in extra if e)}")
 
 
 def cmd_now(_):
@@ -343,6 +603,9 @@ def main():
     p = sub.add_parser("probe", help="ffprobe stations")
     p.add_argument("station", nargs="?")
     p.set_defaults(fn=cmd_probe)
+    p = sub.add_parser("title", help="the piece playing, from the station's feed")
+    p.add_argument("station", nargs="?")
+    p.set_defaults(fn=cmd_title)
     p = sub.add_parser("play", help="play a station in the Radio tab")
     p.add_argument("station")
     p.add_argument("--settle", type=float, default=6, help="seconds before verifying (default 6)")

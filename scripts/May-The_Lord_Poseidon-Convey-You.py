@@ -446,6 +446,19 @@ def stations():
     return out
 
 
+def stream_title(st, t=None):
+    """The stream's own now-playing title (ICY), or '' when mpv fell back to the filename.
+
+    FLAC Icecast mounts and HLS carry no in-band title, so media-title is the URL's last
+    part: that is not a piece, and the caller shows the feed's answer or a placeholder.
+    """
+    mt = (st or {}).get("media_title") or ""
+    if not mt or ((t or {}).get("src") and mt in t["src"]) or "://" in mt \
+            or re.search(r"\.(flac|aac|mp3|m3u8|ogg|m4a)$", mt, re.I):
+        return ""
+    return mt
+
+
 def volume_tag(st):
     """'  muted' or '  vol 80%' for the status line; nothing at unity, the normal case."""
     if not st:
@@ -1152,6 +1165,72 @@ class Mpv:
             os.unlink(self.path)
 
 
+class NowPlaying(threading.Thread):
+    """The piece on the station, from the station's feed (radio.FEEDS), for the status line.
+
+    A FLAC Icecast mount, an HLS feed and Radio France's AAC carry no in-band title, so
+    mpv's media-title is the filename and the line read "(no now-playing metadata on
+    this stream)" through a whole symphony. The piece is published out of band all the
+    same (the sibling MP3 mount's title on the same Icecast server, a broadcaster's
+    now-playing API), and radio.piece() fetches it. This thread asks every POLL seconds
+    while a station with a feed plays, or when the feed says the piece ends, and keeps
+    the last answer in `text` for draw(), the light show's title bar and the remote.
+    `key_fn` names the station playing (None when it is not radio); a change clears the
+    text at once, so a station never wears another's piece. A feed that fails backs off
+    to five minutes; its old text stays up STALE seconds and then goes, so a quiet feed
+    hands the line back to the stream's own title or the placeholder. Exceptions never
+    leave this thread: a web service must not take the player down.
+    """
+    POLL = 20
+    STALE = 90
+
+    def __init__(self, key_fn):
+        super().__init__(daemon=True)
+        self.key_fn = key_fn
+        self.stopping = threading.Event()
+        self.key = None
+        self.text = ""
+        self.piece = None
+        self.at = 0               # when `text` was last confirmed by the feed
+        self.due = 0              # the next poll
+        self.fails = 0
+
+    def run(self):
+        while not self.stopping.wait(1):
+            try:
+                self.tick()
+            except Exception:
+                pass
+
+    def tick(self):
+        key = self.key_fn()
+        if key != self.key:
+            self.key, self.text, self.piece, self.at, self.due, self.fails = key, "", None, 0, 0, 0
+        now = time.time()
+        if not key or key not in radio.FEEDS or now < self.due:
+            if self.text and self.fails and now - self.at > self.STALE:   # a feed gone quiet, not one waiting for the piece's end
+                self.text, self.piece = "", None
+            return
+        p = radio.piece(key)
+        now = time.time()
+        if key != self.key_fn():                                     # the station changed under the fetch
+            return
+        if p:
+            self.piece, self.text, self.at, self.fails = p, radio.fmt_piece(p), now, 0
+            until = p.get("until") or 0
+            self.due = min(until + 3, now + 6 * self.POLL) if until > now + 5 else now + self.POLL
+        else:
+            self.fails += 1
+            self.due = now + min(300, self.POLL * 2 ** min(self.fails, 4))
+
+    def current(self, key):
+        """The piece for this station, or '' (another station's text is never shown)."""
+        return self.text if key and key == self.key else ""
+
+    def stop(self):
+        self.stopping.set()
+
+
 class KeepAwake(threading.Thread):
     """Hold the screen awake while the music plays, until DISPLAY_SLEEP_SECS past the last key.
 
@@ -1367,6 +1446,8 @@ class App:
         self.showing = False                  # the light show is on the screen
         self.awake = KeepAwake(self.mpv, lambda: self.last_key, lambda: self.showing)
         self.awake.start()
+        self.playing = NowPlaying(lambda: (self.now or {}).get("radio"))   # the piece on the station, from its feed
+        self.playing.start()
         self.viz_mode = self.load_state().get("viz_mode", "bars")
         self.rng = random.Random()
         self.splash()
@@ -1636,8 +1717,9 @@ class App:
     def describe_now(self):
         sleep = sleep_tag(self.sleep, self.last_status).strip()
         if not self.now:
-            return {"title": "", "tracks": [], "radio": False, "sleep": sleep}
+            return {"title": "", "tracks": [], "radio": False, "sleep": sleep, "piece": ""}
         return {"title": self.now.get("title") or "", "radio": bool(self.now.get("radio")), "sleep": sleep,
+                "piece": self.playing.current(self.now.get("radio")),
                 "tracks": [t.get("title") or "" for t in self.now.get("tracks") or []]}
 
     def toggle_remote(self):
@@ -2448,10 +2530,12 @@ class App:
     def probe_station(self, s_):
         self.loading(f"probing {s_['name']}...")
         kv, err = radio.ffprobe(s_["url"])
+        p = radio.piece(s_["key"])
+        feed = f"  piece: {radio.fmt_piece(p)}" if p else ("  (no feed for this station)" if s_["key"] not in radio.FEEDS else "")
         if err:
-            self.say(f"{s_['name']}: {err}", 10)
+            self.say(f"{s_['name']}: {err}{feed}", 10)
         else:
-            self.say(f"{s_['name']}: {radio.fmt_probe(kv)}", 15)
+            self.say(f"{s_['name']}: {radio.fmt_probe(kv)}{feed}", 15)
 
     def push_dates(self, year, select_date=None, collection=gd.DEFAULT_COLLECTION):
         who = "" if collection == gd.DEFAULT_COLLECTION else f"{COLLECTIONS[collection]['title']} "
@@ -2626,8 +2710,8 @@ class App:
             if not (st and self.now):
                 return "stopped"
             t = self.now["tracks"][st["pos"]] if st["pos"] < len(self.now["tracks"]) else {"title": "?"}
-            name = st.get("media_title") if self.now.get("radio") and st.get("media_title") not in (None, "") \
-                and st["media_title"] not in t["src"] else t["title"]
+            name = (self.playing.current(self.now["radio"]) or stream_title(st, t) or t["title"]) \
+                if self.now.get("radio") else t["title"]
             note = f"  {self.msg}" if self.msg and time.time() < self.msg_until else volume_tag(st)
             return f"{self.now['title']}  ·  {name}  {fmt_time(st['time'])}" + ("  ⏸" if st["paused"] else "") + note
 
@@ -2722,8 +2806,8 @@ class App:
             dac = f"  DAC {rate / 1000:g}k" if rate else ""
             dac += volume_tag(st) + sleep_tag(self.sleep, st)
             if self.now.get("radio"):
-                icy = st.get("media_title") or ""
-                if not icy or icy in t["src"]:  # FLAC Icecast streams carry no ICY title; mpv falls back to the filename
+                icy = self.playing.current(self.now["radio"]) or stream_title(st, t)   # the feed's piece, else the stream's own title
+                if not icy:
                     icy = "(no now-playing metadata on this stream)"
                 line1 = f" {state} {self.now['title']}  ·  {icy}"
                 line2 = f"   {fmt_time(st['time'])}  {quality(st) or t['how']}{dac}"
@@ -3230,6 +3314,7 @@ class App:
             pass                     # fall through and put everything back
         self.save_position()
         self.awake.stop()
+        self.playing.stop()
         self.awake.join(2)        # drop the idle inhibitor before curses lets go
         if self.sleep and self.sleep.get("fading"):
             self.mpv.set_volume(self.sleep["vol"])
@@ -3344,8 +3429,8 @@ class Remote(threading.Thread):
         if st:
             pos = st["pos"]
             track = tracks[pos] if pos < len(tracks) else (st.get("media_title") or "")
-            if d.get("radio") and st.get("media_title"):
-                track = st["media_title"]
+            if d.get("radio"):
+                track = d.get("piece") or stream_title(st) or track
             out.update({"pos": pos, "count": st["count"], "track": track, "time": st["time"], "dur": st["dur"],
                         "paused": st["paused"], "volume": st.get("volume"), "mute": st.get("mute")})
         return out
@@ -3451,6 +3536,10 @@ def _cli_play(a, mpv):
             else:
                 print(f"{'⏸' if st['paused'] else '▶'} {st.get('media_title') or ''}  {fmt_time(st['time'])} / {fmt_time(st['dur'])}"
                       f"  {st['pos'] + 1}/{st['count']}{volume_tag(st)}")
+                state = load_state()
+                if state.get("last") == "radio" and state.get("radio") in radio.FEEDS:
+                    p = radio.piece(state["radio"])
+                    print(f"  piece: {radio.fmt_piece(p)}" if p else "  piece: (the station's feed is quiet)")
         else:
             mpv.cmd({"pause": "cycle", "next": "playlist-next", "prev": "playlist-prev"}[a.what], *(["pause"] if a.what == "pause" else []))
             print(a.what)
@@ -3506,6 +3595,12 @@ def cli_remote(argv):
     mpv = Mpv()
     mpv.start(detach=True)
 
+    def radio_key():
+        st = load_state()
+        return st.get("radio") if st.get("last") == "radio" else None
+    playing = NowPlaying(radio_key)         # the piece, as in the TUI; the key comes from state.json
+    playing.start()
+
     def describe():
         pl = mpv.get("playlist") or []
         st = load_state()
@@ -3514,7 +3609,8 @@ def cli_remote(argv):
         if len(titles) != len(pl):
             titles = [os.path.basename(urllib.parse.unquote(e.get("filename") or "")) for e in pl]
         return {"title": q.get("title") or (st.get("date") or "") + " " + (st.get("identifier") or "") if pl else "",
-                "tracks": titles, "radio": st.get("last") == "radio"}
+                "tracks": titles, "radio": st.get("last") == "radio",
+                "piece": playing.current(st.get("radio")) if st.get("last") == "radio" else ""}
     r = Remote(mpv, describe, port=a.port)
     r.start()
     print(f"remote at {r.url()}  ({'adopted the running' if mpv.adopted else 'started an idle'} mpv; Ctrl-C stops serving)")
