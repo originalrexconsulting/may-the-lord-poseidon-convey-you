@@ -22,7 +22,7 @@ stopped, the show under the cursor) to ~/.cache/deadtui/bookmarks.json; ↵ play
 there, x unpins. `Stats`: history.jsonl added up (tracks, shows, hours, most played songs
 and years, the longest Dark Star heard). `i` (outside the radio list) shows the taper's
 notes and the reviews of the show under the cursor or the one playing.
-Home rows in detail: `♪ Classical radio` (radio.py's lossless stations);
+Home rows in detail: `♪ Classical radio` (radio.py's 52 stations, six of them FLAC);
 `Firesign Theatre` and `Jokes` (LPs, one 24-bit FLAC per side, from library vinyl
 transfers); `Tears` (the weepers: ↵ on a song runs the song search across every
 show); `History` (every track played, newest first, from

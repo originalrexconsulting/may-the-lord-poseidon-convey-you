@@ -1,7 +1,7 @@
 # May The Lord Poseidon Convey You
 
-A terminal player for the archive.org Grateful Dead collection, and the audio
-plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip: run the scripts
+A terminal player for the archive.org Grateful Dead collection and for classical radio
+streams, and the audio plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip: run the scripts
 from a clone, or download one self-contained build from
 [Releases](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases).
 
@@ -22,7 +22,8 @@ scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
 scripts/deadviz.py                            # the light show: 24 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
                                               # the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
-scripts/radio.py                              # lossless classical radio stations
+scripts/radio.py                              # 52 classical radio stations, six of them FLAC, sorted by what they sound like;
+                                              # where each publishes the piece it is playing
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
 
@@ -36,7 +37,9 @@ another; songs looked for before stay on the menu and list at once), Random show
 run in order), On the air (the Grateful Dead Hour, Dead to the World, the KFOG New Year's
 broadcast), History, Bookmarks (`*` pins a show or the second you are at), Stats (what
 History adds up to) and Now Playing; shows the taper's notes and the reviews of any source
-(`i`); has a sleep timer that fades the gain over its last minute (`t`) and a phone
+(`i`); trades a streamed song for the night it came from, at the same second, so the set
+list goes on (`o`); steps the volume (`+`/`-`, `m` mutes, the level is remembered); has a
+sleep timer that fades the gain over its last minute (`t`) and a phone
 remote on the LAN (`R`: play, pause, next, seek, volume, sleep and the queue on one page);
 adopts an mpv it finds already running (q keeps the music, Q stops it); and starts with
 Poseidon, trident raised. `poseidon play 1977-05-08` plays without the TUI, so cron can
@@ -78,10 +81,11 @@ The Jokes menu and the radio list:
 <img src="docs/screenshots/jokes.svg" width="900" alt="Jokes: the battery bit and sixteen comedy LPs">
 <img src="docs/screenshots/radio.svg" width="900" alt="classical radio stations; Naim Classical playing, the piece named in the status line">
 
-The status line names the piece even on the FLAC stations, whose streams carry no
-title: the station publishes it out of band (its Icecast status page, a broadcaster's
-now-playing API) and the player asks there. `poseidon radio title` lists what every
-station with a feed is playing right now.
+The status line names the piece on the stations that publish it out of band (an Icecast
+status page, a broadcaster's now-playing API), which is how Naim and both Rondo channels
+get a title although their FLAC streams carry none; the other stations show what the
+stream itself says. `poseidon radio title` lists what every station with a feed is
+playing right now.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
