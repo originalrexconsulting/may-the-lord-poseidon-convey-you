@@ -171,7 +171,13 @@ lists it from the shell; identification by ear was dropped since AcoustID cannot
 clip from the middle of a movement; and the splash screenshot retaken with Poseidon's
 eyes the colour of the water, as the code has had them since `v2026.09.19.2`; all four
 runners in 79 seconds end to end, the slowest the Intel Mac at 60, the publish job in
-10, six assets).
+10, six assets) and `v2026.10.04.3` (Sector Nota loses its feed row: its three mounts carry one
+programme, the FLAC 2.5 s behind the MP3s by envelope correlation, but the titles on
+nota-160 and nota-mp3 and the site's own nowplaying-nota.txt sat frozen for an hour and a
+half while the Jazz channel's moved, and a wrong piece is worse than the placeholder; the
+README says classical radio beside the Dead collection, counts the 52 stations, and
+catches up with `o` and the volume keys; all four runners in 91 seconds end to end, the
+slowest the Intel Mac at 70, the publish job in 12, six assets).
 
 ## If CI cannot publish
 
