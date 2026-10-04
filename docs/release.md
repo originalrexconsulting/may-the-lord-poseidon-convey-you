@@ -152,7 +152,14 @@ plays one track per show and now carries each track's night, so `o` trades the s
 that whole show at the same track and the same second and the set list goes on; on a row
 of the queue, that row's night; the night rides in the saved queue and in History, where
 ↵ on a streamed song plays its night from the song on; all four runners in 80 seconds end
-to end, the slowest the Intel Mac at 78, the publish job in 15, six assets).
+to end, the slowest the Intel Mac at 78, the publish job in 15, six assets) and
+`v2026.10.04.1` (`o` keeps the song playing while the night is built around it: the first
+cut reloaded the file and seeked back, and a stream took a breath doing it, which the owner
+heard as a short pause; mpv's `playlist-clear` keeps the playing entry, so `Mpv.surround`
+puts the night's tracks before and after it and the file plays on untouched, the clock
+running 300.3, 300.5, 301.0 through the keypress on a sandboxed mpv against real
+archive.org streams; all four runners in 63 seconds end to end, the slowest the Intel Mac
+at 62, the publish job in 12, six assets).
 
 ## If CI cannot publish
 
