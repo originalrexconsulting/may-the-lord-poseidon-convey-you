@@ -76,6 +76,7 @@ scripts/May-The_Lord_Poseidon-Convey-You.py   # (or scripts/deadtui.py) ↵ open
 scripts/poseidon.py play 1977-05-08 --song "Morning Dew"   # play without the TUI; also random, <identifier>, radio <station|random>,
 scripts/poseidon.py play stop | pause | next | prev | status   # and the running player's controls
 scripts/poseidon.py remote                                  # the phone remote for a player started without the TUI
+scripts/poseidon.py --host tiro                             # the player on another box: mpv and parec there, the TUI and the show here (any verb; remembered)
 scripts/deadviz.py     # light show on its own, against whatever PipeWire is playing
 ```
 
