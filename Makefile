@@ -26,7 +26,7 @@ UPEX        := $(DIST)/poseidon-$(VERSION).pex
 SCIE_NAME   := $(DIST)/poseidon-$(VERSION)
 # pex appends -<os>-<arch> to SCIE_NAME (--scie-name-style platform-file-suffix)
 
-.PHONY: venv stage pex scie dist check check-src smoke-pex smoke-scie clean
+.PHONY: venv stage pex scie dist check check-src check-remote smoke-pex smoke-scie clean
 
 $(PEX):
 	$(PYTHON) -m venv $(VENV) && $(VENV)/bin/pip install --quiet pex==$(PEX_VERSION)
@@ -60,7 +60,11 @@ check-src:
 	$(PYTHON) -m py_compile scripts/*.py
 	test -L scripts/deadtui.py && test "$$(readlink scripts/deadtui.py)" = May-The_Lord_Poseidon-Convey-You.py
 
-check: check-src smoke-pex smoke-scie
+# --host mode against tests/fake-ssh, in a throwaway HOME (tests/remote_smoke.py says how)
+check-remote:
+	$(PYTHON) tests/remote_smoke.py
+
+check: check-src check-remote smoke-pex smoke-scie
 
 # Smoke tests run against a throwaway HOME and no XDG_RUNTIME_DIR: they must never touch
 # a real ~/.cache/deadtui/state.json or a running mpv.
