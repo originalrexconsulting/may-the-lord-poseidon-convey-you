@@ -1583,6 +1583,7 @@ class App:
         self.mpv = Mpv(self.host)
         self.reconnecting = None      # the thread bringing the ssh link back, while it is down
         self.last_reconnect = 0
+        self.host_error = None        # why the box cannot be reached, shown until it can
         self.stack = []
         self.msg = ""
         self.msg_until = 0
@@ -2995,6 +2996,8 @@ class App:
         srch = lvl.ctx.get("search")
         if time.time() < self.msg_until and self.msg:
             self.put(y + 3, 0, f" {self.msg}"[:w - 1], curses.color_pair(3))
+        elif self.host and not self.mpv.sock and self.host_error:
+            self.put(y + 3, 0, f" {self.host_error}  (poseidon doctor shows what the box has)"[:w - 1], curses.color_pair(4))
         elif srch and not srch.done and srch.stale:
             self.put(y + 3, 0, f" from the cache; looking for new nights: {srch.checked}/{srch.total or '?'} dates checked, "
                                f"{srch.new} new"[:w - 1], curses.color_pair(3))
@@ -3440,9 +3443,10 @@ class App:
 
         def go():
             try:
-                self.mpv.reconnect()
-            except OSError:
-                pass
+                self.mpv.start()            # the master back, the player adopted, or started afresh if the box rebooted
+                self.host_error = None
+            except OSError as e:
+                self.host_error = str(e)
         self.reconnecting = threading.Thread(target=go, daemon=True)
         self.reconnecting.start()
 
@@ -3453,10 +3457,16 @@ class App:
                 self.adopt_playlist()          # its volume is whatever it was left at; the status line shows it
             elif self.state.get("volume") is not None:
                 self.mpv.set_volume(self.state["volume"])
-        except FileNotFoundError:
-            self.say("mpv is not installed (apt install mpv / brew install mpv)", 60)
+        except FileNotFoundError as e:
+            if self.host:
+                self.host_error = str(e)
+            else:
+                self.say("mpv is not installed (apt install mpv / brew install mpv)", 60)
         except Exception as e:
-            self.say(f"mpv failed to start: {e}", 30)
+            if self.host:
+                self.host_error = str(e)       # stays on the screen until the box answers
+            else:
+                self.say(f"mpv failed to start: {e}", 30)
         if self.state.get("remote"):
             self.toggle_remote()               # it was on last time: back on, same port
         if self.host:
