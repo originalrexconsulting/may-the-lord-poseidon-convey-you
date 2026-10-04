@@ -1103,6 +1103,21 @@ class Mpv:
             self.cmd("playlist-move", n - 1, i)
         self.cmd("set_property", "pause", False)
 
+    def surround(self, srcs, start):
+        """Rebuild the playlist around the file that is playing, without touching it: srcs[start]
+        is that file, the rest go before and after it. The sound never stops (o on a song stream)."""
+        self.cmd("playlist-clear")                    # everything but the playing entry
+        for s in srcs[start + 1:]:
+            self.cmd("loadfile", s, "append")
+        for i, s in enumerate(srcs[:start]):
+            self.cmd("loadfile", s, "append")
+            n = self.get("playlist-count", 1)
+            self.cmd("playlist-move", n - 1, i)
+
+    def playing_file(self):
+        """The path or URL mpv is playing now, as it was given."""
+        return self.get("path")
+
     def status(self):
         pos = self.get("playlist-pos", -1)
         if pos is None or pos < 0:
@@ -2351,8 +2366,8 @@ class App:
 
         A song stream (a random Dark Star after another, every version in date order, Rain
         and Snow) plays one track per show, and each track knows its night (slim_doc, set
-        where the stream is built). o trades the stream for that whole show, at the same track
-        and the same second, so the set list goes on from the song. On a row of the queue it
+        where the stream is built). o trades the stream for that whole show around the song
+        playing, which plays on without a beat missed, so the set list goes on. On a row of the queue it
         is that row's night; anywhere else, the one playing. A show playing already is its own
         night: o just shows the queue, like w."""
         lvl = self.stack[-1]
@@ -2380,7 +2395,9 @@ class App:
         seek = st.get("time") if playing and st else None
         idx = int(track.get("track") or 0)
         self.loading(f"{doc.get('date', doc['identifier'])}: the whole night from here...")
-        self.play_doc(doc, idx, seek_to=seek)
+        # the song playing is track idx of its night, the same file: the playlist is rebuilt
+        # around it and it plays on without a beat missed; any other case loads the night
+        self.play_doc(doc, idx, seek_to=seek, around=self.mpv.playing_file() if playing else None)
         if self.now and self.now.get("doc") is doc:                # it took: the stream's queue is gone
             if lvl.kind == "queue":
                 self.pop()
@@ -2540,7 +2557,9 @@ class App:
 
     # ---- playback
 
-    def play_doc(self, doc, start=0, seek_to=None):
+    def play_doc(self, doc, start=0, seek_to=None, around=None):
+        """Play the show from track `start`. `around` is the file playing now when it is track
+        `start` of this show already: the playlist is rebuilt around it and it plays on."""
         try:
             tracks, meta = tracks_for(doc)
         except Exception as e:
@@ -2550,6 +2569,11 @@ class App:
             self.say("no playable files in this item")
             return
         self.now = {"doc": doc, "tracks": tracks, "title": show_title(doc, meta)}
+        if around and 0 <= start < len(tracks) and tracks[start]["src"] == around:
+            self.mpv.surround([t["src"] for t in tracks], start)
+            self.pending_seek = None
+            self.save_state(doc, start, seek_to)
+            return
         self.mpv.play([t["src"] for t in tracks], start)
         self.pending_seek = seek_to if seek_to and seek_to > 5 else None
         self.save_state(doc, start, self.pending_seek)
