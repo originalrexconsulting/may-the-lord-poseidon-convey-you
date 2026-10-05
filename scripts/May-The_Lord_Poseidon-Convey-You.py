@@ -1155,7 +1155,20 @@ class Mpv:
             self.host.ensure()
             if self.adopt():
                 return
-            self.host.sock_unlink()       # whatever is there, nothing answers on it
+            # A failed probe is not proof that nothing is there: the link may have stalled, or the
+            # answer came late. The box is asked whether an mpv holds the socket before anything
+            # replaces it; on 2026-10-04 a reconnect took "nothing there" at its word, unlinked the
+            # socket and started a second mpv, and the one with the music played on out of reach.
+            alive = self.host.mpv_alive()
+            if alive is None:
+                raise OSError(f"{self.host.name} is not answering")
+            if alive:
+                for _ in range(20):
+                    time.sleep(0.25)
+                    if self.adopt():
+                        return
+                raise OSError(f"mpv on {self.host.name} is running but not answering; not starting another")
+            self.host.sock_unlink()       # the file an mpv left behind when it quit
             self.host.start_mpv()
             for _ in range(100):
                 if self.adopt():
@@ -1193,25 +1206,39 @@ class Mpv:
 
     def probe(self):
         """A fresh connection, if an mpv answers on the socket; None when nothing does (mpv leaves
-        its socket file behind when it quits, so the file alone says nothing)."""
+        its socket file behind when it quits, so the file alone says nothing).
+
+        mpv broadcasts its events to every client, a new one included, so the first line in may
+        be `start-file` or a radio stream's `metadata-update` rather than the answer: read on until
+        the answer comes (it used to stop at the first newline, and a live player changing tracks
+        read as "nothing there" one probe in a hundred, 2026-10-04). Over the link the wait is
+        longer: the forward is a network round trip, and a slow answer is not an absent player."""
+        deadline = time.time() + (2.0 if self.host else 0.5)
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(0.5)
+            sock.settimeout(max(0.1, deadline - time.time()))
             sock.connect(self.path)
             sock.sendall(b'{"command":["get_property","playlist-count"],"request_id":1}\n')
             data = b""
-            while b"\n" not in data:
+            while True:
+                while b"\n" in data:
+                    line, data = data.split(b"\n", 1)
+                    try:
+                        if line and json.loads(line).get("request_id") == 1:
+                            return sock
+                    except ValueError:
+                        pass
+                left = deadline - time.time()
+                if left <= 0:
+                    raise OSError("no answer")
+                sock.settimeout(left)
                 chunk = sock.recv(65536)
                 if not chunk:
                     raise OSError("closed")
                 data += chunk
-            ok = any(json.loads(l).get("request_id") == 1 for l in data.split(b"\n") if l)
-        except (OSError, ValueError):
-            return None
-        if not ok:
+        except OSError:
             sock.close()
             return None
-        return sock
 
     def reconnect(self):
         """The link to the box dropped: the master back up, the player adopted again. It never stopped."""
@@ -1369,8 +1396,8 @@ class Mpv:
                 sock.close()
                 time.sleep(0.1)
         if self.host:
-            if told:
-                self.host.sock_unlink()       # the file mpv left behind on the box
+            if told and self.host.mpv_alive() is False:
+                self.host.sock_unlink()       # the file mpv left behind on the box; never a live player's
         elif os.path.exists(self.path):
             os.unlink(self.path)
 
@@ -3790,8 +3817,9 @@ def cli_play(argv):
     mpv = Mpv(poseidon.host())
     try:
         return _cli_play(a, mpv)
-    except FileNotFoundError as e:
-        sys.exit(str(e) if mpv.host else "mpv is not installed (apt install mpv / brew install mpv)")
+    except OSError as e:                  # the box not answering, its player not answering, or no mpv here
+        sys.exit(str(e) if mpv.host or not isinstance(e, FileNotFoundError)
+                 else "mpv is not installed (apt install mpv / brew install mpv)")
     except OSError as e:                      # the ssh link to the box
         sys.exit(str(e))
     finally:

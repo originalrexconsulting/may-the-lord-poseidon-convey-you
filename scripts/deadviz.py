@@ -176,7 +176,9 @@ class Capture(threading.Thread):
             self.error = cmd
             return
         try:
-            self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            # stdin from /dev/null: with the tap on a box the command is ssh, which forwards its stdin,
+            # and inherited from the show that is the terminal, so it took keys meant for curses
+            self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         except OSError as e:
             self.error = f"{name}: {e}"
             return

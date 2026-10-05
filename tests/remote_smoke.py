@@ -107,11 +107,32 @@ def main():
         check(r.returncode == 0 and r.stdout.strip() == "idle", "play status beside a running master", r.stdout + r.stderr)
         check(alive(pid_in(host.ctl)), "play status left the TUI's master alone")
 
-        master, relay = pid_in(host.ctl), pid_in(host.ctl + ".fwd")
-        os.kill(master, signal.SIGKILL)
+        def mpvs():
+            r = subprocess.run(["pgrep", "-f", "--", "(^|/)mpv .*--input-ipc-server=" + remote_sock + "$"], capture_output=True, text=True)
+            return len(r.stdout.split())
+
+        # the forward is gone but the player is not: start() must not take "nothing answers" at its
+        # word, unlink the box's socket and start a second mpv over the one still playing
+        relay = pid_in(host.ctl + ".fwd")
         os.kill(relay, signal.SIGKILL)
         time.sleep(0.3)
-        check(mpv.get("playlist-count") is None and mpv.sock is None, "a dropped link is noticed")
+        check(mpv.get("playlist-count") is None and mpv.sock is None, "a dropped forward is noticed")
+        t0 = time.time()
+        try:
+            mpv.start()
+            check(False, "start over a dead forward raised")
+        except OSError as e:
+            check("running but not answering" in str(e), "start over a dead forward: refuses to start another", str(e))
+        check(mpvs() == 1, f"start over a dead forward: still one mpv on the box ({mpvs()})")
+        check(host.mpv_alive() is True and host.sock_present(), "the box: its mpv alive, its socket still there")
+        check(time.time() - t0 < 10, f"start over a dead forward: gave up in {time.time() - t0:.1f}s")
+
+        master, relay = pid_in(host.ctl), pid_in(host.ctl + ".fwd")
+        os.kill(master, signal.SIGKILL)
+        if alive(relay):
+            os.kill(relay, signal.SIGKILL)
+        time.sleep(0.3)
+        check(mpv.sock is None and not mpv.adopt(), "a dropped link is noticed")
         check(mpv.reconnect() and mpv.get("playlist-count") == 0, "reconnect: new master, forward, adopted")
         check(alive(pid_in(host.ctl)) and pid_in(host.ctl) != master, "reconnect: a new master")
 
