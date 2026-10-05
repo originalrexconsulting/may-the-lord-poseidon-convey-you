@@ -205,7 +205,20 @@ each over the forwarded socket, and a stalled link made every one wait out three
 `Mpv.get_many()` pipelines the twelve into one round trip, the title bar keeps the answer for
 half a second, and over the link three silent seconds mark the socket dead so the reconnect
 takes over; locally fifty status calls went from 12 to 6 ms; all four runners in 132 seconds
-end to end, the slowest the Intel Mac at 113, the publish job in 10, six assets).
+end to end, the slowest the Intel Mac at 113, the publish job in 10, six assets) and
+`v2026.10.04.7` (two mpvs on tiro on the same socket, the music on the one nobody could
+reach: a restart from rexdev failed to adopt the player, took "nothing answers" at its word,
+`rm -f`'d the box's socket and started another; `Mpv.probe()` stopped at the first newline
+and mpv broadcasts its events to a fresh client, so a live player changing tracks read as
+absent one probe in a hundred, and a stalled link read the same; the probe now reads on
+until the answer with its request id, and `Host.mpv_alive()` asks the box with `pgrep`
+before anything unlinks the socket, so a player that is there but not answering is left
+alone and the reconnect tries again; ssh forwarded the terminal's stdin to the box's
+commands, the show's parec among them, and took keystrokes meant for curses, so every ssh the
+TUI runs gets `/dev/null`; `poseidon doctor --host` runs the audio check, and its WirePlumber
+fix, on the box as `host audio cards` by sending that section of poseidon.py to its python3;
+all four runners in 64 seconds end to end, the slowest the Intel Mac at 47, the publish job
+in 14, six assets).
 
 ## If CI cannot publish
 
