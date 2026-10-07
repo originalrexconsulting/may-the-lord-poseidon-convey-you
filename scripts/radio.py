@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""radio.py - lossless (FLAC) classical internet radio through Strawberry.
+"""radio.py - lossless (FLAC) classical internet radio through Strawberry; college and public radio too.
 
 Stock python3 only. Needs ffprobe (probe/now) and a running Strawberry.
 
@@ -32,9 +32,15 @@ playlist API (D-dur and Vltava answer "quiet" more often than not). Identifying 
 music by ear was looked at and dropped: AcoustID cannot match a clip from the middle
 of a movement, by design, and the alternatives are unofficial or paid.
 
+College and public radio (2026-10-07). COLLEGE (KALX, KFJC, KZSU... WFMU, WREK) and
+PUBLIC (KPFA, KPOO, KALW, KQED... KEXP, WWOZ) are two more lists, the Bay Area first;
+LISTS names the three and ALL is every station. `play kalx` finds a key in any list,
+`play college` or `play public` picks a random station from that list, `random` stays
+classical. These streams carry their own ICY titles, so no FEEDS rows are needed.
+
 Examples:
 
-  radio.py list                 # stations
+  radio.py list                 # stations, the three lists
   radio.py probe                # codec / rate / depth / now-playing for each
   radio.py title                # the piece on every station with a feed; title naim for one
   radio.py play naim            # start Naim Classical in the Radio tab
@@ -182,6 +188,139 @@ STATIONS = {
     "operavore": ("WQXR Operavore", "https://stream.wqxr.org/operavore",
               "MP3 128/48", "WQXR's all-opera stream."),
 }
+
+# College and public radio (2026-10-07), two more lists for the TUI's home screen and
+# `play radio <key>`. Same tuple as STATIONS. These are ordered by where they are, the
+# Bay Area first, not by sound: the point of KALX is KALX. Every stream verified with
+# ffprobe and a few seconds of mpv --ao=null on 2026-10-07; the format is the mount's
+# own icy-br and ice-audio-info, measured where the server does not say.
+COLLEGE = {
+    # ---- the Bay
+    "kalx": ("KALX", "https://stream.kalx.berkeley.edu:8443/kalx-320.aac",
+             "AAC 320/48", "Berkeley, 90.7. Freeform, student and community DJs since 1962. Best mount on this list."),
+    "kfjc": ("KFJC", "http://netcast.kfjc.org/kfjc-320k-aac",
+             "AAC 320/48", "Foothill College, Los Altos Hills, 89.7. Freeform at the far end; the month-long specials."),
+    "kzsu": ("KZSU", "http://kzsu-streams.stanford.edu/kzsu-1-256.mp3",
+             "MP3 256/48", "Stanford, 90.1."),
+    "ksjs": ("KSJS", "http://streaming.ksjs.sjsu.edu:8000/live",
+             "MP3 256/48", "San José State, 90.5. Jazz, electronic and rock by the hour."),
+    "kscu": ("KSCU", "http://kscu.streamguys1.com/live",
+             "AAC 128/48", "Santa Clara University, 103.3. The Underground Sound."),
+    "kdvs": ("KDVS", "https://listen.kdvs.org/stream",
+             "AAC 128/48", "UC Davis, 90.3. Freeform."),
+    "kzsc": ("KZSC", "https://kzscfms1-geckohost.radioca.st/kzschigh",
+             "MP3 128/44.1", "UC Santa Cruz, 88.1."),
+    # ---- the rest of California, then the coast
+    "kcsb": ("KCSB", "https://kcsb.streamguys1.com/live",
+             "MP3 128/44.1", "UC Santa Barbara, 91.9."),
+    "kcpr": ("KCPR", "https://ice9.securenetsystems.net/KCPR1",
+             "AAC 64/44.1", "Cal Poly, San Luis Obispo, 91.3."),
+    "kxlu": ("KXLU", "http://kxlu.streamguys1.com/kxlu-hi",
+             "MP3 320/44.1", "Loyola Marymount, Los Angeles, 88.9."),
+    "kspc": ("KSPC", "https://kspc.radioca.st/stream",
+             "MP3 192/48", "Pomona College, Claremont, 88.7."),
+    "kuci": ("KUCI", "http://streamer.kuci.org:8000/high",
+             "MP3 320/44.1", "UC Irvine, 88.9."),
+    "kwva": ("KWVA", "http://kwvaradio.uoregon.edu:8000/;",
+             "MP3 128/44.1", "University of Oregon, Eugene, 88.1."),
+    # ---- east
+    "whrb": ("WHRB", "http://stream.whrb.org:8000/whrb-mp3",
+             "MP3 128/44.1", "Harvard, 95.3. The orgies: one composer or one band for days at exam time."),
+    "wmbr": ("WMBR", "https://wmbr.org:8002/hi",
+             "MP3 128/44.1", "MIT, Cambridge, 88.1."),
+    "wkcr": ("WKCR", "https://wkcr.streamguys1.com/live",
+             "MP3 160/48", "Columbia, New York, 89.9. Jazz and classical; Bird Flight every morning for decades."),
+    "wnyu": ("WNYU", "https://www.wnyu-ice-cast-relay.com/wnyu.mp3",
+             "MP3 128/44.1", "NYU, 89.1."),
+    "wfmu": ("WFMU", "http://stream2.wfmu.org/freeform-high.aac",
+             "AAC 128/44.1", "Jersey City, 91.1. The freeform standard: Upsala College's until 1995, listener-run since."),
+    "wprb": ("WPRB", "http://wprb.streamguys1.com/live",
+             "AAC 96/44.1", "Princeton, 103.3."),
+    "wrct": ("WRCT", "http://stream.wrct.org/wrct-hi.mp3",
+             "MP3 128/48", "Carnegie Mellon, Pittsburgh, 88.3. (Measured; the mount says no rate.)"),
+    "wxyc": ("WXYC", "https://audio-mp3.ibiblio.org/wxyc.mp3",
+             "MP3 128/44.1", "UNC Chapel Hill, 89.3. The first station on the internet, November 1994."),
+    "wrek": ("WREK", "https://streaming.wrek.org/main/320kb.mp3",
+             "MP3 320/44.1", "Georgia Tech, Atlanta, 91.1. Student-run; jazz and the far corners."),
+    "whpk": ("WHPK", "https://whpk-stream.uchicago.edu/stream",
+             "MP3 256/44.1", "University of Chicago, 88.5."),
+}
+
+PUBLIC = {
+    # ---- the Bay
+    "kpfa": ("KPFA", "https://streams.kpfa.org:8443/kpfa_192",
+             "MP3 192/48", "Berkeley, 94.1. Pacifica's first, 1949; David Gans's Dead to the World, Wednesday nights."),
+    "kpoo": ("KPOO", "http://amber.streamguys.com:5220/xstream",
+             "MP3 128/44.1", "San Francisco, 89.5. Poor People's Radio since 1971: blues, jazz, reggae, the Fillmore's own."),
+    "kalw": ("KALW", "https://kalw-live.streamguys1.com/kalw",
+             "AAC 128/44.1", "San Francisco, 91.7. The Bay's first FM station (1941); NPR and local."),
+    "kqed": ("KQED", "https://hls.kqed.org/hls/kqed_app/playlist.m3u8",
+             "AAC 128/44.1", "San Francisco, 88.5, NPR. HLS; the plain MP3 mount is 32 kbps."),
+    "kcsm": ("KCSM", "http://ice7.securenetsystems.net/KCSM2",
+             "MP3 96/32", "San Mateo, 91.1. Jazz 91, the Bay's all-jazz station, from the College of San Mateo."),
+    "krcb": ("KRCB", "http://amber.streamguys.com:5540/live",
+             "AAC 128/44.1", "Rohnert Park, 104.9. North Bay Public Media."),
+    "kkup": ("KKUP", "https://kkup.streamguys1.com/live",
+             "AAC 64/44.1", "Cupertino, 91.5. Volunteer community radio since 1972."),
+    "kwmr": ("KWMR", "https://listen.kwmr.org/live",
+             "AAC 64/32", "Point Reyes Station, 90.5. West Marin's."),
+    # ---- the rest of California
+    "kzyx": ("KZYX", "http://kzyx.mcn.org:4000/kzyxlive",
+             "MP3 64/22.05", "Philo, Mendocino County, 90.7."),
+    "kmud": ("KMUD", "http://live.str3am.com:2470/live",
+             "MP3 128/48", "Garberville, 91.1. Redwood Community Radio, Humboldt."),
+    "kvmr": ("KVMR", "https://sslstream.kvmr.org:9433/aac96",
+             "AAC 96/44.1", "Nevada City, 89.5. Volunteer-run since 1978."),
+    "kcrw": ("KCRW", "https://streams.kcrw.com/kcrw_aac",
+             "AAC 256/44.1", "Santa Monica, 89.9. NPR by day, Morning Becomes Eclectic."),
+    "kcrwe24": ("KCRW Eclectic 24", "https://streams.kcrw.com/e24_aac",
+             "AAC 256/44.1", "KCRW's all-music stream, no news."),
+    "kpfk": ("KPFK", "http://stations.pacifica.org:7267/kpfk_128",
+             "MP3 128/44.1", "Los Angeles, 90.7, Pacifica."),
+    # ---- the Northwest
+    "kexp": ("KEXP", "https://kexp.streamguys1.com/kexp160.aac",
+             "AAC 160/44.1", "Seattle, 90.3, and the Bay's 92.7 (KEXC) since 2024. Listener-powered; the live sessions."),
+    "kboo": ("KBOO", "http://live.kboo.fm:8000/high",
+             "MP3 192/48", "Portland, 90.7. Community radio since 1968."),
+    "kbcs": ("KBCS", "http://stream.pacificaservice.org:8000/kbcs",
+             "MP3 128/44.1", "Bellevue, 91.3. Jazz, folk and blues."),
+    "knkx": ("KNKX", "https://knkx-live-a.edge.audiocdn.com/6284_128k",
+             "MP3 128/44.1", "Seattle-Tacoma, 88.5. Jazz and blues, NPR news."),
+    "kuow": ("KUOW", "https://playerservices.streamtheworld.com/api/livestream-redirect/KUOWFM_HIGH_MP3.mp3",
+             "MP3 96/44.1", "Seattle, 94.9, NPR."),
+    # ---- the rest of the country
+    "kutx": ("KUTX", "https://streams.kut.org/4428_192.mp3",
+             "MP3 192/44.1", "Austin, 98.9. The Austin music station, the University of Texas's."),
+    "wwoz": ("WWOZ", "http://wwoz-sc.streamguys.com/wwoz-hi.mp3",
+             "MP3 128/44.1", "New Orleans, 90.7. Jazz and heritage; the Jazz Fest broadcasts."),
+    "wbgo": ("WBGO", "https://ais-sa8.cdnstream1.com/3629_128.mp3",
+             "MP3 128/48", "Newark, 88.3. Jazz 88, all day."),
+    "wxpn": ("WXPN", "https://wxpn.xpn.org/xpnmp3hi",
+             "MP3 128/44.1", "Philadelphia, 88.5. World Cafe's home; Free at Noon."),
+    "wyep": ("WYEP", "https://wyep.org/stream",
+             "AAC 128/48", "Pittsburgh, 91.3."),
+    "wnyc": ("WNYC", "https://fm939.wnyc.org/wnycfm",
+             "MP3 96/32", "New York, 93.9, NPR. Brian Lehrer mornings."),
+    "wbai": ("WBAI", "http://stream.wbai.org:8000/wbai_128",
+             "MP3 64/24", "New York, 99.5, Pacifica. 64 kbps is all it serves."),
+    "wbur": ("WBUR", "http://wbur-sc.streamguys.com/wbur.aac",
+             "AAC 64/48", "Boston, 90.9, NPR."),
+    "wamu": ("WAMU", "https://wamu.cdnstream1.com/wamu.mp3",
+             "MP3 96/44.1", "Washington, 88.5, NPR."),
+}
+
+# The lists by name, in the order the TUI's home screen shows them, and every station at once.
+LISTS = {"classical": ("♪ Classical radio", STATIONS),
+         "college": ("College radio", COLLEGE),
+         "public": ("Public radio", PUBLIC)}
+ALL = {**STATIONS, **COLLEGE, **PUBLIC}
+
+
+def list_of(key):
+    """The list a station key belongs to: classical, college or public (classical for an unknown key)."""
+    return next((n for n, (_, d) in LISTS.items() if key in d), "classical")
+
+
 PLAYLIST = "Radio"
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
 DB = os.path.expanduser("~/.local/share/strawberry/strawberry/strawberry.db")
@@ -248,7 +387,7 @@ def _names(v):
 
 
 def _feed_icecast(key, mount):
-    u = urllib.parse.urlsplit(STATIONS[key][1])
+    u = urllib.parse.urlsplit(ALL[key][1])
     d = _get_json(f"{u.scheme}://{u.netloc}/status-json.xsl")
     src = d.get("icestats", {}).get("source", [])
     for s in [src] if isinstance(src, dict) else src:
@@ -419,15 +558,19 @@ def die(msg, code=1):
 
 
 def station(key):
+    """A station tuple for a key, a unique substring of a key or name, `random` (a classical
+    station), or a list's name (classical, college, public: a random station from it)."""
     k = key.lower()
     if k == "random":
         return random.choice(list(STATIONS.values()))
-    if k in STATIONS:
-        return STATIONS[k]
-    hits = [v for kk, v in STATIONS.items() if k in kk or k in v[0].lower()]
+    if k in LISTS:
+        return random.choice(list(LISTS[k][1].values()))
+    if k in ALL:
+        return ALL[k]
+    hits = [v for kk, v in ALL.items() if k in kk or k in v[0].lower()]
     if len(hits) == 1:
         return hits[0]
-    die(f"unknown station {key!r}; try: {' '.join(STATIONS)}")
+    die(f"unknown station {key!r}; try: {' '.join(ALL)}")
 
 
 def ffprobe(url, timeout=25):
@@ -511,21 +654,23 @@ def hw_params():
 
 # --------------------------------------------------------------------------- commands
 def cmd_list(_):
-    for k, (name, url, fmt, notes) in STATIONS.items():
-        print(f"{k:9} {name:24} {fmt:13} {notes}")
-        print(f"{'':9} {url}")
+    for title, d in LISTS.values():
+        print(f"---- {title}")
+        for k, (name, url, fmt, notes) in d.items():
+            print(f"{k:9} {name:24} {fmt:13} {notes}")
+            print(f"{'':9} {url}")
 
 
 def station_key(key):
-    """The STATIONS key for what station() accepts (a key, a unique substring, random)."""
+    """The ALL key for what station() accepts (a key, a unique substring, random, a list's name)."""
     s = station(key)
-    return next(k for k, v in STATIONS.items() if v is s)
+    return next(k for k, v in ALL.items() if v is s)
 
 
 def cmd_probe(args):
-    keys = [station_key(args.station)] if args.station else list(STATIONS)
+    keys = [station_key(args.station)] if args.station else list(ALL)
     for k in keys:
-        name, url, fmt, _ = STATIONS[k]
+        name, url, fmt, _ = ALL[k]
         kv, err = ffprobe(url)
         line = f"{name:24} {'DOWN: ' + err if err else fmt_probe(kv)}"
         p = piece(k)
@@ -534,9 +679,9 @@ def cmd_probe(args):
 
 def cmd_title(args):
     """The piece on each station with a feed, the way the TUI's status line shows it."""
-    keys = [station_key(args.station)] if args.station else [k for k in STATIONS if k in FEEDS]
+    keys = [station_key(args.station)] if args.station else [k for k in ALL if k in FEEDS]
     for k in keys:
-        name = STATIONS[k][0]
+        name = ALL[k][0]
         if k not in FEEDS:
             print(f"{name:24} (no feed; the stream's own title is all there is)")
             continue

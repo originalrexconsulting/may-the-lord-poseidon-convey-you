@@ -9,7 +9,7 @@ the DAC rate readout is Linux-only and simply stays blank elsewhere).
 Levels:  home  >  years  >  dates in a year  >  sources for a date  >  tracks
 The home screen is sectioned: Now (▶ Now playing, 🎲 Random show, 📅 This day), The Dead
 (the years, 🚌 Tours, Dark Star, Not Fade Away, Seastones, Rain and Snow, Tears, JGB),
-Not Dead (classical radio, 📻 On the air, Firesign, Jokes), Everything (History,
+Not Dead (classical, college and public radio, 📻 On the air, Firesign, Jokes), Everything (History,
 ★ Bookmarks, Stats). Section headers are skipped by the cursor.
 `📅 This day`: every Dead show played on today's month and day, any year (one query,
 the 31 dates OR'd; TOUR_LIST-style dates list, so ↵ sources, p best source, d fetch).
@@ -23,6 +23,10 @@ there, x unpins. `Stats`: history.jsonl added up (tracks, shows, hours, most pla
 and years, the longest Dark Star heard). `i` (outside the radio list) shows the taper's
 notes and the reviews of the show under the cursor or the one playing.
 Home rows in detail: `♪ Classical radio` (radio.py's 52 stations, six of them FLAC);
+`♪ College radio` (23 stations, KALX, KFJC and KZSU first, then the coast and the east:
+WFMU, WKCR, WHRB, WREK...) and `♪ Public radio` (28: KPFA, KPOO, KALW, KQED, KCSM and
+the North Bay first, then KCRW, KEXP, KBOO, WWOZ, WBGO, WXPN, the NPR flagships), the
+same list screen: ↵ tunes, the first row is a random station of that list, i probes;
 `Firesign Theatre` and `Jokes` (LPs, one 24-bit FLAC per side, from library vinyl
 transfers); `Tears` (the weepers: ↵ on a song runs the song search across every
 show); `History` (every track played, newest first, from
@@ -66,8 +70,9 @@ Keys:
                 every review with its stars); in the radio list, probe the station
   *             pin a bookmark: what is playing at this second, or the show under the cursor
   c             classical radio (radio.py's stations, lossless first); also the first
-                entry of the top-level list. Its first row tunes a random station and
-                parks the cursor on it. i probes a station.
+                entry of the top-level list, with college and public radio under it.
+                Each list's first row tunes a random station of it and parks the
+                cursor on it. i probes a station.
   r             resume the last thing played, at the position it was at
   w             what's playing: the whole current playlist (also the first top-level
                 row while something plays); ▶ marks the track, Enter jumps to one
@@ -128,7 +133,8 @@ The command line, no TUI (`poseidon play ...`, the next TUI start adopts the pla
   poseidon play 1977-05-08 [--song "Morning Dew"] [--source aud] [--track 3] [--volume 60]
   poseidon play random                  # a night rated 4+ from a random year, best source
   poseidon play <identifier>            # any archive.org item
-  poseidon play radio naim              # a station from radio.py; radio random picks one
+  poseidon play radio naim              # a station from radio.py (kalx, kpfa...); radio random picks a classical one,
+                                        # radio college | public a random one from that list
   poseidon play stop | pause | next | prev | status
 An mpv started this way is in its own session, so cron can run `poseidon play random`
 at 7 and `poseidon play stop` at 8 and the shell that started it may go away.
@@ -389,7 +395,10 @@ PREFER = ["matrix", "sbd", "aud", "other"]
 KIND_SHORT = {"matrix": "mtx", "sbd": "sbd", "aud": "aud", "other": "?"}
 STREAM_ORDER_OPEN = [".flac", ".mp3", ".ogg", ".shn"]
 STREAM_ORDER_RESTRICTED = [".mp3", ".ogg"]
-RADIO = "radio"  # sentinel entry at the top of the years list
+RADIO = "radio"  # the classical radio row on the home screen (and the sentinel of old state files)
+COLLEGE = "college"   # the college radio row (radio.COLLEGE)
+PUBLIC = "public"     # the public radio row (radio.PUBLIC)
+RADIO_ROWS = {"classical": RADIO, "college": COLLEGE, "public": PUBLIC}   # radio.LISTS name -> home row
 SPLASH_SECS = 2.0        # the Earth Shaker greets you at start; any key skips, 0 disables. SPLASH_STYLE picks the art.
 SPLASH_STYLE = "crowned"   # "crowned" (the keeper), "storm" (rising from the sea), or "random"
 SPLASHES = {
@@ -463,9 +472,11 @@ REMOTE_PORT = 8402       # the phone remote: R in the TUI, or poseidon remote; h
 EXTRA_STATIONS = {}
 
 
-def stations():
+def stations(group=None):
+    """The stations of one list (classical, college, public: radio.LISTS), or every station."""
+    src = radio.LISTS[group][1] if group else radio.ALL
     out = []
-    for key, (name, url, fmt, notes) in {**radio.STATIONS, **EXTRA_STATIONS}.items():
+    for key, (name, url, fmt, notes) in {**src, **(EXTRA_STATIONS if group in (None, "classical") else {})}.items():
         out.append({"key": key, "name": name, "url": url, "fmt": fmt, "notes": notes})
     return out
 
@@ -2063,7 +2074,7 @@ class App:
         (HDR, "The Dead"),
         YEARS_GD, FIND, TOURS, DARKSTAR, NOTFADE, SEASTONES, RAIN, TEARS, JGB,
         (HDR, "Not Dead"),
-        RADIO, ONAIR, FIRESIGN, JOKES,
+        RADIO, COLLEGE, PUBLIC, ONAIR, FIRESIGN, JOKES,
         (HDR, "Everything"),
         HIST, BOOKMARKS, STATS,
     ]
@@ -2084,6 +2095,8 @@ class App:
         TEARS: "Tears                the weepers: Stella Blue, Black Peter, Wharf Rat, Morning Dew...",
         JGB: "JGB                  Jerry Garcia Band, 1970-1995, and Legion of Mary, Garcia/Saunders, Reconstruction, the acoustic band",
         RADIO: "♪ Classical radio    lossless FLAC stations",
+        COLLEGE: "♪ College radio      KALX, KFJC, KZSU, KDVS, WFMU, WKCR, WREK... freeform, the Bay first",
+        PUBLIC: "♪ Public radio       KPFA, KPOO, KALW, KQED, KCSM, KEXP, WWOZ... Pacifica, community, NPR",
         FIRESIGN: "Firesign Theatre     the LPs, 24-bit vinyl transfers",
         JOKES: "Jokes                comedy LPs: Buckley, Bruce, Sahl, Newhart, Pryor, the Goons, Python...",
         HIST: "History              everything played, newest first",
@@ -2100,7 +2113,8 @@ class App:
         items = self.home_items()
         lvl = Level("home", "Poseidon", items, render, {"home": True})
         st = self.state
-        want = RADIO if st.get("last") == "radio" else SEASTONES if st.get("seastones") else ONAIR if st.get("onair") else (
+        want = RADIO_ROWS[radio.list_of(st.get("radio"))] if st.get("last") == "radio" else \
+            SEASTONES if st.get("seastones") else ONAIR if st.get("onair") else (
             (st.get("lp") if st.get("lp") in ALBUMS else FIRESIGN) if st.get("lp") else (
                 JGB if st.get("collection") == "JerryGarcia" else YEARS_GD))
         self.push(lvl, items.index(want) if want in items else items.index(YEARS_GD))
@@ -2786,21 +2800,33 @@ class App:
         self.play_doc(c, idx, seek_to=c["start"])
         self.say(f"✂ {c['title']}: {c['song']} from {fmt_time(c['start'])}", 8)
 
-    def push_radio(self, select_key=None):
+    def push_radio(self, select_key=None, group=None):
+        """One of the three station lists (radio.LISTS); `group` names it, else the list
+        `select_key` belongs to (the saved station), else classical."""
+        group = group or (radio.list_of(select_key) if select_key else "classical")
+
         def render(s_, w):
             if s_ == "random":
                 return "  🎲 A random station, straight into play (the dice land on its row)"
             right = f"  {s_['fmt']:13}"
             left = f"  {s_['name']:26} {s_['notes']}"
             return left[:max(0, w - len(right))].ljust(w - len(right)) + right
-        items = ["random"] + stations()
-        lvl = Level("radio", "♪ Classical radio", items, render)
+        items = ["random"] + stations(group)
+        lvl = Level("radio", radio.LISTS[group][0], items, render, {"group": group})
         sel = next((i for i, s_ in enumerate(items) if s_ != "random" and s_["key"] == select_key), 0) if select_key else 0
         self.push(lvl, sel)
 
+    def push_radio_row(self, group):
+        """A home row: the list, with the cursor on the saved station when it is in this list."""
+        key = self.state.get("radio")
+        self.push_radio(key if key and radio.list_of(key) == group else None, group)
+
     def random_station(self):
-        """Any station but the one playing; the cursor follows it when the radio list is open."""
-        pool = [s_ for s_ in stations() if s_["key"] != (self.now or {}).get("radio")] or stations()
+        """Any station of the open list but the one playing (classical when no list is open);
+        the cursor follows it when the radio list is open."""
+        lvl = self.stack[-1]
+        group = lvl.ctx.get("group", "classical") if lvl.kind == "radio" else "classical"
+        pool = [s_ for s_ in stations(group) if s_["key"] != (self.now or {}).get("radio")] or stations(group)
         s_ = self.rng.choice(pool)
         lvl = self.stack[-1]
         if lvl.kind == "radio" and not lvl.filter:
@@ -3214,8 +3240,8 @@ class App:
             return
         if lvl.kind == "home" and isinstance(item, tuple) and item[0] == HDR:
             return
-        elif lvl.kind == "home" and item == RADIO:
-            self.push_radio(self.state.get("radio"))
+        elif lvl.kind == "home" and item in (RADIO, COLLEGE, PUBLIC):
+            self.push_radio_row(next(g for g, row in RADIO_ROWS.items() if row == item))
         elif lvl.kind == "home" and item == YEARS_GD:
             self.push_years(gd.DEFAULT_COLLECTION)
         elif lvl.kind == "home" and item == JGB:
@@ -3318,8 +3344,8 @@ class App:
             return
         if lvl.kind == "home" and isinstance(item, tuple) and item[0] == HDR:
             return
-        elif lvl.kind == "home" and item == RADIO:
-            self.push_radio(self.state.get("radio"))
+        elif lvl.kind == "home" and item in (RADIO, COLLEGE, PUBLIC):
+            self.push_radio_row(next(g for g, row in RADIO_ROWS.items() if row == item))
         elif lvl.kind == "home" and item == YEARS_GD:
             self.push_years(gd.DEFAULT_COLLECTION)
         elif lvl.kind == "home" and item == JGB:
@@ -3915,7 +3941,7 @@ def cli_play(argv):
     p = argparse.ArgumentParser(prog="poseidon play", description="Play without the TUI: the next TUI adopts the player.")
     p.add_argument("what", help="YYYY-MM-DD, random, an archive.org identifier, radio <station>, "
                                "or stop | pause | next | prev | status")
-    p.add_argument("rest", nargs="*", help="the station key after radio (poseidon radio list)")
+    p.add_argument("rest", nargs="*", help="the station key after radio (poseidon radio list), or random, classical, college, public")
     p.add_argument("--song", help="start at the first track titled like this")
     p.add_argument("--track", type=int, default=1, help="start at this track number (1-based)")
     p.add_argument("--source", choices=["matrix", "sbd", "aud"], help="insist on this kind of source for a date")
@@ -3961,9 +3987,11 @@ def _cli_play(a, mpv):
     state = load_state()
     if a.what == "radio":
         key = (a.rest or [None])[0]
-        s_ = random.choice(stations()) if key == "random" else next((x for x in stations() if x["key"] == key), None)
+        s_ = random.choice(stations("classical")) if key == "random" else random.choice(stations(key)) if key in radio.LISTS \
+            else next((x for x in stations() if x["key"] == key), None)
         if not s_:
-            sys.exit("radio <station>: random, or one of " + ", ".join(x["key"] for x in stations()))
+            sys.exit("radio <station>: random, classical | college | public (a random one from that list), "
+                     "or one of " + ", ".join(x["key"] for x in stations()))
         key = s_["key"]
         mpv.start(detach=True)
         mpv.play([s_["url"]], 0)
