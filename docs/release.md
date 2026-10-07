@@ -225,7 +225,16 @@ in a trailing parenthesis when the station bothered, so the parser reads it that
 of calling the orchestra the composer; Rondo's Icecast titles arrive as UTF-8 read as
 Latin-1, "JoÃ£o Pires", and a latin-1 round-trip repairs them where the bytes survived; NPO
 named the conductor twice when the same person sat in two fields; all four runners in 77
-seconds end to end, the slowest the Intel Mac at 58, the publish job in 11, six assets).
+seconds end to end, the slowest the Intel Mac at 58, the publish job in 11, six assets) and `v2026.10.06.1` (a start with no `--host` that takes the box from state.json says so
+on the message line, "playing on tiro, the box named last time (--no-host plays here)", after
+rexdev's desk sat silent with the music in the cabinet; and a stream with no sound twelve
+seconds after it was asked for is reported in red, with one HEAD at the stream's host to tell
+"can't reach archive.org (timed out)" from "archive.org answers, the stream has not started",
+and "mpv could not open archive.org and stopped" when mpv drops the track, after archive.org
+went down and the 1985-06-24 show sat "playing" in silence; the Intel Mac job failed in
+`make scie` on a DNS lookup, `nodename nor servname provided, or not known`, two and a half
+minutes in while the other three runners finished in under a minute, was rerun on its own with
+`gh run rerun --job` in 107 seconds, and the publish job followed in 9, six assets).
 
 ## If CI cannot publish
 
