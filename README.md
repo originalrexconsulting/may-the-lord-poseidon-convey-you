@@ -1,7 +1,7 @@
 # May The Lord Poseidon Convey You
 
-A terminal player for the archive.org Grateful Dead collection and for classical radio
-streams, and the audio plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip: run the scripts
+A terminal player for the archive.org Grateful Dead collection and for classical, college
+and public radio streams, and the audio plumbing around it. Stock Python 3 (curses), mpv, PipeWire. No pip: run the scripts
 from a clone, or download one self-contained build from
 [Releases](https://github.com/originalrexconsulting/may-the-lord-poseidon-convey-you/releases).
 
@@ -25,7 +25,8 @@ scripts/gdarchive.py                          # search and download shows, tag t
 scripts/deadviz.py                            # the light show: 24 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
                                               # the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
 scripts/radio.py                              # 52 classical radio stations, six of them FLAC, sorted by what they sound like;
-                                              # where each publishes the piece it is playing
+                                              # where each publishes the piece it is playing; 23 college stations (KALX, KFJC,
+                                              # KZSU, WFMU, WKCR...) and 28 public ones (KPFA, KPOO, KALW, KQED, KEXP, WWOZ...)
 scripts/restore-playlist.py                   # snapshot / restore the mpv playlist
 ```
 
@@ -90,6 +91,15 @@ status page, a broadcaster's now-playing API), which is how Naim and both Rondo 
 get a title although their FLAC streams carry none; the other stations show what the
 stream itself says. `poseidon radio title` lists what every station with a feed is
 playing right now.
+
+`♪ College radio` and `♪ Public radio` sit under the classical row: the Bay Area's
+college stations first (KALX, KFJC, KZSU, KSJS, KSCU, KDVS, KZSC), then the coast and
+the east (KXLU, KUCI, WHRB, WMBR, WKCR, WNYU, WFMU, WPRB, WXYC, WREK...), and the
+Pacifica, community and NPR stations (KPFA, KPOO, KALW, KQED, KCSM, KRCB, KKUP, KWMR,
+KMUD, KVMR, KCRW, KPFK, KEXP, KBOO, WWOZ, WBGO, WXPN, WNYC, WBAI, WBUR...). Same list
+screen: ↵ tunes, the first row is a random station of that list, `i` probes one.
+`poseidon play radio kalx` tunes one from the shell; `radio college` or `radio public`
+picks a random one from that list.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
