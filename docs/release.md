@@ -218,7 +218,14 @@ commands, the show's parec among them, and took keystrokes meant for curses, so 
 TUI runs gets `/dev/null`; `poseidon doctor --host` runs the audio check, and its WirePlumber
 fix, on the box as `host audio cards` by sending that section of poseidon.py to its python3;
 all four runners in 64 seconds end to end, the slowest the Intel Mac at 47, the publish job
-in 14, six assets).
+in 14, six assets) and `v2026.10.06` (three feed fixes from a day of two-hourly samples of all
+18 station feeds, which found no composer-and-performer swap and no filename shown: Czech
+Radio's items carry the performers in `interpret` and the work in `track` with the composer
+in a trailing parenthesis when the station bothered, so the parser reads it that way instead
+of calling the orchestra the composer; Rondo's Icecast titles arrive as UTF-8 read as
+Latin-1, "JoÃ£o Pires", and a latin-1 round-trip repairs them where the bytes survived; NPO
+named the conductor twice when the same person sat in two fields; all four runners in 77
+seconds end to end, the slowest the Intel Mac at 58, the publish job in 11, six assets).
 
 ## If CI cannot publish
 
