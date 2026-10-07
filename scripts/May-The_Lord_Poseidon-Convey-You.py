@@ -114,6 +114,15 @@ Keys:
                 State, history and the phone remote live here now. `poseidon doctor`
                 shows what the box has; the status line shows @NAME, and says when the
                 link is down and being brought back (the music never stops for that).
+                A start with no --host that picks the box up from state.json says so on
+                the message line for a while ("playing on tiro, the box named last
+                time; --no-host plays here"): a desk gone silent because the music was
+                on a box in a cabinet is otherwise invisible (rexdev, 2026-10-06).
+  (no audio)    A stream that has not started STALL_SECS after it was asked for (mpv
+                holding the track with no time position, not paused: archive.org down,
+                a station off the air) is reported on the message line in red, with
+                one HEAD at the stream's host off the UI thread to say whether the host
+                answers at all; n/b skip the track, the message goes when sound comes.
 
 The command line, no TUI (`poseidon play ...`, the next TUI start adopts the player):
   poseidon play 1977-05-08 [--song "Morning Dew"] [--source aud] [--track 3] [--volume 60]
@@ -157,7 +166,9 @@ import sys
 import textwrap
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -438,6 +449,7 @@ SPLASHES = {
 }
 SPLASH_EYES = {"crowned": (10, 11), "storm": ()}   # rows whose inner blocks are the eyes; ▓ is always an eye
 SCREENSAVER_SECS = 180   # idle time (while playing) before the light show starts; 0 disables
+STALL_SECS = 12          # a stream with no sound this long after it was asked for is reported; 0 disables
 DISPLAY_SLEEP_SECS = 5400  # hold the panel awake this long past the last key, while playing; 0 disables
 VOLUME_STEP = 5          # +/- move mpv's software volume by this much; m mutes. The level is remembered.
 VOLUME_MAX = 100         # unity gain; mpv allows 130 but that only clips before the DAC
@@ -1048,6 +1060,33 @@ def tracks_for(doc):
 
 # --------------------------------------------------------------------------- song search
 
+class Reach(threading.Thread):
+    """One HEAD at a stream's host, off the UI thread: `result` is "up" or the error, None while asking.
+
+    Only what a stalled stream needs to know: is the host there at all. Any HTTP answer,
+    a 403 included, is "up" (the stream itself is mpv's problem then); a refused
+    connection, a timeout or a name that does not resolve is the error text.
+    """
+
+    def __init__(self, url):
+        super().__init__(daemon=True)
+        self.url = url
+        self.result = None
+        self.at = time.time()
+
+    def run(self):
+        try:
+            req = urllib.request.Request(self.url, method="HEAD", headers={"User-Agent": gd.UA})
+            with urllib.request.urlopen(req, timeout=6):
+                pass
+            self.result = "up"
+        except urllib.error.HTTPError:
+            self.result = "up"
+        except Exception as e:
+            reason = getattr(e, "reason", e)
+            self.result = str(reason) or e.__class__.__name__
+
+
 class SongSearch(threading.Thread):
     """Find every show with `song`: one item per date, best source that really has the track.
 
@@ -1145,6 +1184,7 @@ class Mpv:
         self.buf = b""
         self.adopted = False   # True when we attached to an mpv that was already running on the socket
         self.lock = threading.RLock()   # the remote's server thread shares the socket with the UI loop
+        self.answered = True            # the last status() got an answer; False while mpv's core is blocked in an open
 
     def start(self, detach=False):
         """Adopt the mpv on the socket, else start one. detach=True (the command line) puts it in its
@@ -1363,6 +1403,7 @@ class Mpv:
 
     def status(self):
         g = self.get_many(self.STATUS_PROPS)
+        self.answered = "playlist-pos" in g       # False: mpv said nothing in 3 s (its core is blocked opening a URL)
         pos = g.get("playlist-pos", -1)
         if "playlist-pos" not in g or pos is None or pos < 0:
             return None
@@ -1664,6 +1705,10 @@ class App:
         self.reconnecting = None      # the thread bringing the ssh link back, while it is down
         self.last_reconnect = 0
         self.host_error = None        # why the box cannot be reached, shown until it can
+        self.stall_key = None         # (id(now), pos) of a track mpv holds without sound, since stall_since
+        self.stall_since = 0
+        self.stall_probe = None       # the Reach thread asking the stream's host, while stalled
+        self.stall_text = ""          # the message line's red row, "" when sound is coming
         self.stack = []
         self.msg = ""
         self.msg_until = 0
@@ -2963,7 +3008,8 @@ class App:
             t = self.now["tracks"][st["pos"]] if st["pos"] < len(self.now["tracks"]) else {"title": "?"}
             name = (self.playing.current(self.now["radio"]) or stream_title(st, t) or t["title"]) \
                 if self.now.get("radio") else t["title"]
-            note = f"  {self.msg}" if self.msg and time.time() < self.msg_until else volume_tag(st)
+            note = f"  {self.msg}" if self.msg and time.time() < self.msg_until else \
+                (f"  {self.stall_text}" if self.stall_text else volume_tag(st))
             return f"{self.now['title']}  ·  {name}  {fmt_time(st['time'])}" + ("  ⏸" if st["paused"] else "") + note
 
         def on_key(ch):
@@ -3085,6 +3131,8 @@ class App:
             self.put(y + 3, 0, f" {self.msg}"[:w - 1], curses.color_pair(3))
         elif self.host and not self.mpv.sock and self.host_error:
             self.put(y + 3, 0, f" {self.host_error}  (poseidon doctor shows what the box has)"[:w - 1], curses.color_pair(4))
+        elif self.stall_text:
+            self.put(y + 3, 0, f" {self.stall_text}"[:w - 1], curses.color_pair(4))
         elif srch and not srch.done and srch.stale:
             self.put(y + 3, 0, f" from the cache; looking for new nights: {srch.checked}/{srch.total or '?'} dates checked, "
                                f"{srch.new} new"[:w - 1], curses.color_pair(3))
@@ -3516,6 +3564,62 @@ class App:
             pass
         return True
 
+    def watch_stall(self, st):
+        """A stream mpv holds without sound: after STALL_SECS, say so, and whether its host answers.
+
+        mpv opening a URL that does not answer shows a track as current with no time
+        position and not paused, and the TUI used to show it as playing for as long as it
+        took (rexdev, 2026-10-06: archive.org was down and the 1985-06-24 show sat "playing"
+        in silence). The stall is per track: n/b or a new play resets it, sound clears it.
+        One Reach probe per 30 s tells a dead host from a slow stream.
+        """
+        # Two faces of the same stall: mpv answers and shows the track with no time position (archive.org
+        # refusing or resetting), or mpv's core is blocked in the connect and its IPC says nothing for 3 s
+        # (a host that swallows packets), which status() reports as None with `answered` False. A stopped
+        # player (s clears `now`) and a finished playlist (mpv answers, playlist-pos -1) are neither.
+        if not STALL_SECS or not self.now:
+            self.stall_key, self.stall_text = None, ""
+            return
+        silent = st is None and self.mpv.sock is not None and not self.mpv.answered
+        stuck = silent or bool(st and not st["paused"] and st["time"] is None)
+        pos = st["pos"] if st else ((self.last_status or {}).get("pos") or 0)
+        if st is None and self.stall_key and not silent:
+            # the third face: mpv gave the track up (a refused connection, a reset) and went idle with
+            # nothing having played; the status line would say "stopped" and nothing else
+            t = self.now["tracks"][pos] if pos < len(self.now["tracks"]) else {}
+            src = t.get("src") or ""
+            where = urllib.parse.urlsplit(src).netloc if "://" in src else os.path.basename(src)
+            self.stall_text = f"mpv could not open {where or 'the track'} and stopped (p or ↵ tries again)"
+            self.stall_key = None                                        # the text stays until something plays
+            return
+        key = (id(self.now), pos) if stuck else None
+        if key != self.stall_key:
+            self.stall_key, self.stall_since, self.stall_probe = key, time.time(), None
+            if stuck or st:
+                self.stall_text = ""
+        if not stuck:
+            return
+        waited = time.time() - self.stall_since
+        if waited < STALL_SECS:
+            return
+        t = self.now["tracks"][pos] if pos < len(self.now["tracks"]) else {}
+        src = t.get("src") or ""
+        if "://" not in src:
+            self.stall_text = f"no sound after {waited:.0f} s from {os.path.basename(src) or 'this track'} (n skips it)"
+            return
+        u = urllib.parse.urlsplit(src)
+        where = "archive.org" if u.netloc.endswith("archive.org") else u.netloc
+        if self.stall_probe is None or (self.stall_probe.result is not None and time.time() - self.stall_probe.at > 30):
+            self.stall_probe = Reach(f"{u.scheme}://{u.netloc}/")
+            self.stall_probe.start()
+        r = self.stall_probe.result
+        if r is None:
+            self.stall_text = f"no sound after {waited:.0f} s; asking {where}..."
+        elif r == "up":
+            self.stall_text = f"no sound after {waited:.0f} s: {where} answers, the stream has not started (n skips it)"
+        else:
+            self.stall_text = f"no sound after {waited:.0f} s: can't reach {where} ({r})"
+
     def host_tag(self):
         """'  @tiro' on the status line while the player is on another box; says when the link is down."""
         if not self.host:
@@ -3558,6 +3662,8 @@ class App:
             self.toggle_remote()               # it was on last time: back on, same port
         if self.host:
             LIB.refresh_later()                # the box's disk; the cached index shows until it answers
+            if "POSEIDON_HOST" not in os.environ:     # the box came from state.json, not the command line: say so
+                self.say(f"playing on {self.host.name}, the box named last time (--no-host plays here)", 20)
         fetched = set()
         try:
             while True:
@@ -3575,6 +3681,7 @@ class App:
                     self.rain_more()
                     st = self.mpv.status()
                 self.tick_sleep(st)
+                self.watch_stall(st)
                 if st and (not self.now or st["count"] != len(self.now["tracks"])):
                     # something else loaded a playlist into our mpv (restore-playlist.py, a hand-typed
                     # loadfile): describe it the same way an adopted mpv is described
