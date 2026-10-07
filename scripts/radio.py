@@ -253,7 +253,13 @@ def _feed_icecast(key, mount):
     src = d.get("icestats", {}).get("source", [])
     for s in [src] if isinstance(src, dict) else src:
         if os.path.basename(urllib.parse.urlsplit(s.get("listenurl", "")).path).startswith(mount):
-            raw = _clean((s.get("title") or "").replace("~", ": "))
+            title = s.get("title") or ""
+            if "Ã" in title or "Â" in title:                          # Rondo serves UTF-8 read as Latin-1: "JoÃ£o Pires"
+                try:
+                    title = title.encode("latin-1").decode("utf-8")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    pass                                              # bytes already lost ("Rogï¿½"): leave it
+            raw = _clean(title.replace("~", ": "))
             return {"raw": raw} if raw else None
     return None
 
@@ -336,8 +342,13 @@ def _feed_npo(_key, _arg):
     if "[" in composer:                                               # "Anastasia [cello] Kobekina" is the soloist, whatever the field says
         who.insert(0, re.sub(r"\s*\[[^\]]*\]", "", composer))
         composer = ""
+    names = []
+    for w in who:                                                     # the conductor sits in two fields some nights
+        w = _clean(w)
+        if w and w not in names:
+            names.append(w)
     return {"composer": _clean(composer), "work": _clean(t["title"]),
-            "performers": ", ".join(_clean(w) for w in who if w), "album": _clean(t.get("label")), "until": until}
+            "performers": ", ".join(names), "album": _clean(t.get("label")), "until": until}
 
 
 def _feed_bbc(_key, service):
@@ -351,16 +362,18 @@ def _feed_bbc(_key, service):
 
 
 def _feed_rozhlas(_key, sid):
+    # The item shape, from the day lists (the `now` endpoint said "quiet" on every probe of
+    # 2026-10-05/06, each landing between tracks): `interpret` is the performers, `track` the
+    # work with the composer in a trailing parenthesis when the station bothered,
+    # "Staré tance a árie ... (Ottorino Respighi)", `since` the start, no end.
     d = (_get_json(f"https://api.rozhlas.cz/data/v2/playlist/now/{sid}.json") or {}).get("data") or {}
-    if d.get("status") == "quiet" or not (d.get("track") or d.get("title")):
+    track = d.get("track") or ""
+    if d.get("status") == "quiet" or not track:
         return None
-    until = None
-    try:
-        until = datetime.datetime.fromisoformat(d["till"]).timestamp()
-    except (KeyError, ValueError, TypeError):
-        pass
-    return {"composer": _clean(d.get("interpret") or d.get("composer")), "work": _clean(d.get("track") or d.get("title")),
-            "until": until}
+    m = re.search(r"\s*\(([^()]+)\)\s*$", track)
+    composer = m.group(1) if m else ""
+    work = track[:m.start()] if m else track
+    return {"composer": _clean(composer), "work": _clean(work), "performers": _clean(d.get("interpret"))}
 
 
 _FEED_KINDS = {"icecast": _feed_icecast, "triton": _feed_triton, "radiofrance": _feed_radiofrance,
