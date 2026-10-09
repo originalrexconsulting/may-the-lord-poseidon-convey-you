@@ -280,9 +280,11 @@ RAMPS = {   # name: (first pair, kind, cube corners (r, g, b in 0..5), 8-colour 
                  ["GREEN", "GREEN", "YELLOW", "RED"]),             # VU: green to ~65%, yellow, red at the top
     "plasma_bg": (380, "bg", [(0, 0, 3), (0, 1, 5), (0, 3, 4), (0, 5, 3), (2, 5, 1), (0, 3, 4)],
                  ["BLUE", "CYAN", "GREEN", "CYAN"]),               # blue -> azure -> teal -> green and back, so it wraps smoothly
+    "moon_fg":  (411, "fg", [(2, 2, 2), (3, 3, 3), (4, 4, 4), (5, 5, 4), (5, 5, 5), (5, 5, 5)],
+                 ["WHITE", "WHITE", "WHITE", "WHITE"]),            # grey -> silver -> pale ivory -> white
 }
 # curses attributes carry the pair number in 8 bits, so every pair must stay below 256
-# whatever the terminal claims. 13 ramps x 16 steps from pair 8 ends at 215. The "first
+# whatever the terminal claims. 14 ramps x 16 steps from pair 8 ends at 231. The "first
 # pair" written above is only a label; the real bases are assigned here in order.
 STEPS_PER_SEGMENT = 3
 RAMP_LEN = 5 * STEPS_PER_SEGMENT + 1
@@ -303,6 +305,7 @@ WAVE_FG = RAMPS["wave_fg"][0]
 RADIAL_FG = RAMPS["radial_fg"][0]
 METER_FG = RAMPS["meter_fg"][0]
 PLASMA_BG = RAMPS["plasma_bg"][0]
+MOON_FG = RAMPS["moon_fg"][0]
 
 
 def _ramp(steps):
@@ -1824,7 +1827,7 @@ class Viz:
         moon = Canvas(h, w)
         mx, my = P(0.36, 0.10)
         moon.ellipse(mx, my, 0.09 * H, 0.09 * H, 0.35 + an.treble * 0.6)
-        moon.paint(self, bold=an.treble > 0.4, base=STAR_FG)
+        moon.paint(self, bold=an.treble > 0.4, base=MOON_FG)
         cols = max(4, (w - 2) // 6)
         for c in range(cols):
             xx = 1 + c * 6
