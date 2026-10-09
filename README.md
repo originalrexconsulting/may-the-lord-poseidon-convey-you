@@ -120,7 +120,7 @@ band, and a beat flashes his eyes.
 
 <img src="docs/screenshots/enik.svg" width="900" alt="Enik, mid-step, arms out, the crystal matrix lit in the corner">
 
-Polyphemus at home: Poseidon's son, and the reason the Lord Poseidon conveys nobody. He breathes with the bass, his eye follows the loudest band, and on a
+Polyphemus at home: Poseidon's son, and the reason the Lord Poseidon won't convey anyone, or Nobody. He breathes with the bass, his eye follows the loudest band, and on a
 big beat he picks a man out of the flock. Leave the music off long enough and Nobody
 comes for him.
 
