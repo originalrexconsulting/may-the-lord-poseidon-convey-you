@@ -148,6 +148,9 @@ bough gives under her.
 Quiet music, and it asks the
 only question an owl asks. The answer here is Nobody.
 
+The moon over her, and over the night seas of the voyage, is tonight's moon in its real
+phase: a crescent, a quarter, gibbous or full, the dark side a faint limb of earthshine.
+
 <img src="docs/screenshots/athena.svg" width="900" alt="Athena's owl, wings spread wide, each feather a band of the spectrum">
 
 Althea is not Athena. Athena is the grey-eyed goddess of wisdom, the owl above. Althea
