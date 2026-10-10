@@ -22,8 +22,8 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # the light show here, over one ssh connection)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 26 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
-                                              # Circe, the Sirens, the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
+scripts/deadviz.py                            # the light show: 27 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
+                                              # Circe, the Sirens, the strait of Scylla, the Sleestak, Grumpy, the Stealie, the Wall of Sound
 scripts/radio.py                              # 52 classical radio stations, six of them FLAC, sorted by what they sound like;
                                               # where each publishes the piece it is playing; 23 college stations (KALX, KFJC,
                                               # KZSU, WFMU, WKCR...) and 28 public ones (KPFA, KPOO, KALW, KQED, KEXP, WWOZ...)
@@ -102,7 +102,7 @@ screen: ↵ tunes, the first row is a random station of that list, `i` probes on
 picks a random one from that list.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
-mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
+mode `V` walks through the newest ones: the Wall of Sound, the Stealie, Grumpy, the Sleestak, the strait,
 the Sirens, Circe, Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The light show also starts on its own after three idle minutes while something
@@ -207,6 +207,15 @@ cornered against a column they wave the torch and push through. A beat flashes t
 Sleestak's eyes and they hiss; a big one and a crossbow bolt flies wide.
 
 <img src="docs/screenshots/sleestak.svg" width="900" alt="the Lost City: Will and Holly with the torch between two Sleestak, one coming out from behind a column, a crossbow bolt on the way">
+
+Grumpy has the Land of the Lost by day. The tyrannosaur comes out of the tree ferns, a stride
+on every beat and the ground shaking where his foot comes down, and roars on a big one. Will,
+Holly and Cha-Ka run for their cave, which is too small for him: he gets his snout in and
+snaps at the dark on the beat, their eyes looking back at him, then gives up and stomps
+off, and out they come until he is back. The fronds flutter with the treble. Silence, and
+he lies down where he is and sleeps.
+
+<img src="docs/screenshots/grumpy.svg" width="900" alt="Grumpy the tyrannosaur stomping through the tree ferns toward the cave, Will, Holly and Cha-Ka running for it">
 
 The Stealie, traced from the 1969 design: the skull in the ring, blue and red behind it, the
 disc in the cranium red and blue either side of the thirteen-point bolt, which flashes white
