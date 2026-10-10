@@ -22,8 +22,8 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # the light show here, over one ssh connection)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 25 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
-                                              # the Sirens, the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
+scripts/deadviz.py                            # the light show: 26 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
+                                              # Circe, the Sirens, the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
 scripts/radio.py                              # 52 classical radio stations, six of them FLAC, sorted by what they sound like;
                                               # where each publishes the piece it is playing; 23 college stations (KALX, KFJC,
                                               # KZSU, WFMU, WKCR...) and 28 public ones (KPFA, KPOO, KALW, KQED, KEXP, WWOZ...)
@@ -103,7 +103,7 @@ picks a random one from that list.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
-the Sirens, Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
+the Sirens, Circe, Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The light show also starts on its own after three idle minutes while something
 plays. `V` in the list stops that, `V` again lets it, and the choice is remembered;
@@ -165,6 +165,16 @@ bass, sparks fly on a beat, smoke thickens with the mids, and hollyhocks bloom e
 side on the treble. She dances seated, hair a beat behind her shoulders, one hand
 keeping time on her knee. Music too hot for too long and she draws the brand out and
 raises a palm; when it settles she puts it back. Silence, and she stirs the embers.
+
+Circe is at home on Aeaea, at a loom whose warp threads are the spectrum, the wine on the
+table. The companions come in out of the woods and she gives each the cup; a big beat and
+her wand turns him into a pig with a man's mind, and he trots off to the sty. With six in
+the sty Odysseus comes with Hermes's moly, black at the root and its flower like milk, and
+waits for it to bloom on the treble. In full bloom he takes it in, the wand fails, he
+draws his sword, she yields, and the pigs are men again, younger than before and taller.
+Silence, and she sings at her loom, and the web grows.
+
+<img src="docs/screenshots/circe.svg" width="900" alt="Circe at her loom with the wand raised, a man at the table with the cup, pigs in the sty">
 
 The Sirens come before the strait, and they are the one episode of the voyage that is
 about music. Two of them on their flowery meadow, women's heads on birds' bodies, a heap

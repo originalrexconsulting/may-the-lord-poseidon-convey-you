@@ -69,6 +69,14 @@ Modes:
              keeping time on her knee. Music too hot for too long and she draws the
              brand out and raises a palm: cool down boy. Settled, she puts it back.
              Silence and she stirs the embers: easy Jim
+  circe      Aeaea: the goddess of the lovely braids in her hall, at a loom whose warp
+             threads are the spectrum, the wine bowl on the table. The companions come
+             in from the woods one by one and she gives each the cup; a big beat and her
+             wand turns him into a pig, and he trots off to the sty. With six in the sty,
+             Odysseus comes with Hermes's moly, black at the root, its flower like milk,
+             blooming with the treble; in full bloom he takes it in, the wand fails, he
+             draws his sword, she yields, and the pigs are men again, taller than before.
+             Silence and she sings at her loom, and the web grows
   sirens     the voyage's next island: the two Sirens on their flowery meadow, women's
              heads on birds' bodies, the bones of men at its foot, one with a lyre strung
              with the treble. Their song is the vocal band: the mouths open with it, the
@@ -139,7 +147,7 @@ TAP_LATENCY_MS = 40   # parec's buffer: how far the show trails the speakers, pl
 REF_H, REF_W = 40, 140   # the terminal the cell-counted modes were drawn for; Viz.density() scales them from here
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
-         "athena", "althea", "sirens", "scylla", "sleestak", "stealie", "wall"]
+         "athena", "althea", "circe", "sirens", "scylla", "sleestak", "stealie", "wall"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -2287,6 +2295,298 @@ class Viz:
             for j, ch in enumerate(row):
                 if ch != " " and 0 <= px + j < w - 1:
                     self.put(yy, px + j, ch, attr_fn(ch))
+
+    # ---- circe (Aeaea: the goddess at her loom, the cup, the wand, the sty)
+    PIG = [[" ,,___    ", "(oo '   )~", "  ll ll   "], [" ,,___    ", "(oo '   )~", " l l l l  "]]   # facing left, to the sty
+    TALLER = [[" o ", "/|\\", " | ", "/ \\"], [" o ", "\\|/", " | ", "/ \\"]]                    # men again, and taller
+    ODYSSEUS = [[" o  ", "/|\\ ", "/ \\ "], [" o  ", "/|\\ ", " |  "]]
+    SWORD = [" o   ", "/|\\——", "/ \\  "]
+    CIRCE_SAYS = {"cup": "SHE GIVES HIM THE CUP", "pig": "THE HEAD AND VOICE AND BRISTLES OF A SWINE, BUT HIS MIND AS BEFORE",
+                  "hermes": "HERMES GIVES HIM THE MOLY: BLACK AT THE ROOT, ITS FLOWER LIKE MILK",
+                  "holds": "THE MOLY HOLDS", "sword": "HE DRAWS HIS SWORD", "yield": "SHE YIELDS",
+                  "taller": "YOUNGER THAN BEFORE, AND TALLER, AND FAR MORE HANDSOME",
+                  "feast": "A YEAR OF MEAT AND SWEET WINE", "loom": "SHE SINGS AT HER LOOM, WEAVING AN IMMORTAL WEB"}
+
+    def draw_circe(self, h, w):
+        an = self.an
+        t = self.t
+        dt = 1 / FPS
+        floor = h - 3
+        st = self.state("circe", h, w, lambda: {
+            "stage": "feast", "since": t, "walkers": [], "pigs": 0, "men": 0, "cool": t + 3, "next": t + 1.5,
+            "strike": None, "bloom": 0.0, "odysseus": None, "turned": 0, "web": 0.0, "quiet": 0.0, "text": None,
+            "y": 0.0, "vy": 0.0, "last_beat": -9.0,
+            "trees": [(self.rng.random() * 0.26, 0.35 + self.rng.random() * 0.3) for _ in range(5)]})
+        st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
+        quiet = st["quiet"] > 3
+        gw, gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        H = min(floor * 4 * 0.62, gw * 0.5)                         # the goddess, a head taller than a man would be
+        fy = floor * 4                                              # the floor, in dots
+        table = int(w * 0.44)                                       # where the men stand to drink
+        sty0, sty1 = 1, int(w * 0.30)
+        pen = max(4, min(10, (sty1 - sty0 - 12) // 2))             # pig to pig in the sty, three to a row
+        moly_x = int(w * 0.33)
+        if an.beat > 0.45 and t - st["last_beat"] > 0.2:            # she keeps time a little, as Althea does
+            st["last_beat"] = t
+            st["vy"] += 4 * min(1.0, an.beat)
+        st["vy"] += (-90 * st["y"] - 6 * st["vy"]) * dt
+        st["y"] += st["vy"] * dt
+        sway = math.sin(t * 2.2) * 0.02 * (0.3 + an.rms * 3) if not quiet else math.sin(t * 0.8) * 0.01
+        # the web on her loom grows as she weaves, fastest in the quiet
+        st["web"] = (st["web"] + dt * (0.02 if quiet else 0.004)) % 1.0
+        # the moly blooms with the treble
+        st["bloom"] = max(0.0, min(1.0, st["bloom"] + (an.treble - 0.25) * dt * 0.8))
+        # ---- the glade behind: a few dark trees, and the stars
+        trees = Canvas(h, w)
+        for tu, tv in st["trees"]:
+            tx, top = tu * gw, fy - tv * fy
+            for k in range(4):
+                y0 = top + k * (fy - top) * 0.2
+                half = (k + 1) * 0.022 * gw
+                trees.poly([(tx, y0), (tx + half, y0 + (fy - top) * 0.28), (tx - half, y0 + (fy - top) * 0.28)], 0.02)
+        trees.paint(self, bold=False, base=RAIN_FG)
+        # ---- the loom: warp threads from the beam, one per band, the web woven down from the top
+        loom = Canvas(h, w)
+        warp = Canvas(h, w)
+        weft = Canvas(h, w)
+        lx0, lx1 = gw * 0.76, gw * 0.95
+        ly0, ly1 = fy - H * 1.02, fy
+        loom.line(lx0, ly0, lx0, ly1, 0.35, width=2 * self.stroke(h, w))
+        loom.line(lx1, ly0, lx1, ly1, 0.35, width=2 * self.stroke(h, w))
+        loom.line(lx0 - 3, ly0 + 2, lx1 + 3, ly0 + 2, 0.45, width=2 * self.stroke(h, w))
+        n = BANDS // 2
+        woven = ly0 + 4 + (ly1 - ly0 - 12) * st["web"]
+        for i in range(n):
+            lvl = float(an.level[i * 2])
+            x0 = lx0 + 4 + (lx1 - lx0 - 8) * i / (n - 1)
+            wob = math.sin(t * 30 + i) * lvl * 1.2
+            warp.line(x0, ly0 + 4, x0 + wob, ly1 - 8, 0.25 + lvl * 0.7)
+            warp.ellipse(x0 + wob, ly1 - 6, 1.2, 1.6, 0.3)          # the loom weights
+        for k, yy in enumerate(np.arange(ly0 + 5, woven, 2)):      # the web: a pattern in the weft, a meander
+            for xx in np.arange(lx0 + 3, lx1 - 3, 1):
+                if (int(xx / 3) + int(yy / 4) + (k // 2)) % 3:
+                    weft.dot(xx, yy, 0.35 + 0.2 * ((int(xx / 6) + k // 3) % 2))
+        loom.paint(self, bold=False, base=RADIAL_FG)
+        warp.paint(self, bold=an.treble > 0.35, base=STAR_FG)
+        weft.paint(self, bold=False, base=MAIN_FG)                 # the woven part covers the warp
+        # ---- the table and the cup of Pramnian wine
+        furn = Canvas(h, w)
+        tx = table * 2 + 10
+        furn.line(tx - 8, fy - 14, tx + 8, fy - 14, 0.5, width=2)
+        furn.line(tx - 6, fy - 14, tx - 7, fy, 0.4)
+        furn.line(tx + 6, fy - 14, tx + 7, fy, 0.4)
+        furn.ellipse(tx, fy - 17, 4, 2.5, 0.8)                     # the krater
+        furn.line(tx - 2, fy - 15, tx + 2, fy - 15, 0.8)
+        furn.paint(self, bold=False, base=RADIAL_FG)
+        # ---- the moly, by the door
+        moly = Canvas(h, w)
+        milk = Canvas(h, w)
+        mx, my = moly_x * 2, fy
+        have = st["odysseus"] is not None and st["odysseus"].get("moly")
+        moly.line(mx, my, mx, my + 2, 0.02, width=3)               # black at the root
+        moly.line(mx, my, mx + math.sin(t) * 1.5, my - 18, 0.15, width=self.stroke(h, w))
+        for e in (-1, 1):
+            moly.line(mx, my - 8, mx + e * 5, my - 12, 0.25)
+        if not have:
+            r = 1.5 + st["bloom"] * 4.5
+            for p in range(5):
+                pa = p * 2 * math.pi / 5 + t * 0.2
+                milk.ellipse(mx + math.cos(pa) * r + math.sin(t) * 1.5, my - 19 + math.sin(pa) * r, r * 0.5, r * 0.5, 0.4 + st["bloom"] * 0.6)
+        moly.paint(self, bold=False, base=RAIN_FG)
+        # ---- the people: men walking in to drink, pigs trotting off to the sty, Odysseus with the moly
+        stage = st["stage"]
+        speed = 0.3 + an.rms * 1.2
+        walkers = st["walkers"]
+        men = sorted((wk for wk in walkers if wk["kind"] == "man"), key=lambda wk: -wk["x"])
+        if (stage == "feast" and st["pigs"] + len(walkers) < 6 and t > st["next"] and not quiet
+                and all(wk["x"] > 6 for wk in men)):
+            walkers.append({"x": 0.0, "kind": "man", "at": None})
+            st["next"] = t + 2.5 + self.rng.random() * 2
+        for i, wk in enumerate(men):                                # they queue at the table, the first one drinks
+            goal = float(table - 4 * i)
+            if wk["x"] < goal:
+                wk["x"] = min(goal, wk["x"] + speed)
+            if i == 0 and wk["x"] >= table and wk["at"] is None:
+                wk["at"] = t
+                st["text"] = (self.CIRCE_SAYS["cup"], t + 2.5)
+        for wk in walkers:
+            if wk["kind"] == "pig":
+                wk["x"] -= speed * 1.4
+        def ripe(since, after=1.0):                                 # a big beat, or after a wait a smaller one
+            return since is not None and t - since > after and an.beat > 0.5 - min(0.25, (t - since - after) * 0.05)
+        # she strikes on a big beat once he has drunk
+        drinker = next((wk for wk in walkers if wk["kind"] == "man" and wk["at"] is not None and t - wk["at"] > 1.0), None)
+        if drinker and st["strike"] is None and ripe(drinker["at"]) and t > st["cool"]:
+            st["strike"] = t
+        ody = st["odysseus"]
+        if stage == "moly" and ody is not None:
+            if not ody.get("moly"):
+                ody["x"] = min(float(moly_x - 4), ody["x"] + speed)
+                if ody["x"] >= moly_x - 4 and st["bloom"] >= 1.0:   # the flower in full bloom: he takes it and goes in
+                    ody["moly"] = True
+            elif ody["x"] < table:
+                ody["x"] = min(float(table), ody["x"] + speed)
+                if ody["x"] >= table:
+                    ody["at"] = t
+                    st["text"] = (self.CIRCE_SAYS["cup"], t + 2.5)
+            elif st["strike"] is None and not ody.get("held") and ripe(ody["at"]) and t > st["cool"]:
+                st["strike"] = t
+            elif ody.get("held") and not ody.get("sword") and ripe(ody["held"], 1.2):
+                ody["sword"] = t
+                st["text"] = (self.CIRCE_SAYS["sword"], t + 2)
+            elif ody.get("sword") and t - ody["sword"] > 2:
+                stage, st["since"], st["turned"] = "yield", t, 0
+                st["text"] = (self.CIRCE_SAYS["yield"], t + 2.5)
+        if st["strike"] is not None and t - st["strike"] > 0.35:
+            st["strike"] = None
+            st["cool"] = t + 1.5
+            if stage == "feast" and drinker:
+                drinker["kind"] = "pig"
+                st["text"] = (self.CIRCE_SAYS["pig"], t + 3)
+            elif stage == "moly" and ody is not None:
+                ody["held"] = t
+                st["text"] = (self.CIRCE_SAYS["holds"], t + 2.5)
+        for wk in [wk for wk in walkers if wk["kind"] == "pig" and wk["x"] <= sty0 + 2 + (st["pigs"] % 3) * pen]:
+            walkers.remove(wk)                                    # into the sty, with the others
+            st["pigs"] += 1
+        if stage == "feast" and st["pigs"] >= 6 and not walkers:
+            stage, st["since"] = "moly", t
+            st["odysseus"] = ody = {"x": 0.0, "moly": False, "at": None}
+            st["text"] = (self.CIRCE_SAYS["hermes"], t + 4)
+        if stage == "yield" and st["turned"] < st["pigs"] and t - st["since"] > 1.5 + st["turned"] * 0.5:
+            st["turned"] += 1
+            if st["turned"] == st["pigs"]:
+                st["text"] = (self.CIRCE_SAYS["taller"], t + 4)
+        if stage == "yield" and st["turned"] >= st["pigs"] and t - st["since"] > 1.5 + st["pigs"] * 0.5 + 4:
+            stage, st["since"] = "freed", t
+            st["text"] = (self.CIRCE_SAYS["feast"], t + 4)
+        if stage == "freed" and t - st["since"] > 10:
+            st.update({"stage": "feast", "since": t, "walkers": [], "pigs": 0, "odysseus": None, "turned": 0,
+                       "next": t + 2, "cool": t + 3, "text": None})
+            stage, ody = "feast", None
+        st["stage"] = stage
+        # ---- Circe of the lovely braids: she faces the door, the wand in her right hand, the cup in her left
+        cx0 = gw * 0.60
+        top = fy - H
+
+        def P(u, v):
+            lift = max(0.0, 0.6 - v) / 0.6
+            return cx0 + (u + sway * lift) * H, top + v * H + st["y"] * 0.02 * lift * H
+        skin, dress, hair, dark, wand, spark = (Canvas(h, w) for _ in range(6))
+        lw = max(2, int(H / 50))
+        kneel = 0.08 if stage == "yield" and st["turned"] < st["pigs"] else 0.0
+        hx, hy = P(0.0, 0.10 + kneel)
+        skin.ellipse(hx, hy, 0.055 * H, 0.068 * H, 0.75)
+        for side in (-1, 1):                                        # the braids, down her back, beaded
+            prev = (hx + 0.04 * H, hy - 0.02 * H)
+            for j in range(1, 9):
+                q = j / 8
+                p = (hx + (0.05 + side * 0.012 + math.sin(t * 2 + j * 0.7 + side) * 0.006) * H, hy + q * 0.32 * H)
+                hair.line(*prev, *p, 0.3, width=self.stroke(h, w) * 2)
+                if j % 2 == 0:
+                    hair.ellipse(p[0], p[1], 1.2, 1.2, 0.6)
+                prev = p
+        hair.ellipse(hx + 0.01 * H, hy - 0.04 * H, 0.058 * H, 0.04 * H, 0.35)
+        dark.ellipse(hx - 0.03 * H, hy - 0.005 * H, 0.008 * H, 0.008 * H, 0.05)
+        sing = 0.003 + (0.012 if quiet else min(1.0, an.mid) * 0.008)
+        dark.ellipse(hx - 0.035 * H, hy + 0.035 * H, 0.01 * H, sing * H, 0.05)
+        skin.line(*P(0.0, 0.17 + kneel), *P(0.0, 0.22 + kneel), 0.75, width=lw * 2)
+        dress.poly([P(-0.09, 0.23 + kneel), P(0.09, 0.23 + kneel), P(0.07, 0.48 + kneel), P(0.15, 1.0), P(-0.17, 1.0), P(-0.08, 0.48 + kneel)],
+                   0.12 + an.mid * 0.1)
+        dress.line(*P(-0.08, 0.48 + kneel), *P(0.07, 0.48 + kneel), 0.3, width=lw)   # the girdle
+        for k in range(3):
+            dark.line(*P(-0.05 + k * 0.05, 0.52 + kneel), *P(-0.12 + k * 0.12, 0.98), 0.12)
+        # the arms: at the loom in the quiet, the cup out to a man at the table, the wand up and down on a strike
+        shoulder_r, shoulder_l = P(-0.07, 0.26 + kneel), P(0.07, 0.26 + kneel)
+        strike = st["strike"]
+        if quiet:
+            hand_r, hand_l = P(0.20, 0.45), P(0.22, 0.38)
+        else:
+            k = (t - strike) / 0.35 if strike is not None else None
+            if k is not None:
+                ang = -1.9 + 1.6 * k                                # over her head, then down at him
+                hand_r = (shoulder_r[0] + math.cos(ang) * 0.2 * H, shoulder_r[1] + math.sin(ang) * 0.2 * H)
+            elif stage == "yield" and st["turned"] < st["pigs"]:
+                hand_r = P(-0.16, 0.15 + kneel)                    # hands up: she yields
+            else:
+                hand_r = P(-0.13, 0.42 + kneel)
+            hand_l = P(-0.19, 0.36 + kneel) if (drinker or (ody and ody.get("at") and not ody.get("held"))) else P(0.03, 0.48 + kneel)
+        for sh_, hd in ((shoulder_r, hand_r), (shoulder_l, hand_l)):
+            el = ((sh_[0] + hd[0]) / 2 + 0.02 * H, (sh_[1] + hd[1]) / 2 + 0.03 * H)
+            skin.line(*sh_, *el, 0.72, width=lw)
+            skin.line(*el, *hd, 0.72, width=lw)
+            skin.ellipse(hd[0], hd[1], 0.012 * H, 0.012 * H, 0.8)
+        if not quiet:
+            d = (hand_r[0] - shoulder_r[0], hand_r[1] - shoulder_r[1])
+            L = math.hypot(*d) or 1.0
+            tip = (hand_r[0] + d[0] / L * 0.16 * H, hand_r[1] + d[1] / L * 0.16 * H)
+            wand.line(*hand_r, *tip, 0.85, width=self.stroke(h, w))
+            if strike is not None or an.beat > 0.5:                 # the wand's tip sparks
+                for _ in range(8 if strike is not None else 3):
+                    a = self.rng.random() * 6.28
+                    rr = self.rng.random() * (6 if strike is not None else 3)
+                    spark.dot(tip[0] + math.cos(a) * rr, tip[1] + math.sin(a) * rr, self.rng.random())
+            if drinker or (ody and ody.get("at") and not ody.get("held")):
+                furn2 = Canvas(h, w)
+                furn2.ellipse(hand_l[0] - 2, hand_l[1] - 2, 2.5, 1.5, 0.9)   # the cup, held out
+                furn2.paint(self, bold=True, base=RADIAL_FG)
+        for cv in (skin, dress, hair):
+            for (cy, cx_), _ in cv.cells.items():
+                self.put(cy, cx_, " ")
+        dress.paint(self, bold=False, base=MAIN_FG)
+        hair.paint(self, bold=False, base=RADIAL_FG)
+        skin.paint(self, bold=True, base=RADIAL_FG)
+        dark.paint(self, bold=False, base=RADIAL_FG)
+        wand.paint(self, bold=True, base=RADIAL_FG)
+        spark.paint(self, bold=True, base=SPARK_FG)
+        milk.paint(self, bold=st["bloom"] > 0.9, base=MOON_FG)
+        # ---- the sty: six pigs in two rows behind the rails, or men again, taller, dancing
+        rail = self.fg(0.35, False, base=RADIAL_FG)
+        bob = int(min(1.0, an.beat) * 1.5)
+        for i in range(st["pigs"]):
+            row, col = i // 3, i % 3
+            px = sty0 + 2 + col * pen
+            if stage in ("yield", "freed") and i < st["turned"]:
+                fr = self.TALLER[(self.frame // 6 + i) % 2] if stage == "freed" and an.beat > 0.3 else self.TALLER[0]
+                py = floor - 4 - row * 3 - (bob if stage == "freed" else 0)
+                self.sprite_at(h, w, fr, px + 3, py, lambda ch: self.fg(0.98, True, base=WAVE_FG))
+            else:
+                py = floor - 3 - row * 3 - (bob if i % 2 else 0)
+                self.sprite_at(h, w, self.PIG[(self.frame // 8 + i) % 2], px, py,
+                               lambda ch: self.fg(0.75, ch == "o", base=SPIRAL_FG))
+        for yy in (floor - 4, floor - 1):
+            self.put(yy, sty0, "═" * (sty1 - sty0), rail)
+        for xx in range(sty0, sty1 + 1, 6):
+            for yy in range(floor - 5, floor):
+                self.put(yy, xx, "║", rail)
+        if st["pigs"] and an.beat > 0.55 and stage == "feast":
+            self.put(floor - 7, sty0 + 4 + int(self.rng.integers(0, max(1, sty1 - 10))), "oink", self.fg(0.8, False, base=SPIRAL_FG))
+        for wk in walkers:
+            if wk["kind"] == "man":
+                self.sprite_at(h, w, self.MAN[(self.frame // 6) % 2] if wk["at"] is None else self.MAN[0], int(wk["x"]), floor - 3,
+                               lambda ch: self.fg(0.98, True, base=WAVE_FG))
+            else:
+                self.sprite_at(h, w, self.PIG[(self.frame // 4) % 2], int(wk["x"]), floor - 3,
+                               lambda ch: self.fg(0.75, ch == "o", base=SPIRAL_FG))
+        if ody is not None:
+            fr = self.SWORD if ody.get("sword") else self.ODYSSEUS[(self.frame // 6) % 2 if ody.get("at") is None else 0]
+            ox = int(ody["x"])
+            self.sprite_at(h, w, fr, ox, floor - 3, lambda ch: self.fg(1.0, True, base=RADIAL_FG) if ch == "—" else
+                           self.fg(1.0, True, base=WAVE_FG))
+            if ody.get("moly"):
+                self.put(floor - 2, ox + 3, "✿", self.fg(0.95, True, base=MOON_FG))
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.25, False, base=RADIAL_FG))
+        # ---- words
+        if quiet and st["text"] is None:
+            st["text"] = (self.CIRCE_SAYS["loom"], t + 5)
+        if st["text"] and t < st["text"][1]:
+            msg = st["text"][0]
+            self.put(1, max(0, (w - len(msg)) // 2), msg[:w - 1], self.fg(1.0, True, base=RADIAL_FG))
+        elif st["text"] and t >= st["text"][1]:
+            st["text"] = None
+        doing = {"feast": "the feast", "moly": "Odysseus, with the moly", "yield": "she yields", "freed": "men again"}[stage]
+        self.put(h - 2, 1, f"pigs {st['pigs'] - st['turned']}  ·  the moly {int(st['bloom'] * 100)}%  ·  {doing}",
+                 self.fg(0.5, False, base=WAVE_FG))
 
     # ---- sirens (Anthemoessa: the two Sirens on their meadow, Odysseus lashed to the mast)
     SIRENS_SING = ["COME HITHER, RENOWNED ODYSSEUS, GREAT GLORY OF THE ACHAEANS",
