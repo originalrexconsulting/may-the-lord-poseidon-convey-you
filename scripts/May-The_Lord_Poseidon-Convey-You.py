@@ -81,10 +81,10 @@ Keys:
                 plays one track per show; o trades the stream for that whole show at
                 the same spot, so the set list goes on. On a queue row, that row's night.
   v             light show (deadviz.py): patterns driven by an FFT of what the
-                Rotel is playing. Inside it v steps to the next of 27 modes
+                Rotel is playing. Inside it v steps to the next of 28 modes
                 (bars, plasma, scope, rings, waterfall, fire, rain, stars, wave,
                 radial, particles, meters, spiral, life, poseidon, enik, cyclops, convey, athena, althea,
-                circe, sirens, scylla, sleestak, grumpy, stealie, wall), V steps back, 1-9/0
+                circe, sirens, scylla, sleestak, grumpy, stealie, bears, wall), V steps back, 1-9/0
                 pick the first ten, space/n/b/←/→ still control playback,
                 ↑/↓ set the waterfall's direction, Esc (or any other key) returns.
                 Also starts by itself after SCREENSAVER_SECS idle while playing.
