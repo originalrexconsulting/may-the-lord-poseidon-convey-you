@@ -105,6 +105,13 @@ Modes:
              and push through, and a flare sends the Sleestak back with an arm up. A beat
              flashes their eyes and they hiss, a big one and a crossbow bolt flies wide.
              Long enough in the cold and they go back where they came from
+  grumpy     the Land of the Lost by day: Grumpy the tyrannosaur comes out of the tree
+             ferns, a stride on every beat and the ground shaking where he puts his foot
+             down, roaring on a big one. Will, Holly and Cha-Ka run for their cave, which
+             is too small for him: he gets his snout in and snaps at the dark on the beat,
+             their eyes looking back at him, then gives up and stomps off, and they come
+             out until he comes back. The fronds flutter with the treble. Silence and he
+             lies down where he is and sleeps
   stealie    steal your face, traced from the 1969 design: the skull in the ring, blue
              and red behind it, the disc in the cranium red and blue either side of the
              thirteen-point bolt, which flashes white on a beat. The red lights with the
@@ -147,7 +154,7 @@ TAP_LATENCY_MS = 40   # parec's buffer: how far the show trails the speakers, pl
 REF_H, REF_W = 40, 140   # the terminal the cell-counted modes were drawn for; Viz.density() scales them from here
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
-         "athena", "althea", "circe", "sirens", "scylla", "sleestak", "stealie", "wall"]
+         "athena", "althea", "circe", "sirens", "scylla", "sleestak", "grumpy", "stealie", "wall"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -3225,6 +3232,251 @@ class Viz:
             self.put(h - 2, 1, st["say"], self.fg(0.6, False, base=RAIN_FG))
         else:
             self.put(h - 2, 1, f"warmth {int(warm * 100)}%  ·  {len(keep)} Sleestak  ·  torch {flame_h}", self.fg(0.4, False, base=RAIN_FG))
+
+    # ---- grumpy (the Land of the Lost by day: the tyrannosaur, and the cave too small for him)
+    CHAKA = [[" @ ", "/#\\", "/ \\"], [" @ ", "\\#/", " | "]]                    # the Pakuni, furry and small
+    GRUMPY_SAYS = {"roar": "ROAAARR", "run": "RUN!", "chaka": "GRUMPY!", "cave": "HE CAN'T GET IN!",
+                   "leave": "he's going", "sleep": "Grumpy is asleep. Quiet, Holly", "out": "it's safe"}
+
+    def draw_grumpy(self, h, w):
+        an = self.an
+        t = self.t
+        dt = 1 / FPS
+        floor = h - 3
+        gw, gh = max(2, (w - 1) * 2), max(4, (h - 1) * 4)
+        fy = floor * 4                                              # the ground, in dots
+        G = min(fy * 0.42, gw * 0.16)                               # his hip height: a big animal
+        cave_x = int(w * 0.86)                                      # the mouth of the Marshalls' cave, in cells
+        st = self.state("grumpy", h, w, lambda: {
+            "x": -G * 1.2, "feet": [-G * 1.4, -G * 0.95], "swing": 0, "from": 0.0, "f": 1.0, "mode": "hunt", "since": t, "step": None, "k": 0, "last_beat": -9.0,
+            "jaw": 0.0, "roar": None, "cool": t + 3, "roars": 0, "steps": 0, "shake": 0, "dust": [],
+            "family": float(w * 0.52), "hid": False, "say": None, "quiet": 0.0, "back": t,
+            "fronds": [(self.rng.random(), self.rng.random()) for _ in range(9)],
+            "trees": [(self.rng.random() * 0.75, 0.55 + self.rng.random() * 0.35) for _ in range(6)]})
+        st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
+        quiet = st["quiet"] > 3
+        mode = st["mode"]
+        # ---- his walk: a step on each beat, or a slower one if the beat goes missing; he lands on the floor hard
+        stride = 0.35 * G
+        if mode in ("hunt", "leave") and st["step"] is None and not quiet:
+            if (an.beat > 0.45 and t - st["last_beat"] > 0.25) or (an.rms > 0.05 and t - st["last_beat"] > 1.2):
+                st["step"], st["last_beat"] = t, t
+                st["swing"] = st["k"] % 2
+                st["from"] = st["feet"][st["swing"]]
+        k = 0.0
+        lift = 0.0
+        if st["step"] is not None:                                  # the hind foot swings past the planted one
+            k = min(1.0, (t - st["step"]) / 0.35)
+            st["x"] += st["f"] * stride * (1 / 0.35) * dt
+            goal = st["x"] + st["f"] * 0.3 * G
+            st["feet"][st["swing"]] = st["from"] + (goal - st["from"]) * k
+            lift = math.sin(k * math.pi) * 0.18 * G
+            if k >= 1.0:                                            # the foot comes down
+                st["step"] = None
+                st["k"] += 1
+                st["steps"] += 1
+                st["shake"] = 2 + int(min(1.0, an.bass) * 3)
+                foot = st["feet"][st["swing"]]
+                st["dust"] += [[foot + (self.rng.random() - 0.5) * 12, fy - self.rng.random() * 3, (self.rng.random() - 0.5) * 1.5, 1.0]
+                               for _ in range(10)]
+        phase = (st["k"] + k) * math.pi                             # 0..π a step, alternating feet
+        # a big beat and he roars
+        if st["roar"] is None and an.beat > 0.6 and t > st["cool"] and not quiet and mode != "asleep":
+            st["roar"], st["cool"] = t, t + 3 + self.rng.random() * 2
+            st["roars"] += 1
+            st["say"] = (self.GRUMPY_SAYS["chaka"] if not st["hid"] else self.GRUMPY_SAYS["roar"], t + 1.5, "chaka" if not st["hid"] else "grumpy")
+        open_ = 0.0
+        if st["roar"] is not None:
+            r = (t - st["roar"]) / 1.2
+            open_ = math.sin(min(1.0, r) * math.pi) * 0.75
+            if r >= 1:
+                st["roar"] = None
+        if mode == "poke":                                          # snapping at the cave on the beat
+            open_ = max(open_, 0.15 + min(1.0, an.beat) * 0.5)
+        st["jaw"] += (open_ - st["jaw"]) * 0.4
+        # ---- what he and the Marshalls are doing
+        snout = st["x"] + st["f"] * 1.15 * G                        # in dots
+        if mode == "hunt":
+            if not st["hid"] and snout / 2 > st["family"] - 34:      # too close: they run for the cave
+                st["family"] = min(float(cave_x), st["family"] + 0.5 + an.rms)
+                if st["say"] is None:
+                    st["say"] = (self.GRUMPY_SAYS["run"], t + 1.5, "will")
+                if st["family"] >= cave_x:
+                    st["hid"] = True
+            if snout / 2 >= cave_x - 3:
+                mode, st["since"] = "poke", t
+                st["x"] = (cave_x - 3) * 2 - 1.15 * G
+                st["step"] = None
+                st["say"] = (self.GRUMPY_SAYS["cave"], t + 2.5, "holly")
+        elif mode == "poke" and t - st["since"] > 5:
+            mode, st["since"], st["f"] = "leave", t, -1.0
+            st["say"] = (self.GRUMPY_SAYS["leave"], t + 2, "will")
+        elif mode == "leave" and st["x"] < -G * 1.6:
+            mode, st["since"], st["back"] = "away", t, t + 5 + self.rng.random() * 5
+        elif mode == "away":
+            if st["hid"] and t - st["since"] > 2:
+                st["hid"] = False
+                st["say"] = (self.GRUMPY_SAYS["out"], t + 2, "will")
+            if not st["hid"]:
+                st["family"] += (w * 0.52 - st["family"]) * 0.03
+            if t > st["back"] and not quiet:
+                mode, st["since"], st["f"], st["x"] = "hunt", t, 1.0, -G * 1.2
+                st["feet"] = [-G * 1.4, -G * 0.95]
+        if quiet and mode in ("hunt", "poke", "leave") and 0 < st["x"] < gw:
+            mode, st["since"] = "asleep", t
+            st["say"] = (self.GRUMPY_SAYS["sleep"], t + 4, "will")
+        elif mode == "asleep" and not quiet:
+            mode, st["since"] = "hunt", t
+            st["f"] = 1.0
+        st["mode"] = mode
+        dx = 0
+        if st["shake"] > 0:
+            st["shake"] -= 1
+            dx = int(self.rng.integers(-1, 2))
+        # ---- the jungle behind: tree ferns and cycads, dark
+        back = Canvas(h, w)
+        for tu, tv in st["trees"]:
+            tx, top = tu * gw, fy - tv * fy
+            back.line(tx, fy, tx + 2, top, 0.12, width=3)
+            for j in range(7):
+                a = -math.pi / 2 + (j - 3) * 0.45 + math.sin(t * 0.7 + tu * 9) * 0.05
+                L = 0.12 * fy
+                back.line(tx + 2, top, tx + 2 + math.cos(a) * L * 1.4, top + math.sin(a) * L * 0.5 + L * 0.35 * abs(j - 3) / 3, 0.18)
+        back.paint(self, bold=False, base=RAIN_FG)
+        # ---- the cliff and the cave on the right
+        cliff = Canvas(h, w)
+        cx0 = cave_x * 2 - 6
+        cliff.poly([(cx0, fy), (cx0 + 4, fy * 0.45), (cx0 + 14, fy * 0.25), (gw, fy * 0.18), (gw, fy)], 0.4)
+        for (ry, rx), cell in cliff.cells.items():
+            cell[0] &= self.ROCK_GRAIN[(ry * 3 + rx * 5) % len(self.ROCK_GRAIN)]
+            cell[1] = 0.3 + ((ry * 7 + rx * 3) % 5) * 0.06
+        cliff.paint(self, bold=False, base=RADIAL_FG)
+        mouth_h = 5
+        for yy in range(floor - mouth_h, floor):
+            half = int(4 * math.sqrt(max(0.0, 1 - ((floor - yy) / mouth_h) ** 2))) + 1
+            self.put(yy, cave_x - half + 3, " " * (half * 2), 0)
+        if st["hid"]:                                               # eyes in the dark of the cave
+            for j, ex in enumerate((cave_x + 1, cave_x + 4, cave_x + 6)):
+                if (int(t * 3) + j) % 7:
+                    self.put(floor - 3 + (j == 2), ex, "o o"[: 3 if j < 2 else 1], self.fg(0.9, True, base=MOON_FG))
+        # ---- Grumpy
+        f = st["f"]
+        hip = (st["x"] + dx * 2, fy - G * (0.55 if mode == "asleep" else 1.0))
+        sway = math.sin(phase) * 0.03 * G
+
+        def P(u, v):                                                # body units: u forward of the hip, v up
+            return hip[0] + f * u * G, hip[1] - v * G + sway * (1 if v > 0 else 0)
+        hide, belly, teeth, eye = (Canvas(h, w) for _ in range(4))
+        wag = math.sin(t * 2.5) * 0.06 + (math.sin(phase) * 0.05)
+        down = 0.45 if mode == "asleep" else 0.0                     # asleep, the head on the ground
+        hide.poly([P(-1.35, 0.15 + wag - down * 0.3), P(-0.7, 0.42), P(-0.1, 0.55), P(0.35, 0.55), P(0.58, 0.72 - down),
+                   P(0.72, 0.62 - down), P(0.62, 0.36), P(0.45, 0.02), P(0.05, -0.14), P(-0.35, -0.02), P(-0.7, 0.18)], 0.28)
+        belly.poly([P(0.40, 0.04), P(0.05, -0.10), P(-0.25, 0.0), P(-0.1, 0.12), P(0.3, 0.2)], 0.42)
+        for j in range(6):                                          # the ridge down his back
+            hide.dot(*P(-0.9 + j * 0.25, 0.36 + 0.13 * math.sin(j * 0.6 + 0.4)), 0.65)
+        # the head: skull above the hinge, the lower jaw swinging open on the roar
+        hinge = P(0.66, 0.68 - down)
+        ja = st["jaw"]
+        skull = [P(0.56, 0.86 - down), P(0.82, 0.93 - down), P(1.05, 0.85 - down), P(1.18, 0.74 - down), P(1.16, 0.66 - down), P(0.70, 0.66 - down)]
+        hide.poly(skull, 0.32)
+        jaw_len = 0.45 * G
+        ang = -ja * (1 if f > 0 else -1)
+        jt = (hinge[0] + f * math.cos(ja) * jaw_len, hinge[1] + math.sin(ja) * jaw_len)
+        jb = (hinge[0] + f * math.cos(ja) * jaw_len * 0.9, hinge[1] + math.sin(ja) * jaw_len * 0.9 + 0.08 * G)
+        hide.poly([hinge, jt, jb, (hinge[0], hinge[1] + 0.1 * G)], 0.28)
+        for j in range(1, 7):                                       # teeth along both jaws
+            q = j / 7
+            ux, uy = P(0.70 + 0.44 * q, 0.66 - down)
+            teeth.line(ux, uy, ux, uy + 2.5, 0.9)
+            lx, ly = hinge[0] + (jt[0] - hinge[0]) * q, hinge[1] + (jt[1] - hinge[1]) * q
+            teeth.line(lx, ly, lx, ly - 2.0, 0.9)
+        ex, ey = P(0.86, 0.82 - down)
+        if mode == "asleep":
+            eye.line(ex - 2, ey, ex + 2, ey, 0.3)
+        else:
+            eye.ellipse(ex, ey, 1.6, 1.6, 0.95)
+        # the little arms
+        for e in (0.0, 0.05):
+            sx_, sy_ = P(0.5 + e, 0.32)
+            hide.line(sx_, sy_, sx_ + f * 0.12 * G, sy_ + 0.08 * G, 0.5, width=2)
+            hide.line(sx_ + f * 0.12 * G, sy_ + 0.08 * G, sx_ + f * 0.16 * G, sy_ + 0.04 * G, 0.5, width=1)
+        # the legs: a step swings one foot forward while the other is planted; knees forward, as a bird's
+        for side in (0, 1):
+            if mode == "asleep":
+                foot = (hip[0] + f * (0.3 if side else 0.05) * G, fy)
+            else:
+                up = lift if st["step"] is not None and st["swing"] == side else 0.0
+                foot = (st["feet"][side] + dx * 2, fy - up)
+            hp = (hip[0] + f * 0.05 * G * side, hip[1] + 0.05 * G)
+            d = math.hypot(foot[0] - hp[0], foot[1] - hp[1]) or 1.0
+            a = 0.58 * G
+            m = ((hp[0] + foot[0]) / 2, (hp[1] + foot[1]) / 2)
+            off = math.sqrt(max(0.0, a * a - (d / 2) ** 2))
+            nx, ny = -(foot[1] - hp[1]) / d, (foot[0] - hp[0]) / d
+            knee = (m[0] + f * abs(nx) * off * (1 if f * nx >= 0 else -1), m[1] + ny * off * (1 if f * nx >= 0 else -1))
+            col = 0.2 if side == 0 else 0.3                        # the far leg a shade darker
+            tx_, ty_ = (hp[0] * 0.6 + knee[0] * 0.4, hp[1] * 0.6 + knee[1] * 0.4)
+            hide.ellipse(tx_, ty_, 0.17 * G, 0.24 * G, col)           # the drumstick: a tyrant's thigh
+            hide.line(*hp, *knee, col, width=max(3, int(G / 9)))
+            hide.line(*knee, *foot, col, width=max(2, int(G / 14)))
+            for toe in (-0.05, 0.08, 0.2):
+                hide.line(*foot, foot[0] + f * toe * G, foot[1] + 1, col, width=2)
+        hide.paint(self, bold=False, base=RAIN_FG)
+        belly.paint(self, bold=False, base=RAIN_FG)
+        teeth.paint(self, bold=True, base=MOON_FG)
+        eye.paint(self, bold=True, base=RADIAL_FG)
+        if mode == "asleep":
+            for j in range(3):
+                zz = ((t * 0.6 + j / 3) % 1)
+                self.put(int((ey - 6 - zz * 24) / 4), int((ex + 4 + zz * 10) / 2), "zZz"[j], self.fg(0.6 + zz * 0.4, False, base=STAR_FG))
+        dust = []
+        for p in st["dust"]:                                        # where his foot came down
+            p[0] += p[2]
+            p[1] -= 0.4
+            p[3] -= 0.06
+            if p[3] > 0:
+                self.put(int(p[1] / 4), int(p[0] / 2), "·" if p[3] < 0.5 else "∙", self.fg(0.3 + p[3] * 0.3, False, base=RADIAL_FG))
+                dust.append(p)
+        st["dust"] = dust
+        # ---- the fronds in front, fluttering with the treble
+        fronds = Canvas(h, w)
+        for fu, fv in st["fronds"]:
+            bx, by = fu * gw, fy + 2
+            L = (0.05 + fv * 0.05) * fy
+            for j in range(5):
+                a = -math.pi / 2 + (j - 2) * 0.35 + math.sin(t * (2 + an.treble * 8) + fu * 20 + j) * (0.03 + an.treble * 0.08)
+                prev = (bx, by)
+                for q in np.linspace(0.2, 1, 5):
+                    p = (bx + math.cos(a) * L * q + (j - 2) * q * q * L * 0.25, by + math.sin(a) * L * q + q * q * L * 0.35)
+                    fronds.line(*prev, *p, 0.5 + an.treble * 0.4)
+                    prev = p
+        fronds.paint(self, bold=an.treble > 0.35, base=RAIN_FG)
+        # ---- the Marshalls and Cha-Ka, running for the cave, or hiding in it
+        if not st["hid"]:
+            fx = int(st["family"]) + dx
+            running = mode == "hunt" and st["family"] > w * 0.52 + 0.5
+            fr = (self.frame // 3) % 2 if running else 0
+            self.sprite_at(h, w, self.CHAKA[fr], fx + 9, floor - 3, lambda ch: self.fg(0.35, True, base=RADIAL_FG))
+            self.sprite_at(h, w, self.HOLLY[fr], fx + 5, floor - 3, lambda ch: self.fg(0.95, ch == "=", base=RADIAL_FG))
+            self.sprite_at(h, w, self.WILL[fr], fx, floor - 4, lambda ch: self.fg(0.98, True, base=WAVE_FG))
+        self.put(floor, 0, "▔" * (w - 1), self.fg(0.25, False, base=RAIN_FG))
+        # ---- words
+        if st["say"] and t < st["say"][1]:
+            msg, _, who = st["say"]
+            if who == "grumpy" or (who == "chaka" and st["hid"]):
+                self.put(max(1, int(hinge[1] / 4) - 3), max(0, int(hinge[0] / 2) - 3), msg, self.fg(1.0, True, base=RADIAL_FG))
+            elif st["hid"]:
+                self.put(floor - mouth_h - 1, max(0, cave_x - len(msg) // 2), msg, self.fg(0.9, True, base=MOON_FG))
+            else:
+                self.put(floor - 5, max(0, int(st["family"]) + (8 if who == "chaka" else 4 if who == "holly" else 0) - len(msg) // 3),
+                         msg, self.fg(0.95, True, base=MOON_FG))
+            if who == "chaka" and an.beat > 0.6 or st["roar"] is not None:
+                self.put(max(1, int(hinge[1] / 4) - 2), max(0, int(jt[0] / 2) + (2 if f > 0 else -9)), self.GRUMPY_SAYS["roar"],
+                         self.fg(1.0, True, base=RADIAL_FG))
+        elif st["say"]:
+            st["say"] = None
+        doing = {"hunt": "hunting", "poke": "at the cave", "leave": "going", "away": "away", "asleep": "asleep"}[mode]
+        self.put(h - 2, 1, f"Grumpy: {doing}  ·  steps {st['steps']}  ·  roars {st['roars']}", self.fg(0.5, False, base=RAIN_FG))
 
     # ---- stealie (steal your face)
     # The Stealie in ring units (the ring's radius is 1, y down, origin at its centre), traced from the 1969
