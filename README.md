@@ -22,8 +22,8 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # the light show here, over one ssh connection)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 27 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
-                                              # Circe, the Sirens, the strait of Scylla, the Sleestak, Grumpy, the Stealie, the Wall of Sound
+scripts/deadviz.py                            # the light show: 28 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
+                                              # Circe, the Sirens, the strait of Scylla, the Sleestak, Grumpy, the Stealie, the marching bears, the Wall of Sound
 scripts/radio.py                              # 52 classical radio stations, six of them FLAC, sorted by what they sound like;
                                               # where each publishes the piece it is playing; 23 college stations (KALX, KFJC,
                                               # KZSU, WFMU, WKCR...) and 28 public ones (KPFA, KPOO, KALW, KQED, KEXP, WWOZ...)
@@ -102,7 +102,7 @@ screen: ↵ tunes, the first row is a random station of that list, `i` probes on
 picks a random one from that list.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
-mode `V` walks through the newest ones: the Wall of Sound, the Stealie, Grumpy, the Sleestak, the strait,
+mode `V` walks through the newest ones: the Wall of Sound, the bears, the Stealie, Grumpy, the Sleestak, the strait,
 the Sirens, Circe, Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The light show also starts on its own after three idle minutes while something
@@ -224,6 +224,15 @@ the bass, and the thirteen points around the ring are one group of bands each, t
 faster with the music.
 
 <img src="docs/screenshots/stealie.svg" width="900" alt="the Stealie: the skull in the ring, red and blue, the bolt through the cranium, the thirteen points">
+
+The marching bears, traced from the five on the sticker sheet after Bob Thomas's back cover
+for Bear's Choice (1973): blue, green, yellow, orange and pink, each in its ruff, marching
+across in a line and round again. On every beat each bear steps on to the next of the five
+poses with a hop, so the line high-steps; Bear himself said they were marching, not
+dancing. Each hops higher and brightens with its own fifth of the spectrum, bass to the
+blue. Silence, and they stand and wait for the band.
+
+<img src="docs/screenshots/bears.svg" width="900" alt="the marching bears, pink, blue and green, each in its ruff, mid-step on the floor">
 
 The Wall of Sound, 1974, as the PA it was: stacks of cabinets, one per instrument where
 they stood, Bob, Phil's quad bass (four columns, one per string), the vocal cluster in the
