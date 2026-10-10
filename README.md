@@ -22,8 +22,8 @@ scripts/poseidon.py                           # one door to every tool: bare = t
                                               # the light show here, over one ssh connection)
 scripts/May-The_Lord_Poseidon-Convey-You.py   # the TUI (scripts/deadtui.py is a symlink)
 scripts/gdarchive.py                          # search and download shows, tag them, shn -> flac
-scripts/deadviz.py                            # the light show: 24 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
-                                              # the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
+scripts/deadviz.py                            # the light show: 25 modes; Poseidon, Enik, Polyphemus, the voyage home, Athena's owl, Althea,
+                                              # the Sirens, the strait of Scylla, the Sleestak, the Stealie, the Wall of Sound
 scripts/radio.py                              # 52 classical radio stations, six of them FLAC, sorted by what they sound like;
                                               # where each publishes the piece it is playing; 23 college stations (KALX, KFJC,
                                               # KZSU, WFMU, WKCR...) and 28 public ones (KPFA, KPOO, KALW, KQED, KEXP, WWOZ...)
@@ -103,7 +103,7 @@ picks a random one from that list.
 
 In the light show, `v` cycles the modes forward and `V` backward, so from the first
 mode `V` walks through the newest ones: the Wall of Sound, the Stealie, the Sleestak, the strait,
-Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
+the Sirens, Althea, Athena's owl, the voyage, Polyphemus, Enik, Poseidon.
 
 The light show also starts on its own after three idle minutes while something
 plays. `V` in the list stops that, `V` again lets it, and the choice is remembered;
@@ -162,6 +162,19 @@ bass, sparks fly on a beat, smoke thickens with the mids, and hollyhocks bloom e
 side on the treble. She dances seated, hair a beat behind her shoulders, one hand
 keeping time on her knee. Music too hot for too long and she draws the brand out and
 raises a palm; when it settles she puts it back. Silence, and she stirs the embers.
+
+The Sirens come before the strait, and they are the one episode of the voyage that is
+about music. Two of them on their flowery meadow, women's heads on birds' bodies, a heap
+of bones at the foot of it, a lyre strung with the treble. Their song is the vocal band:
+the mouths open with it, the wings rise, notes drift out to the ship. The crew row past
+with wax in their ears, and Odysseus, lashed to the mast, hears all of it. Hold the song
+near the island and the ropes give one by one while he begs to be let loose; a beat and
+Perimedes and Eurylochus bind him faster. Lose all three and he is over the side and
+swimming for the meadow until they haul him back. A long Dark Star is the Sirens' best
+chance. In silence Kafka has the last word: the Sirens have a still more fatal
+weapon, their silence.
+
+<img src="docs/screenshots/sirens.svg" width="900" alt="the two Sirens on their meadow singing, notes drifting to the ship, Odysseus at the mast begging to be let loose">
 
 The strait is the next chapter of the voyage. Scylla's rock on the left, her cave in it and
 six necks swaying out of it over the water; Charybdis on the right, a whirlpool that dips

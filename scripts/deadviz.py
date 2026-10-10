@@ -69,6 +69,16 @@ Modes:
              keeping time on her knee. Music too hot for too long and she draws the
              brand out and raises a palm: cool down boy. Settled, she puts it back.
              Silence and she stirs the embers: easy Jim
+  sirens     the voyage's next island: the two Sirens on their flowery meadow, women's
+             heads on birds' bodies, the bones of men at its foot, one with a lyre strung
+             with the treble. Their song is the vocal band: the mouths open with it, the
+             wings rise, and notes drift out to the ship. The crew row past with wax in
+             their ears; Odysseus is lashed to the mast and hears it all. Hold the song
+             near the island and the ropes give, one by one, and he begs to be let loose;
+             a beat and Perimedes and Eurylochus bind him faster. Lose all three and he is
+             over the side and swimming for the meadow until they haul him back. Near the
+             island the wind drops and they furl the sail. Silence, and Kafka has the
+             last word: their silence is the more fatal weapon
   scylla     the strait, the next chapter of the voyage: Scylla's rock on the left with
              her cave and six necks swaying out of it, Charybdis on the right, a whirlpool
              that dips the sea and spins faster and wider with the bass. The ship rows
@@ -126,7 +136,7 @@ TAP_LATENCY_MS = 40   # parec's buffer: how far the show trails the speakers, pl
 REF_H, REF_W = 40, 140   # the terminal the cell-counted modes were drawn for; Viz.density() scales them from here
 MODES = ["bars", "plasma", "scope", "rings", "waterfall", "fire", "rain", "stars",
          "wave", "radial", "particles", "meters", "spiral", "life", "poseidon", "enik", "cyclops", "convey",
-         "athena", "althea", "scylla", "sleestak", "stealie", "wall"]
+         "athena", "althea", "sirens", "scylla", "sleestak", "stealie", "wall"]
 
 BLOCKS = " ▁▂▃▄▅▆▇█"
 BRAILLE_BASE = 0x2800
@@ -2239,6 +2249,260 @@ class Viz:
             for j, ch in enumerate(row):
                 if ch != " " and 0 <= px + j < w - 1:
                     self.put(yy, px + j, ch, attr_fn(ch))
+
+    # ---- sirens (Anthemoessa: the two Sirens on their meadow, Odysseus lashed to the mast)
+    SIRENS_SING = ["COME HITHER, RENOWNED ODYSSEUS, GREAT GLORY OF THE ACHAEANS",
+                   "STAY YOUR SHIP, THAT YOU MAY HEAR OUR VOICE",
+                   "NO ONE HAS EVER ROWED PAST US IN HIS BLACK SHIP",
+                   "UNTIL HE HAS HEARD THE HONEY-SWEET VOICE FROM OUR LIPS",
+                   "WE KNOW ALL THE TOILS AT WIDE TROY",
+                   "WE KNOW ALL THINGS THAT COME TO PASS ON THE FRUITFUL EARTH"]
+    SIRENS_SAYS = {"fray": "THE ROPES GIVE", "bind": "PERIMEDES AND EURYLOCHUS BIND HIM FASTER",
+                   "loose": "ODYSSEUS IS LOOSE", "haul": "HAULED BACK, AND BOUND AGAIN",
+                   "past": "PAST THE SIRENS. THE WAX COMES OUT", "silence": "THE SIRENS HAVE A STILL MORE FATAL WEAPON: THEIR SILENCE"}
+    COILS = " -=≡"                                                  # the ropes round him, by how many are left
+
+    def draw_sirens(self, h, w):
+        an = self.an
+        t = self.t
+        dt = 1 / FPS
+        ship_w = 42
+
+        def meadow():                                               # flowers and bones, fixed for the life of the screen
+            return {"flowers": [(self.rng.random(), self.rng.random(), self.rng.random()) for _ in range(22)],
+                    "bones": [(self.rng.random(), self.rng.random(), self.rng.random()) for _ in range(9)]}
+        st = self.state("sirens", h, w, lambda: {
+            "x": float(w - ship_w - 2), "ropes": 3, "fray": 0.0, "pull": 0.0, "song": 0.0, "cool": t + 3,
+            "loose": None, "swim": 0.0, "text": None, "passed": 0, "quiet": 0.0, "notes": [], "phase": 0.0, "hair": 0.0,
+            "stars": np.column_stack([self.rng.random(50) * (w - 1), self.rng.random(50) * max(1, h // 3),
+                                      self.rng.random(50)]), **meadow()})
+        # the island, and how near the ship is to it
+        ix = int(w * 0.30)
+        cx = int(st["x"]) + ship_w // 2
+        prox = math.exp(-((cx - ix) / max(8.0, w * 0.28)) ** 2)
+        # the song is the vocal band, low-passed; heard near the island it works on him
+        st["song"] += (an.mid - st["song"]) * 0.06
+        st["quiet"] = st["quiet"] + dt if an.rms < 0.05 else 0.0
+        drive = prox * max(0.0, st["song"] - 0.15) * 2.5
+        st["pull"] = max(0.0, min(1.0, st["pull"] + (drive - 0.15) * dt))
+        pull = st["pull"]
+        # near the island the wind drops and a calm lies on the sea; they furl the sail and row
+        hz = int(h * 0.42)
+        fore = max(5, int(h * 0.25))                                # the ship is nearer than the island: lower on the sea
+        x = np.arange(w - 1)
+        amp = (0.5 + an.bass * (h * 0.07) + an.beat * 1.0) * (1 - 0.7 * prox)
+        surf = (hz + amp * np.sin(x * 0.16 - t * 1.6) + amp * 0.4 * np.sin(x * 0.37 + t * 2.4)
+                + 0.4 * np.sin(x * 0.06 + t * 0.5))
+        for sx, sy, ph in st["stars"]:
+            band = int(sx / max(1, w - 1) * (BANDS // 2)) + BANDS // 2
+            tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
+            if sy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45:
+                self.put(int(sy), int(sx), "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        rows = np.arange(h - 1)[:, None]
+        depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
+        under = rows >= surf[None, :]
+        self.field(np.clip(0.5 - depth * 0.9 + an.bass * 0.1, 0.0, 0.999), mask=under, base=WATER_BG)
+        for xx in range(0, w - 1):
+            yy = int(surf[xx])
+            if 0 <= yy < h - 1 and surf[xx] <= surf[max(0, xx - 1)] and surf[xx] <= surf[min(w - 2, xx + 1)]:
+                self.put(yy, xx, "≈" if an.treble > 0.35 else "~", self.fg(0.9, an.treble > 0.35, base=WAVE_FG))
+        # Anthemoessa: a low island on the horizon, the flowery meadow on top, the bones of men at its foot
+        gw = max(2, (w - 1) * 2)
+        X = ix * 2
+        bw = w * 0.17 * 2
+        base_y = (hz + 2) * 4
+        top = (hz - 1.5) * 4
+        rock = Canvas(h, w)
+        outline = [(X - bw, base_y), (X - bw * 0.8, top + 0.55 * (base_y - top)), (X - bw * 0.62, top + 0.2 * (base_y - top)),
+                   (X - bw * 0.45, top), (X + bw * 0.5, top), (X + bw * 0.66, top + 0.3 * (base_y - top)),
+                   (X + bw * 0.85, top + 0.6 * (base_y - top)), (X + bw, base_y)]
+        rock.poly(outline, 0.45)
+        for (ry, rx), cell in rock.cells.items():                      # grained, as Scylla's rock is
+            cell[0] &= self.ROCK_GRAIN[(ry * 3 + rx * 5) % len(self.ROCK_GRAIN)]
+            cell[1] = 0.3 + ((ry * 7 + rx * 3) % 5) * 0.06
+        grass = Canvas(h, w)
+        flowers = Canvas(h, w)
+        bones = Canvas(h, w)
+        for gx in range(int(X - bw * 0.45), int(X + bw * 0.5)):     # the meadow: tufts of grass along the top
+            grass.line(gx, top + 1, gx + ((gx * 7) % 3 - 1), top - 1 - (gx * 5) % 3, 0.4 + ((gx * 3) % 4) * 0.12)
+        for fu, fv, fc in st["flowers"]:
+            fx, fy = X - bw * 0.45 + fu * bw * 0.95, top - 2 - fv * 3
+            flowers.blob(fx, fy, fc, size=2 * self.stroke(h, w) + int(an.treble * 2.5))
+        for bu, bv, ba in st["bones"]:                               # a bone: a shaft and a knob at each end
+            bx, by = X - bw * 0.95 + bu * bw * 1.9, base_y - 6 - bv * 6
+            a = ba * math.pi
+            ux, uy = math.cos(a) * 3, math.sin(a) * 1.5
+            bones.line(bx - ux, by - uy, bx + ux, by + uy, 0.6)
+            for e in (-1, 1):
+                bones.dot(bx + e * ux - uy * 0.5, by + e * uy + ux * 0.5, 0.6)
+                bones.dot(bx + e * ux + uy * 0.5, by + e * uy - ux * 0.5, 0.6)
+        # the two Sirens on the meadow: women's heads on birds' bodies, facing the ship, singing with the mids
+        sh = min(top - 12, gw * 0.2)
+        if an.beat > 0.45:
+            st["phase"] += 0.6
+        st["phase"] += dt * (1.5 + st["song"] * 3)
+        sway = math.sin(st["phase"]) * (0.03 + st["song"] * 0.08)
+        st["hair"] += (sway - st["hair"]) * 0.15
+        feathers, hair, skin, dark, lyre, strings = (Canvas(h, w) for _ in range(6))
+        lw = max(2, int(sh / 30))
+        mouths = []
+        for k, fx in enumerate((X - bw * 0.3, X + bw * 0.3)):
+            f = 1.0 if cx * 2 > fx else -1.0                        # each turns toward the ship
+            fy = top - 1
+            s = sway * (1 if k else -1)
+
+            def S(u, v, lift=1.0):
+                return fx + f * (u + s * v * lift) * sh, fy - v * sh
+            for e in (-0.04, 0.04):                                 # legs and talons on the rock
+                feathers.line(*S(e, 0.0), *S(e * 0.8, 0.22), 0.3, width=lw)
+                feathers.line(*S(e, 0.0), *S(e + 0.08, 0.0), 0.3, width=self.stroke(h, w))
+            feathers.poly([S(-0.10, 0.30), S(-0.44, 0.06), S(-0.38, 0.0), S(-0.04, 0.22)], 0.35)   # the tail
+            for j in range(3):
+                feathers.line(*S(-0.08, 0.27), *S(-0.40 + j * 0.03, 0.02 + j * 0.03), 0.55)
+            feathers.ellipse(*S(0.0, 0.40), 0.17 * sh, 0.20 * sh, 0.45)    # the body, the breast a shade lighter
+            feathers.ellipse(*S(0.07, 0.47), 0.10 * sh, 0.13 * sh, 0.6)
+            a = 0.45 + 0.9 * st["song"] + math.sin(st["phase"] * 0.5 + k) * 0.08   # the wing rises with the song
+            sx, sy = S(-0.02, 0.56)
+            tip = (sx - f * math.cos(a) * 0.62 * sh, sy - math.sin(a) * 0.62 * sh)
+            elbow = (sx - f * math.cos(a + 0.5) * 0.3 * sh, sy - math.sin(a + 0.5) * 0.3 * sh)
+            trail = S(-0.16, 0.30)
+            feathers.poly([(sx, sy), elbow, tip, ((tip[0] + trail[0]) / 2, (tip[1] + trail[1]) / 2 + 0.06 * sh), trail], 0.3)
+            for j in range(1, 6):                                   # primaries along the trailing edge
+                q = j / 6
+                p0 = (elbow[0] + (tip[0] - elbow[0]) * q, elbow[1] + (tip[1] - elbow[1]) * q)
+                p1 = (trail[0] + (tip[0] - trail[0]) * q, trail[1] + (tip[1] - trail[1]) * q + 0.05 * sh)
+                feathers.line(*p0, *p1, 0.6, width=self.stroke(h, w))
+            skin.line(*S(0.05, 0.60), *S(0.08, 0.74, 1.3), 0.75, width=lw * 2)   # neck and head
+            hx, hy = S(0.09, 0.84, 1.4)
+            skin.ellipse(hx, hy, 0.10 * sh, 0.12 * sh, 0.75)
+            lag = (st["hair"] - sway) * 2.0 * (1 if k else -1)
+            for j in range(-3, 4):                                  # long hair from the crown down her back
+                ang = math.radians(-90 - f * 25 + j * 18)
+                x1, y1 = hx + math.cos(ang) * 0.085 * sh, hy + math.sin(ang) * 0.105 * sh
+                hair.line(x1, y1, hx - f * (0.12 + abs(j) * 0.02 - lag) * sh, hy + (0.30 + j * 0.02) * sh,
+                          0.3 + abs(j) * 0.04, width=self.stroke(h, w) * 2)
+            hair.ellipse(hx - f * 0.02 * sh, hy - 0.06 * sh, 0.08 * sh, 0.05 * sh, 0.35)
+            dark.ellipse(hx + f * 0.04 * sh, hy - 0.01 * sh, 0.012 * sh, 0.012 * sh, 0.05)
+            mo = 0.004 + min(1.0, st["song"] * 1.6) * 0.016 if st["quiet"] < 1 else 0.003
+            mx, my = hx + f * 0.045 * sh, hy + 0.05 * sh
+            dark.ellipse(mx, my, 0.014 * sh, mo * sh, 0.05)
+            mouths.append((mx, my))
+            if k == 1:                                              # the lyre, standing at her feet, strung with the treble
+                lb0, lb1 = S(0.28, 0.02, 0), S(0.46, 0.02, 0)
+                la0, la1 = S(0.24, 0.34, 0), S(0.50, 0.34, 0)
+                lyre.line(*lb0, *lb1, 0.8, width=lw)
+                lyre.line(*lb0, *S(0.22, 0.18, 0), 0.8, width=lw)
+                lyre.line(*S(0.22, 0.18, 0), *la0, 0.8, width=lw)
+                lyre.line(*lb1, *S(0.52, 0.18, 0), 0.8, width=lw)
+                lyre.line(*S(0.52, 0.18, 0), *la1, 0.8, width=lw)
+                lyre.line(*S(0.22, 0.30, 0), *S(0.52, 0.30, 0), 0.8, width=lw)
+                for j in range(4):
+                    q = (j + 1) / 5
+                    lvl = float(an.level[BANDS * 2 // 3 + j * (BANDS // 12)])
+                    wob = math.sin(t * 40 + j) * lvl * 1.5
+                    x0 = lb0[0] + (lb1[0] - lb0[0]) * q
+                    strings.line(x0, lb0[1], x0 + wob, S(0.22, 0.30, 0)[1], 0.4 + lvl * 0.6)
+        # paint the island, then the Sirens in front of it
+        rock.paint(self, bold=False, base=RADIAL_FG)
+        grass.paint(self, bold=False, base=RAIN_FG)
+        flowers.paint(self, bold=an.treble > 0.35, base=SPARK_FG)
+        bones.paint(self, bold=False, base=MOON_FG)
+        for cv in (feathers, skin, hair):
+            for (cy, cx_), _ in cv.cells.items():
+                self.put(cy, cx_, " ")
+        feathers.paint(self, bold=False, base=SPIRAL_FG)
+        hair.paint(self, bold=False, base=RADIAL_FG)
+        skin.paint(self, bold=True, base=RADIAL_FG)
+        dark.paint(self, bold=False, base=RADIAL_FG)
+        lyre.paint(self, bold=True, base=RADIAL_FG)
+        strings.paint(self, bold=an.treble > 0.35, base=STAR_FG)
+        # the ship rows west past them; the crew have wax in their ears, so only Odysseus hears
+        loose = st["loose"]
+        if loose is None:
+            st["x"] -= 0.05 + an.rms * 0.4
+            if pull > 0.75 and st["ropes"] > 0:                     # held long enough, the song works the ropes loose
+                st["fray"] += dt
+                if st["fray"] > 2.5:
+                    st["fray"] = 0.0
+                    st["ropes"] -= 1
+                    st["text"] = (self.SIRENS_SAYS["fray"], t + 2)
+                    if st["ropes"] == 0:
+                        st["loose"] = loose = t
+                        st["swim"] = float(int(st["x"]) + 19)
+                        st["text"] = (self.SIRENS_SAYS["loose"], t + 3)
+            else:
+                st["fray"] = max(0.0, st["fray"] - dt)
+            if 0 < st["ropes"] < 3 and an.beat > 0.5 and t > st["cool"]:
+                st["ropes"] += 1
+                st["fray"] = 0.0
+                st["cool"] = t + 2
+                st["text"] = (self.SIRENS_SAYS["bind"], t + 3)
+        mast = int(st["x"]) + 19
+        py = int(surf[min(max(cx, 0), w - 2)]) + fore - 9
+        oar = int(self.frame / max(2, 8 - int(an.rms * 12))) % 3
+        rows_ = self.ship_rows(6, oar if loose is None else 1, an.mid > 0.25 and prox < 0.5)
+        if loose is None:                                           # Odysseus, upright in the step of the mast
+            c = self.COILS[st["ropes"]]
+            strain = pull > 0.5 and (self.frame // 3) % 2
+            look = "Ò" if ix < mast else "Ó"
+            rows_[7] = " " * 18 + c + (look if strain else "O") + c
+        self.sprite_at(h, w, rows_, int(st["x"]), py,
+                       lambda ch: (self.fg(0.95, True, base=STAR_FG) if ch in "()|" else
+                                   self.fg(1.0, True, base=RADIAL_FG) if ch in "OÒÓ" else
+                                   self.fg(0.9, True, base=MOON_FG) if ch in self.COILS else
+                                   self.fg(0.98, True, base=WAVE_FG) if ch == "o" else
+                                   self.fg(0.55, False, base=RADIAL_FG)), surf=surf + fore)
+        # loose: over the side and swimming for the meadow, until the two haul him back on a line
+        if loose is not None:
+            k = t - loose
+            if k < 2.5:
+                st["swim"] += max(-0.5, min(0.5, ix - st["swim"]))
+            else:
+                st["swim"] += (mast - st["swim"]) * 0.12
+                for xx in range(int(st["swim"]) + 3, mast, 2):
+                    if 0 <= xx < w - 1:
+                        self.put(int(surf[min(xx, w - 2)]) + fore - 1, xx, "·", self.fg(0.9, False, base=MOON_FG))
+            sx = int(st["swim"])
+            yy = int(surf[min(max(sx, 0), w - 2)]) + fore
+            self.put(yy, max(0, sx), "\\O/" if (self.frame // 4) % 2 else "_O_", self.fg(1.0, True, base=RADIAL_FG))
+            if k > 4:
+                st.update({"loose": None, "ropes": 3, "fray": 0.0, "pull": 0.4, "cool": t + 2,
+                           "text": (self.SIRENS_SAYS["haul"], t + 3)})
+        # the song itself: notes from their mouths, drifting out to the man at the mast
+        if st["quiet"] < 1 and len(st["notes"]) < 30 and self.rng.random() < st["song"] * (0.3 + prox):
+            mx, my = mouths[int(self.rng.integers(2))]
+            st["notes"].append([mx / 2, my / 4, self.rng.random() * 6.3, 1.0, "♪♫"[int(self.rng.integers(2))]])
+        notes = []
+        for nt in st["notes"]:
+            gx, gy = mast - nt[0], (py + 7) - nt[1]
+            d = math.hypot(gx, gy) or 1.0
+            nt[0] += gx / d * 0.7
+            nt[1] += gy / d * 0.35 + math.sin(t * 3 + nt[2]) * 0.15
+            nt[3] -= 0.012
+            if nt[3] > 0 and d > 1.5 and 0 <= nt[1] < h - 1 and 0 <= nt[0] < w - 1:
+                self.put(int(nt[1]), int(nt[0]), nt[4], self.fg(0.5 + nt[3] * 0.5, nt[3] > 0.5, base=SPIRAL_FG))
+                notes.append(nt)
+        st["notes"] = notes
+        if loose is None and pull > 0.6 and (int(t * 4) % 4) < 3:    # he begs them, over the notes
+            self.put(max(0, py - 1), max(0, mast - 4), "LOOSE ME!", self.fg(0.9, True, base=STAR_FG))
+        # past them at last; round again from the east
+        if st["x"] <= 1 and loose is None:
+            st["passed"] += 1
+            st.update({"x": float(w - ship_w - 2), "ropes": 3, "fray": 0.0, "pull": 0.0, "notes": [],
+                       "text": (self.SIRENS_SAYS["past"], t + 4)})
+        if st["quiet"] > 3 and prox > 0.4 and st["text"] is None:
+            st["text"] = (self.SIRENS_SAYS["silence"], t + 5)
+        # words: what happens on row 1, the song on row 2 while it is working on him
+        if st["text"] and t < st["text"][1]:
+            msg = st["text"][0]
+            self.put(1, max(0, (w - len(msg)) // 2), msg[:w - 1], self.fg(1.0, True, base=RADIAL_FG))
+        elif st["text"] and t >= st["text"][1]:
+            st["text"] = None
+        if pull > 0.25 and st["quiet"] < 1:
+            line = self.SIRENS_SING[int(t / 4) % len(self.SIRENS_SING)]
+            self.put(2, max(0, (w - len(line)) // 2), line[:w - 1], self.fg(0.6 + pull * 0.4, pull > 0.6, base=SPIRAL_FG))
+        self.put(h - 2, 1, f"ropes {'●' * st['ropes']}{'○' * (3 - st['ropes'])}  ·  the song {int(pull * 100)}%  ·  "
+                           f"wax in their ears  ·  past the Sirens {st['passed']}", self.fg(0.5, False, base=WAVE_FG))
 
     # ---- scylla (the strait: six heads on one side, the whirlpool on the other)
     ROCK_GRAIN = [0xFF, 0xF7, 0xDF, 0xFE, 0xBF, 0xFB, 0xEF, 0x7F, 0xFD, 0xF6, 0xDB, 0xBE]
