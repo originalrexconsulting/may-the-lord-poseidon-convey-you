@@ -245,9 +245,15 @@ the slowest the Intel Mac at 69, the publish job in 10, six assets),
 `v2026.10.08` (a proper moon for Athena's owl: its own ramp, grey to silver to pale ivory to
 white, resting light silver where the star ramp had rested it on a periwinkle that read as
 purple; 94 seconds end to end, the slowest the Intel Mac at 57, the publish job in 11, six
-assets) and `v2026.10.09` (docs only: the Lord Poseidon won't convey anyone, or Nobody, where
+assets), `v2026.10.09` (docs only: the Lord Poseidon won't convey anyone, or Nobody, where
 the README had him conveying nobody, which with the Cyclops's pun is Odysseus; 85 seconds end
-to end, the slowest the Intel Mac at 64, the publish job in 13, six assets).
+to end, the slowest the Intel Mac at 64, the publish job in 13, six assets) and `v2026.10.09.1`
+(five light-show changes, PRs #92-#96, 24 modes to 28: the Sirens, whose song is the vocal band
+fraying Odysseus's ropes at the mast; tonight's moon in its real phase over Athena and the night
+seas; Circe, the cup, the wand, the sty and Hermes's moly blooming with the treble; Grumpy the
+tyrannosaur, a stride on every beat, at the cave too small for him; and the marching bears,
+traced from the owner's sticker sheet, five poses stepped on the beat; 88 seconds end to end,
+the slowest the Intel Mac at 68, the publish job in 12, six assets).
 
 ## If CI cannot publish
 
