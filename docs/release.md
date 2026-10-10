@@ -234,7 +234,14 @@ and "mpv could not open archive.org and stopped" when mpv drops the track, after
 went down and the 1985-06-24 show sat "playing" in silence; the Intel Mac job failed in
 `make scie` on a DNS lookup, `nodename nor servname provided, or not known`, two and a half
 minutes in while the other three runners finished in under a minute, was rerun on its own with
-`gh run rerun --job` in 107 seconds, and the publish job followed in 9, six assets).
+`gh run rerun --job` in 107 seconds, and the publish job followed in 9, six assets) and
+`v2026.10.07` (college and public radio: two more rows under the classical one, 23 college
+stations from KALX, KFJC and KZSU out to WFMU, WKCR and WREK, and 28 public ones from KPFA,
+KPOO, KALW and KQED out to KCRW, KEXP, WWOZ and the NPR flagships, the Bay first in each,
+every stream verified with ffprobe and six seconds of `mpv --ao=null`; the same list screen,
+a random row per list, the home cursor back on the saved station's row, `poseidon play radio
+kalx` and `radio college | public` from the shell; all four runners in 71 seconds end to end,
+the slowest the Intel Mac at 69, the publish job in 10, six assets).
 
 ## If CI cannot publish
 
