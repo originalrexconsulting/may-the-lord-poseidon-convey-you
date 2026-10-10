@@ -114,6 +114,9 @@ On macOS there is no monitor source: install BlackHole (brew install blackhole-2
 set it as the output device (or a Multi-Output Device with it and the DAC), and the
 tap reads it back through ffmpeg's avfoundation input. DEADVIZ_DEVICE names the
 device (default "BlackHole 2ch"); DEADVIZ_CAPTURE forces parec or ffmpeg.
+
+The moon over Athena's owl and over the night seas is tonight's, in its real phase;
+DEADVIZ_MOON=0.5 forces one (0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter).
 """
 
 import curses
@@ -469,6 +472,15 @@ def _parity(U, V, pts, closed=True):
     return odd
 
 
+def moon_phase(now=None):
+    """The moon's age as a fraction of the synodic month, 0 new, 0.25 first quarter, 0.5 full: the mean month
+    counted from the new moon of 2000-01-06 18:14 UTC, so within a day of the sky. DEADVIZ_MOON=0.5 forces one."""
+    try:
+        return float(os.environ["DEADVIZ_MOON"]) % 1.0
+    except (KeyError, ValueError):
+        return ((now or time.time()) - 947182440) / (29.530588853 * 86400) % 1.0
+
+
 def _grow(m, n):
     """Dilate a boolean grid by n dots, 4-connected."""
     for _ in range(n):
@@ -550,6 +562,32 @@ class Viz:
                 i = int(row[s])
                 if i >= 0:
                     self.put(yy, int(s), " " * int(e - s), curses.color_pair(base + i))
+
+    def moon(self, h, w, cx, cy, r, glow, bold=False):
+        """Tonight's moon, centre (cx, cy) and radius r in dots: the lit part on the moon ramp at glow, the dark
+        part only a faint limb of earthshine. Waxing, the right side is lit (as seen from the north); waning, the left."""
+        p = moon_phase()
+        k = math.cos(2 * math.pi * p)                           # the terminator: an ellipse x = k * half-width
+        lit, dark = Canvas(h, w), Canvas(h, w)
+        for py in range(int(cy - r), int(cy + r) + 1):
+            yn = (py - cy) / r
+            if abs(yn) > 1:
+                continue
+            s = math.sqrt(1 - yn * yn)
+            for px in range(int(cx - r * s), int(cx + r * s) + 1):
+                xn = (px - cx) / r
+                if (xn > k * s) if p < 0.5 else (xn < -k * s):
+                    lit.dot(px, py, glow)
+                elif math.hypot(px - cx, py - cy) > r - 1.5 or (px * 3 + py * 5) % 7 == 0:   # the limb, and a sparse grain
+                    dark.dot(px, py, 0.04)
+        dark.paint(self, bold=False, base=STAR_FG)
+        lit.paint(self, bold=bold, base=MOON_FG)               # last, so a cell on the terminator shows the light
+
+    def sea_moon(self, h, w, hz):
+        """The moon over a night sea: high on the right of the sky, brighter with the treble."""
+        gw = max(2, (w - 1) * 2)
+        r = max(4.0, min(hz * 4 * 0.22, gw * 0.045))
+        self.moon(h, w, gw * 0.84, max(r + 2, hz * 4 * 0.38), r, 0.35 + self.an.treble * 0.6, self.an.treble > 0.4)
 
     def band_cols(self, n):
         """Band index for each of n columns across the width."""
@@ -1035,6 +1073,7 @@ class Viz:
             tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
             if sy + dy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45:
                 self.put(int(sy) + dy, int(sx) + dx, "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        self.sea_moon(h, w, hz)
         # sea: dark, depth-shaded, brighter near the surface so the figure stands out below
         rows = np.arange(h - 1)[:, None]
         depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
@@ -1585,6 +1624,7 @@ class Viz:
             tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
             if sy + dy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45:
                 self.put(int(sy) + dy, int(sx) + dx, "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        self.sea_moon(h, w, hz)
         rows = np.arange(h - 1)[:, None]
         depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
         under = rows >= surf[None, :]
@@ -1834,10 +1874,8 @@ class Viz:
             return (cx0 + u * H * (1 - 0.35 * stretch) + sway * follow * lift * H,
                     feet_y - lift * H * (1 + stretch))
         # the moon, and the Parthenon along the bottom
-        moon = Canvas(h, w)
         mx, my = P(0.36, 0.10)
-        moon.ellipse(mx, my, 0.09 * H, 0.09 * H, 0.35 + an.treble * 0.6)
-        moon.paint(self, bold=an.treble > 0.4, base=MOON_FG)
+        self.moon(h, w, mx, my, 0.09 * H, 0.35 + an.treble * 0.6, an.treble > 0.4)
         cols = max(4, (w - 2) // 6)
         for c in range(cols):
             xx = 1 + c * 6
@@ -2298,6 +2336,7 @@ class Viz:
             tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
             if sy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45:
                 self.put(int(sy), int(sx), "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        self.sea_moon(h, w, hz)
         rows = np.arange(h - 1)[:, None]
         depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
         under = rows >= surf[None, :]
@@ -2540,6 +2579,7 @@ class Viz:
             tw = 0.2 + 0.8 * abs(math.sin(t * 1.5 + ph * 6.28)) * (0.3 + an.level[min(BANDS - 1, band)])
             if sy + dy < surf[min(int(sx), w - 2)] - 1 and tw > 0.45 and sx > w * 0.26:
                 self.put(int(sy) + dy, int(sx) + dx, "✦" if tw > 0.85 else "·", self.fg(tw, tw > 0.85, base=STAR_FG))
+        self.sea_moon(h, w, hz)
         rows = np.arange(h - 1)[:, None]
         depth = (rows - surf[None, :]) / max(1.0, (h - 1) - hz)
         under = rows >= surf[None, :]
