@@ -470,6 +470,9 @@ PHONE_WAIT = 60          # a Browse tap waits this long for the TUI's loop (a ye
 PHONE_CLIENTS = 8        # phones whose menu stacks are kept, each its own
 # the menus where p plays something ↵ only opens: these rows get a ▶ on the phone
 PHONE_PLAY_KINDS = {"dates", "sources", "tours", "tour", "onair", "albums", "find", "songs", "seastones", "nights"}
+# the menus whose show rows have notes for i (doc_here): these rows get an ⓘ; a track list gets one in the bar
+PHONE_NOTES_KINDS = {"dates", "sources", "tour", "onair", "albums", "songs", "seastones", "history", "bookmarks"}
+PHONE_NOTES_WIDTH = 40   # the notes wrapped for a phone held upright, not the terminal's width
 
 # Stations beyond radio.py's list go here: key: (name, url, nominal format, notes).
 # KDFC lives in radio.py since 2026-09-20 (StreamTheWorld's KDFCFMAAC96 mount;
@@ -2028,11 +2031,21 @@ class App:
 
     # ---- the phone remote
 
+    def playing_doc(self):
+        """The show playing now, for its notes: the playlist's show, or a song stream's track's night."""
+        if not self.now:
+            return None
+        st = self.last_status
+        tracks = self.now.get("tracks") or []
+        here = tracks[st["pos"]] if st and st["pos"] < len(tracks) else {}
+        return self.now.get("doc") or ((here.get("doc") or {}).get("identifier") and here["doc"]) or None
+
     def describe_now(self):
         sleep = sleep_tag(self.sleep, self.last_status).strip()
         if not self.now:
             return {"title": "", "tracks": [], "radio": False, "sleep": sleep, "piece": ""}
         return {"title": self.now.get("title") or "", "radio": bool(self.now.get("radio")), "sleep": sleep,
+                "notes": bool(self.playing_doc()),
                 "piece": self.playing.current(self.now.get("radio")),
                 "tracks": [t.get("title") or "" for t in self.now.get("tracks") or []]}
 
@@ -2097,6 +2110,14 @@ class App:
             elif do in ("open", "play") and i is not None and 0 <= i < len(lvl.items):
                 lvl.filter, lvl.cursor = "", i
                 (self.open if do == "open" else self.play_here)()
+            elif do == "notes":             # i on row i, or with no row the show playing now
+                if i is not None and 0 <= i < len(lvl.items):
+                    lvl.filter, lvl.cursor = "", i
+                doc = self.doc_here() if i is not None or lvl.kind == "tracks" else self.playing_doc()
+                if doc:
+                    self.push_notes(doc, PHONE_NOTES_WIDTH)
+                else:
+                    self.say("no notes here: a show has them, a station does not")
             out = self.phone_view()
             if (self.msg, self.msg_until) != msg and self.msg_until > time.time():
                 out["msg"] = self.msg
@@ -2120,14 +2141,16 @@ class App:
                 continue
             head, *rest = re.split(r"\s{3,}", line.strip())
             rows.append({"t": head, "s": "  ·  ".join(rest), "h": isinstance(it, tuple) and it[0] == HDR,
-                         "ask": "song title" if it == FIND_TYPE else ""})
+                         "ask": "song title" if it == FIND_TYPE else "",
+                         "n": lvl.kind in PHONE_NOTES_KINDS and isinstance(it, dict) and (
+                             lvl.kind not in ("history", "bookmarks") or bool((it.get("doc") or {}).get("identifier")))})
         srch = lvl.ctx.get("search")
         busy = ""
         if srch and not srch.done:
             busy = f"searching: {srch.checked}/{srch.total or '?'} dates checked, {len(srch.results)} so far"
         elif srch and srch.error:
             busy = f"search failed: {srch.error}"
-        return {"crumb": [l.title for l in self.stack], "rows": rows, "text": text,
+        return {"crumb": [l.title for l in self.stack], "rows": rows, "text": text, "notes": lvl.kind == "tracks",
                 "play": lvl.kind in PHONE_PLAY_KINDS, "busy": busy, "searching": bool(srch and not srch.done)}
 
     def screensaver_on(self):
@@ -2547,7 +2570,7 @@ class App:
             return item["doc"]                 # a song stream: the night this track came from
         return None
 
-    def push_notes(self, doc):
+    def push_notes(self, doc, width=None):
         """What the item says about itself: source, lineage, the taper's notes, the setlist, the reviews."""
         self.loading(f"reading the notes on {doc['identifier']}...")
         try:
@@ -2556,7 +2579,7 @@ class App:
             self.say(f"metadata: {e}")
             return
         h, w = self.scr.getmaxyx()
-        lines = notes_lines(doc, meta, max(40, w - 4))
+        lines = notes_lines(doc, meta, width or max(40, w - 4))
         lvl = Level("notes", f"notes: {doc['identifier']}", lines, lambda s, w_: s[:w_], {"doc": doc})
         self.push(lvl, 0)
         self.msg_until = 0
@@ -3873,10 +3896,12 @@ li span{color:#5b6580;margin-right:8px}
 #bmsg{color:#ffd166;font-size:14px;padding:6px 16px 0;min-height:1em}
 #bl li{display:flex;align-items:center;gap:10px}#bl li div{flex:1;min-width:0}#bl li small{display:block;color:#7d879c;font-size:13px}
 #bl li.h{color:#8fb3ff;font-size:13px;letter-spacing:.06em;text-transform:uppercase;background:#0e1428}
-#bl li.x{font:13px/1.35 ui-monospace,Menlo,monospace;white-space:pre-wrap;border:0;padding:1px 16px;color:#c3c9d6}
+#bl li.x{font:13px/1.35 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;border:0;padding:1px 16px;color:#c3c9d6}
+#bl li i,#nav #ni,#hn{font-style:normal;font-size:17px;padding:8px 13px;border:0;border-radius:10px;background:#131a33;color:#8fb3ff}
+#hn{float:right;margin-top:-2px;display:none}
 #bl li b{font-size:18px;padding:8px 14px;border-radius:10px;background:#1c2540;color:#ffd166;font-weight:normal}
 </style></head><body>
-<header><h1>MAY THE LORD POSEIDON CONVEY YOU</h1><div id="title">…</div><div id="track"></div><div id="time"></div></header>
+<header><h1>MAY THE LORD POSEIDON CONVEY YOU</h1><div id="title"><button id="hn" onclick="setTab('b');nav('notes')">ⓘ</button><span id="tt">…</span></div><div id="track"></div><div id="time"></div></header>
 <div class="bar"><i id="fill"></i></div>
 <div class="row"><button onclick="cmd('prev')">⏮</button><button onclick="cmd('pause')" id="pp">⏯</button><button onclick="cmd('next')">⏭</button></div>
 <div class="row"><button class="small" onclick="cmd('seek&s=-60')">−60s</button><button class="small" onclick="cmd('seek&s=-10')">−10s</button>
@@ -3888,7 +3913,7 @@ li span{color:#5b6580;margin-right:8px}
 <div id="vol"></div>
 <div class="tabs" id="tabs"><button id="tq" class="on" onclick="setTab('q')">Queue</button><button id="tb" onclick="setTab('b')">Browse</button></div>
 <ul id="q"></ul>
-<div id="b" style="display:none"><div id="nav"><button onclick="nav('back')">←</button><button onclick="nav('home')">⌂</button><div id="crumb"></div></div>
+<div id="b" style="display:none"><div id="nav"><button onclick="nav('back')">←</button><button onclick="nav('home')">⌂</button><div id="crumb"></div><button id="ni" style="display:none" onclick="nav('notes')">ⓘ</button></div>
 <div id="bmsg"></div><ul id="bl"></ul></div>
 <script>
 var cid;try{cid=localStorage.getItem('poseidon-phone')}catch(e){}
@@ -3902,19 +3927,20 @@ fetch('/browse?c='+cid+'&do='+d+(i!=null?'&i='+i:'')+(text!=null?'&text='+encode
 function tap(r,d,i){if(r.ask){var t=prompt(r.ask);if(!t)return;nav(d,i,t)}else nav(d,i)}
 function menu(v,d){seen=true;var m=document.getElementById('bmsg');
 if(v.error){m.textContent=v.error;return}
-m.textContent=v.msg||v.busy||'';document.getElementById('crumb').textContent=v.crumb.join(' › ');
+m.textContent=v.msg||v.busy||'';document.getElementById('crumb').textContent=v.crumb.join(' › ');document.getElementById('ni').style.display=v.notes?'':'none';
 var ul=document.getElementById('bl');ul.innerHTML='';
 v.rows.forEach(function(r,i){var li=document.createElement('li');
 if(v.text){li.className='x';li.textContent=r.t||' '}
 else if(r.h){li.className='h';li.textContent=r.t}
 else{var div=document.createElement('div');div.textContent=r.t;if(r.s){var sm=document.createElement('small');sm.textContent=r.s;div.appendChild(sm)}
 li.appendChild(div);li.onclick=function(){tap(r,'open',i)};
+if(r.n){var n=document.createElement('i');n.textContent='ⓘ';n.onclick=function(e){e.stopPropagation();nav('notes',i)};li.appendChild(n)}
 if(v.play){var b=document.createElement('b');b.textContent='▶';b.onclick=function(e){e.stopPropagation();tap(r,'play',i)};li.appendChild(b)}}
 ul.appendChild(li)});
-if(d=='open'||d=='back'||d=='home')document.getElementById('tabs').scrollIntoView();
+if(d=='open'||d=='back'||d=='home'||d=='notes')document.getElementById('tabs').scrollIntoView();
 if(v.searching&&tab=='b')again=setTimeout(function(){nav('view')},2000)}
 function fmt(s){if(s==null)return'--:--';s=Math.floor(s);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
-function show(d){document.getElementById('title').textContent=d.title||'stopped';
+function show(d){document.getElementById('tt').textContent=d.title||'stopped';document.getElementById('hn').style.display=d.notes?'inline':'none';
 document.getElementById('tabs').style.display=d.browse?'flex':'none';
 document.getElementById('track').textContent=d.track||'';
 document.getElementById('time').textContent=d.pos>=0?fmt(d.time)+' / '+fmt(d.dur)+'   '+(d.pos+1)+'/'+d.count+(d.paused?'   ⏸':'')+(d.sleep?'   '+d.sleep:''):'';
@@ -3992,7 +4018,7 @@ class Remote(threading.Thread):
         tracks = d.get("tracks") or []
         out = {"title": d.get("title") or "", "pos": -1, "count": 0, "tracks": tracks, "track": "", "time": None,
                "dur": None, "paused": False, "volume": None, "mute": False, "sleep": d.get("sleep") or "",
-               "browse": bool(self.browse)}
+               "browse": bool(self.browse), "notes": bool(self.browse and d.get("notes"))}
         if st:
             pos = st["pos"]
             track = tracks[pos] if pos < len(tracks) else (st.get("media_title") or "")
