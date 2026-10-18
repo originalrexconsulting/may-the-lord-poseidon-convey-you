@@ -43,7 +43,8 @@ History adds up to) and Now Playing; shows the taper's notes and the reviews of 
 (`i`); trades a streamed song for the night it came from, at the same second, so the set
 list goes on (`o`); steps the volume (`+`/`-`, `m` mutes, the level is remembered); has a
 sleep timer that fades the gain over its last minute (`t`) and a phone
-remote on the LAN (`R`: play, pause, next, seek, volume, sleep and the queue on one page);
+remote on the LAN (`R`: play, pause, next, seek, volume, sleep and the queue on one page, and a
+Browse tab with the TUI's own menus, so the phone can pick a new show or station);
 adopts an mpv it finds already running (q keeps the music, Q stops it); drives the player
 on another box over ssh (`--host tiro`: mpv and its parec run there, the TUI and the light
 show here, in sync, the box's CPU flat, its shows on disk still playing lossless and `d`

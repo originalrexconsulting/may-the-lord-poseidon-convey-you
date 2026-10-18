@@ -162,6 +162,7 @@ import http.server
 import random
 import json
 import os
+import queue
 import re
 import shlex
 import shutil
@@ -465,6 +466,10 @@ VOLUME_MAX = 100         # unity gain; mpv allows 130 but that only clips before
 HW_PARAMS = "/proc/asound/R20/pcm0p/sub0/hw_params"
 SLEEP_FADE = 60          # the sleep timer fades the gain to nothing over its last minute, then pauses
 REMOTE_PORT = 8402       # the phone remote: R in the TUI, or poseidon remote; http://<this machine>:8402/
+PHONE_WAIT = 60          # a Browse tap waits this long for the TUI's loop (a year from archive.org takes a few s)
+PHONE_CLIENTS = 8        # phones whose menu stacks are kept, each its own
+# the menus where p plays something ↵ only opens: these rows get a ▶ on the phone
+PHONE_PLAY_KINDS = {"dates", "sources", "tours", "tour", "onair", "albums", "find", "songs", "seastones", "nights"}
 
 # Stations beyond radio.py's list go here: key: (name, url, nominal format, notes).
 # KDFC lives in radio.py since 2026-09-20 (StreamTheWorld's KDFCFMAAC96 mount;
@@ -1729,6 +1734,10 @@ class App:
         self.fetches = []         # (identifier, Popen, logpath)
         self.sleep = None         # the sleep timer: {"mode": "minutes"|"track"|"show", ...}
         self.remote = None        # the phone remote's server thread, when R has turned it on
+        self.phone_jobs = queue.Queue()   # taps from the phone's Browse tab, run here on the UI thread
+        self.phone_stacks = {}    # each phone's own menu stack, by the id its page made up
+        self.tui_stack = None     # the TUI's own stack, put aside while a phone tap runs on self.stack
+        self.phone_answer = None  # what the phone typed, for prompt() while its tap runs
         self.state = self.load_state()
         if "POSEIDON_HOST" in os.environ:     # --host NAME / --no-host on the command line: remembered
             if os.environ["POSEIDON_HOST"]:
@@ -1919,7 +1928,8 @@ class App:
 
     def loading(self, text):
         self.msg, self.msg_until = text, time.time() + 60
-        self.draw()
+        if not self.showing:
+            self.draw()
 
     # ---- volume
 
@@ -2035,7 +2045,7 @@ class App:
             self.say("remote off", 3)
             return
         try:
-            self.remote = Remote(self.mpv, self.describe_now, on_sleep=self.set_sleep)
+            self.remote = Remote(self.mpv, self.describe_now, on_sleep=self.set_sleep, browse=self.phone_browse)
             self.remote.start()
         except OSError as e:
             self.remote = None
@@ -2044,6 +2054,81 @@ class App:
         self.state["remote"] = True
         self.write_state()
         self.say(f"remote: {self.remote.url()}  (R again turns it off)", 15)
+
+    # ---- the phone's Browse tab: the TUI's own menus, on the phone's own stack
+
+    def phone_browse(self, client, do, i=None, text=None):
+        """From the remote's thread: hand one tap to the UI thread and wait for the menu it leaves."""
+        job = {"args": (client, do, i, text), "done": threading.Event(), "out": None}
+        self.phone_jobs.put(job)
+        if not job["done"].wait(PHONE_WAIT):
+            return {"error": "the TUI is busy (typing at a prompt?)"}
+        return job["out"]
+
+    def phone_drain(self):
+        """Run the phone's waiting taps. Called from the main loop and from the light show's frames."""
+        while True:
+            try:
+                job = self.phone_jobs.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                job["out"] = self.phone_step(*job["args"])
+            except Exception as e:
+                job["out"] = {"error": str(e)}
+            job["done"].set()
+
+    def phone_step(self, client, do, i, text):
+        """One tap, exactly as ↵ (open) or p (play) on that row in the TUI, but on the phone's stack,
+        so the TUI's cursor stays where it is and whatever plays is the TUI's now (status, history, r)."""
+        stack = self.phone_stacks.pop(client, None)
+        self.tui_stack, self.stack, self.phone_answer = self.stack, [], text
+        msg = (self.msg, self.msg_until)
+        try:
+            if stack:
+                self.stack = stack
+            else:
+                self.push_home()
+            lvl = self.stack[-1]
+            if do == "back":
+                self.pop()
+            elif do == "home":
+                del self.stack[1:]
+            elif do in ("open", "play") and i is not None and 0 <= i < len(lvl.items):
+                lvl.filter, lvl.cursor = "", i
+                (self.open if do == "open" else self.play_here)()
+            out = self.phone_view()
+            if (self.msg, self.msg_until) != msg and self.msg_until > time.time():
+                out["msg"] = self.msg
+        finally:
+            self.phone_stacks[client] = self.stack
+            while len(self.phone_stacks) > PHONE_CLIENTS:     # oldest phone first
+                self.phone_stacks.pop(next(iter(self.phone_stacks)))
+            self.stack, self.tui_stack, self.phone_answer = self.tui_stack, None, None
+        return out
+
+    def phone_view(self):
+        """The menu on top of the phone's stack as rows: the TUI's own text, its columns split into a
+        title and a dim second line, since a phone is too narrow for them."""
+        lvl = self.stack[-1]
+        text = lvl.kind in ("notes", "stats")
+        rows = []
+        for it in lvl.items:
+            line = lvl.render(it, 160)
+            if text:
+                rows.append({"t": line.rstrip()})
+                continue
+            head, *rest = re.split(r"\s{3,}", line.strip())
+            rows.append({"t": head, "s": "  ·  ".join(rest), "h": isinstance(it, tuple) and it[0] == HDR,
+                         "ask": "song title" if it == FIND_TYPE else ""})
+        srch = lvl.ctx.get("search")
+        busy = ""
+        if srch and not srch.done:
+            busy = f"searching: {srch.checked}/{srch.total or '?'} dates checked, {len(srch.results)} so far"
+        elif srch and srch.error:
+            busy = f"search failed: {srch.error}"
+        return {"crumb": [l.title for l in self.stack], "rows": rows, "text": text,
+                "play": lvl.kind in PHONE_PLAY_KINDS, "busy": busy, "searching": bool(srch and not srch.done)}
 
     def screensaver_on(self):
         """Whether the light show starts by itself after SCREENSAVER_SECS idle (V toggles, remembered)."""
@@ -3025,6 +3110,7 @@ class App:
         def title():
             # asked once per frame, 24 times a second; mpv's answer is good for half a second, and over
             # the --host link every ask is a network round trip (the show's keys sat behind them)
+            self.phone_drain()                 # the phone browses while the show runs
             if time.time() - cache["at"] > 0.5:
                 cache["st"] = self.mpv.status() if self.mpv.sock else None
                 cache["at"] = time.time()
@@ -3090,8 +3176,9 @@ class App:
         scr = self.scr
         scr.erase()
         h, w = scr.getmaxyx()
-        lvl = self.stack[-1]
-        crumb = " › ".join(l.title for l in self.stack)
+        stack = self.tui_stack or self.stack      # a phone tap may be loading: draw the TUI's own menus
+        lvl = stack[-1]
+        crumb = " › ".join(l.title for l in stack)
         head = f" {crumb}"
         if lvl.filter:
             head += f"   [/{lvl.filter}]"
@@ -3212,6 +3299,8 @@ class App:
     # ---- input
 
     def prompt(self, label):
+        if self.tui_stack is not None:   # a phone tap: never wait on the keyboard for it
+            return (self.phone_answer or "").strip()
         h, w = self.scr.getmaxyx()
         curses.curs_set(1)
         curses.echo()
@@ -3723,6 +3812,7 @@ class App:
                     self.log_history(self.now["tracks"][st["pos"]])
                     self.logged = key
                 self.last_status = st
+                self.phone_drain()
                 self.draw()
                 ch = self.scr.getch()        # a Ctrl-C here raises out to the handler below
                 if ch == -1:
@@ -3776,6 +3866,15 @@ header{padding:14px 16px 6px}h1{margin:0;font-size:15px;letter-spacing:.08em;col
 #vol{color:#9aa4b8;font-size:14px;text-align:center;padding:2px}
 ul{list-style:none;margin:8px 0 40px;padding:0}li{padding:10px 16px;border-top:1px solid #151c33;color:#c3c9d6}li.now{color:#ffd166;background:#131a33}
 li span{color:#5b6580;margin-right:8px}
+.tabs{display:none;gap:8px;padding:10px 16px 0}.tabs button{flex:1;font-size:16px;padding:10px 0;border:0;border-radius:10px;background:#131a33;color:#9aa4b8}
+.tabs button.on{background:#33417a;color:#e6e9f0}
+#nav{display:flex;gap:8px;align-items:center;padding:10px 16px 0}#nav button{font-size:18px;padding:8px 14px;border:0;border-radius:10px;background:#1c2540;color:#e6e9f0}
+#crumb{flex:1;color:#8fb3ff;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bmsg{color:#ffd166;font-size:14px;padding:6px 16px 0;min-height:1em}
+#bl li{display:flex;align-items:center;gap:10px}#bl li div{flex:1;min-width:0}#bl li small{display:block;color:#7d879c;font-size:13px}
+#bl li.h{color:#8fb3ff;font-size:13px;letter-spacing:.06em;text-transform:uppercase;background:#0e1428}
+#bl li.x{font:13px/1.35 ui-monospace,Menlo,monospace;white-space:pre-wrap;border:0;padding:1px 16px;color:#c3c9d6}
+#bl li b{font-size:18px;padding:8px 14px;border-radius:10px;background:#1c2540;color:#ffd166;font-weight:normal}
 </style></head><body>
 <header><h1>MAY THE LORD POSEIDON CONVEY YOU</h1><div id="title">…</div><div id="track"></div><div id="time"></div></header>
 <div class="bar"><i id="fill"></i></div>
@@ -3786,10 +3885,37 @@ li span{color:#5b6580;margin-right:8px}
 <button class="small" onclick="cmd('vol&d=5')">vol +</button></div>
 <div class="row"><button class="small" onclick="cmd('sleep&m=30')">💤 30m</button><button class="small" onclick="cmd('sleep&m=60')">💤 60m</button>
 <button class="small" onclick="cmd('sleep&m=show')">💤 end</button><button class="small" onclick="cmd('stop')">stop</button></div>
-<div id="vol"></div><ul id="q"></ul>
+<div id="vol"></div>
+<div class="tabs" id="tabs"><button id="tq" class="on" onclick="setTab('q')">Queue</button><button id="tb" onclick="setTab('b')">Browse</button></div>
+<ul id="q"></ul>
+<div id="b" style="display:none"><div id="nav"><button onclick="nav('back')">←</button><button onclick="nav('home')">⌂</button><div id="crumb"></div></div>
+<div id="bmsg"></div><ul id="bl"></ul></div>
 <script>
+var cid;try{cid=localStorage.getItem('poseidon-phone')}catch(e){}
+if(!cid){cid=Math.random().toString(36).slice(2);try{localStorage.setItem('poseidon-phone',cid)}catch(e){}}
+var tab='q',seen=false,again=null;
+function setTab(t){tab=t;document.getElementById('q').style.display=t=='q'?'':'none';document.getElementById('b').style.display=t=='b'?'':'none';
+document.getElementById('tq').className=t=='q'?'on':'';document.getElementById('tb').className=t=='b'?'on':'';if(t=='b'&&!seen)nav('view')}
+function nav(d,i,text){clearTimeout(again);if(d!='view')document.getElementById('bmsg').textContent='…';
+fetch('/browse?c='+cid+'&do='+d+(i!=null?'&i='+i:'')+(text!=null?'&text='+encodeURIComponent(text):''),{method:'POST'})
+.then(r=>r.json()).then(function(v){menu(v,d)}).catch(function(){document.getElementById('bmsg').textContent='no answer from the TUI'})}
+function tap(r,d,i){if(r.ask){var t=prompt(r.ask);if(!t)return;nav(d,i,t)}else nav(d,i)}
+function menu(v,d){seen=true;var m=document.getElementById('bmsg');
+if(v.error){m.textContent=v.error;return}
+m.textContent=v.msg||v.busy||'';document.getElementById('crumb').textContent=v.crumb.join(' › ');
+var ul=document.getElementById('bl');ul.innerHTML='';
+v.rows.forEach(function(r,i){var li=document.createElement('li');
+if(v.text){li.className='x';li.textContent=r.t||' '}
+else if(r.h){li.className='h';li.textContent=r.t}
+else{var div=document.createElement('div');div.textContent=r.t;if(r.s){var sm=document.createElement('small');sm.textContent=r.s;div.appendChild(sm)}
+li.appendChild(div);li.onclick=function(){tap(r,'open',i)};
+if(v.play){var b=document.createElement('b');b.textContent='▶';b.onclick=function(e){e.stopPropagation();tap(r,'play',i)};li.appendChild(b)}}
+ul.appendChild(li)});
+if(d=='open'||d=='back'||d=='home')document.getElementById('tabs').scrollIntoView();
+if(v.searching&&tab=='b')again=setTimeout(function(){nav('view')},2000)}
 function fmt(s){if(s==null)return'--:--';s=Math.floor(s);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
 function show(d){document.getElementById('title').textContent=d.title||'stopped';
+document.getElementById('tabs').style.display=d.browse?'flex':'none';
 document.getElementById('track').textContent=d.track||'';
 document.getElementById('time').textContent=d.pos>=0?fmt(d.time)+' / '+fmt(d.dur)+'   '+(d.pos+1)+'/'+d.count+(d.paused?'   ⏸':'')+(d.sleep?'   '+d.sleep:''):'';
 document.getElementById('fill').style.width=(d.dur?100*Math.min(1,(d.time||0)/d.dur):0)+'%';
@@ -3806,9 +3932,10 @@ class Remote(threading.Thread):
     """A page on the LAN with play, pause, next, volume, sleep and the queue: the second remote on
     the same mpv socket. describe() gives the titles (the TUI's `now`; standalone, the filenames)."""
 
-    def __init__(self, mpv, describe, port=REMOTE_PORT, on_sleep=None):
+    def __init__(self, mpv, describe, port=REMOTE_PORT, on_sleep=None, browse=None):
         super().__init__(daemon=True)
         self.mpv, self.describe, self.on_sleep, self.port = mpv, describe, on_sleep, port
+        self.browse = browse      # the TUI's phone_browse; None standalone, and the page hides Browse
         remote = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -3833,10 +3960,17 @@ class Remote(threading.Thread):
 
             def do_POST(self):
                 path = urllib.parse.urlparse(self.path)
+                q = urllib.parse.parse_qs(path.query)
+                if path.path == "/browse" and remote.browse:
+                    one = lambda k: (q.get(k) or [None])[0]
+                    i = one("i")
+                    out = remote.browse(one("c") or "", one("do") or "view",
+                                        int(i) if i and i.isdigit() else None, one("text"))
+                    self.send(200, json.dumps(out).encode(), "application/json")
+                    return
                 if path.path != "/cmd":
                     self.send(404, b"not here", "text/plain")
                     return
-                q = urllib.parse.parse_qs(path.query)
                 remote.command(q.get("do", [""])[0], q)
                 self.send(200, json.dumps(remote.status()).encode(), "application/json")
         self.server = http.server.ThreadingHTTPServer(("0.0.0.0", port), Handler)
@@ -3857,7 +3991,8 @@ class Remote(threading.Thread):
         d = self.describe() or {}
         tracks = d.get("tracks") or []
         out = {"title": d.get("title") or "", "pos": -1, "count": 0, "tracks": tracks, "track": "", "time": None,
-               "dur": None, "paused": False, "volume": None, "mute": False, "sleep": d.get("sleep") or ""}
+               "dur": None, "paused": False, "volume": None, "mute": False, "sleep": d.get("sleep") or "",
+               "browse": bool(self.browse)}
         if st:
             pos = st["pos"]
             track = tracks[pos] if pos < len(tracks) else (st.get("media_title") or "")
