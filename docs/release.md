@@ -247,13 +247,17 @@ white, resting light silver where the star ramp had rested it on a periwinkle th
 purple; 94 seconds end to end, the slowest the Intel Mac at 57, the publish job in 11, six
 assets), `v2026.10.09` (docs only: the Lord Poseidon won't convey anyone, or Nobody, where
 the README had him conveying nobody, which with the Cyclops's pun is Odysseus; 85 seconds end
-to end, the slowest the Intel Mac at 64, the publish job in 13, six assets) and `v2026.10.09.1`
+to end, the slowest the Intel Mac at 64, the publish job in 13, six assets), `v2026.10.09.1`
 (five light-show changes, PRs #92-#96, 24 modes to 28: the Sirens, whose song is the vocal band
 fraying Odysseus's ropes at the mast; tonight's moon in its real phase over Athena and the night
 seas; Circe, the cup, the wand, the sty and Hermes's moly blooming with the treble; Grumpy the
 tyrannosaur, a stride on every beat, at the cave too small for him; and the marching bears,
 traced from the owner's sticker sheet, five poses stepped on the beat; 88 seconds end to end,
-the slowest the Intel Mac at 68, the publish job in 12, six assets).
+the slowest the Intel Mac at 68, the publish job in 12, six assets) and `v2026.10.17` (the phone
+remote's Browse tab, PR #98: the TUI's own menus on the phone, a row tap for ↵ and its ▶ for `p`,
+run on the UI thread on the phone's own menu stack, so the TUI's cursor stays put and whatever
+plays is the TUI's; 72 seconds end to end, the slowest the Intel Mac at 54, the publish job in 9,
+six assets).
 
 ## If CI cannot publish
 
