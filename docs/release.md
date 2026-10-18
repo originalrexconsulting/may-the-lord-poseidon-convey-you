@@ -253,10 +253,13 @@ fraying Odysseus's ropes at the mast; tonight's moon in its real phase over Athe
 seas; Circe, the cup, the wand, the sty and Hermes's moly blooming with the treble; Grumpy the
 tyrannosaur, a stride on every beat, at the cave too small for him; and the marching bears,
 traced from the owner's sticker sheet, five poses stepped on the beat; 88 seconds end to end,
-the slowest the Intel Mac at 68, the publish job in 12, six assets) and `v2026.10.17` (the phone
+the slowest the Intel Mac at 68, the publish job in 12, six assets), `v2026.10.17` (the phone
 remote's Browse tab, PR #98: the TUI's own menus on the phone, a row tap for ↵ and its ▶ for `p`,
 run on the UI thread on the phone's own menu stack, so the TUI's cursor stays put and whatever
 plays is the TUI's; 72 seconds end to end, the slowest the Intel Mac at 54, the publish job in 9,
+six assets) and `v2026.10.17.1` (the taper's notes on the phone, PR #100: an ⓘ on each show row,
+in the Browse bar on a track list and beside the title for what is playing, the TUI's `i` wrapped
+at 40 columns; 106 seconds end to end, the slowest the Intel Mac at 86, the publish job in 11,
 six assets).
 
 ## If CI cannot publish
