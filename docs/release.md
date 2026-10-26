@@ -260,7 +260,13 @@ plays is the TUI's; 72 seconds end to end, the slowest the Intel Mac at 54, the 
 six assets) and `v2026.10.17.1` (the taper's notes on the phone, PR #100: an ⓘ on each show row,
 in the Browse bar on a track list and beside the title for what is playing, the TUI's `i` wrapped
 at 40 columns; 106 seconds end to end, the slowest the Intel Mac at 86, the publish job in 11,
-six assets).
+six assets) and `v2026.10.25` (two merged PRs: one history.jsonl on the box the player is on,
+PR #102, every machine that drives it adding to the same file over the ssh master with a 5 s
+read deadline and a local fallback; and the Sirens are Draper's women, PR #103, both figures
+traced from the 1909 painting into polygon loops, the standing one singing with dark auburn
+hair, the reclining one red-haired with an eye, a soft nose and her sea-green tail kept to
+the rock face at any terminal size, the lyre on the meadow at her side; 122 seconds end to
+end, the slowest the Intel Mac at 97, the publish job in 15, six assets).
 
 ## If CI cannot publish
 
