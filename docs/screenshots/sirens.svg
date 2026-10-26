@@ -23,7 +23,7 @@
 <text x="12.0" y="80" fill="#c9d1d9">                      </text>
 <text x="196.8" y="80" fill="#afd7ff">·</text>
 <text x="205.2" y="80" fill="#c9d1d9">         </text>
-<text x="280.8" y="80" fill="#ffaf00">⣠⣴⣶⣶⣾⣦</text>
+<text x="280.8" y="80" fill="#d75f00">⣠⣴⣶⣶⣾⣦</text>
 <text x="331.2" y="80" fill="#c9d1d9"> </text>
 <text x="339.6" y="80" fill="#ffff5f" font-weight="bold">⡀</text>
 <text x="348.0" y="80" fill="#c9d1d9">                                    </text>
@@ -33,15 +33,15 @@
 <text x="1028.4" y="80" fill="#c9d1d9">                   </text>
 <text x="12.0" y="98" fill="#87afff">·</text>
 <text x="20.4" y="98" fill="#c9d1d9">                              </text>
-<text x="272.4" y="98" fill="#ffaf00">⣰⣿⣿⣿⣿⡿⠁</text>
-<text x="331.2" y="98" fill="#af5f00">⠠⠄</text>
-<text x="348.0" y="98" fill="#c9d1d9"> </text>
+<text x="272.4" y="98" fill="#d75f00">⣰⣿⣿⣿⣿⡿⠁</text>
+<text x="331.2" y="98" fill="#ffff5f" font-weight="bold">⣿</text>
+<text x="339.6" y="98" fill="#af5f00">⠤⠄</text>
 <text x="356.4" y="98" fill="#87d7ff">·</text>
 <text x="364.8" y="98" fill="#c9d1d9">                                                                     </text>
 <text x="944.4" y="98" fill="#ffffd7">⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡄</text>
 <text x="1045.2" y="98" fill="#c9d1d9">                 </text>
 <text x="12.0" y="116" fill="#c9d1d9">                              </text>
-<text x="264.0" y="116" fill="#ffaf00">⢠⣿⡿⠁⠉⠉</text>
+<text x="264.0" y="116" fill="#d75f00">⢠⣿⡿⠁⠉⠉</text>
 <text x="314.4" y="116" fill="#ffff5f" font-weight="bold">⣴⣿⣿</text>
 <text x="339.6" y="116" fill="#c9d1d9">                </text>
 <text x="474.0" y="116" fill="#ffafd7" font-weight="bold">♫</text>
@@ -51,7 +51,7 @@
 <text x="1171.2" y="116" fill="#d7ffff">·</text>
 <text x="1179.6" y="116" fill="#c9d1d9"> </text>
 <text x="12.0" y="134" fill="#c9d1d9">                              </text>
-<text x="264.0" y="134" fill="#ffaf00">⣼⣿⠁</text>
+<text x="264.0" y="134" fill="#d75f00">⣼⣿⠁</text>
 <text x="289.2" y="134" fill="#ffff5f" font-weight="bold">⢀⣴⣿⣿⣿⡿⣷⡀</text>
 <text x="356.4" y="134" fill="#c9d1d9">                                                                     </text>
 <text x="936.0" y="134" fill="#ffffd7">⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃</text>
@@ -59,7 +59,7 @@
 <text x="12.0" y="152" fill="#c9d1d9"> </text>
 <text x="20.4" y="152" fill="#afffff">·</text>
 <text x="28.8" y="152" fill="#c9d1d9">                            </text>
-<text x="264.0" y="152" fill="#ffaf00">⣿⡏</text>
+<text x="264.0" y="152" fill="#d75f00">⣿⡏</text>
 <text x="280.8" y="152" fill="#ffff5f" font-weight="bold">⣴⣿⣿⣿⣿⣿⡇⠘⣿⡄</text>
 <text x="364.8" y="152" fill="#ffffff" font-weight="bold">✦</text>
 <text x="373.2" y="152" fill="#c9d1d9">      </text>
@@ -74,7 +74,7 @@
 <text x="12.0" y="170" fill="#c9d1d9">      </text>
 <text x="62.4" y="170" fill="#5fafff">·</text>
 <text x="70.8" y="170" fill="#c9d1d9">                       </text>
-<text x="264.0" y="170" fill="#ffaf00">⠟</text>
+<text x="264.0" y="170" fill="#d75f00">⠟</text>
 <text x="272.4" y="170" fill="#ffff5f" font-weight="bold">⣾⣿⣿⣿⣿⣿⠟⠁</text>
 <text x="339.6" y="170" fill="#c9d1d9"> </text>
 <text x="348.0" y="170" fill="#ffff5f" font-weight="bold">⠘⢿⣆</text>
@@ -86,9 +86,8 @@
 <text x="322.8" y="188" fill="#c9d1d9">    </text>
 <text x="356.4" y="188" fill="#ffff5f" font-weight="bold">⠈⠻⡦</text>
 <text x="381.6" y="188" fill="#c9d1d9">       </text>
-<text x="440.4" y="188" fill="#ffd700">⣠⣶⣾⣿⣿⣦</text>
-<text x="490.8" y="188" fill="#ffafd7" font-weight="bold">♫</text>
-<text x="499.2" y="188" fill="#ffff5f" font-weight="bold">⡀</text>
+<text x="440.4" y="188" fill="#ffaf00">⣠⣶⣾⣿⣿⣦⡀</text>
+<text x="499.2" y="188" fill="#ffafd7" font-weight="bold">♫</text>
 <text x="507.6" y="188" fill="#c9d1d9">                                                       </text>
 <text x="969.6" y="188" fill="#ffffd7">⠈⠉⠉⠉⠉⠁</text>
 <text x="1020.0" y="188" fill="#c9d1d9">                    </text>
@@ -96,7 +95,7 @@
 <text x="20.4" y="206" fill="#c9d1d9">                           </text>
 <text x="247.2" y="206" fill="#ffff5f" font-weight="bold">⢿⣿⣿⣿⣿⣿⣿⠃</text>
 <text x="314.4" y="206" fill="#c9d1d9">              </text>
-<text x="432.0" y="206" fill="#ffd700">⢰⣿⣿⣿⣿⣿⡟</text>
+<text x="432.0" y="206" fill="#ffaf00">⢰⣿⣿⣿⣿⣿⡟</text>
 <text x="490.8" y="206" fill="#af5f00">⠉</text>
 <text x="499.2" y="206" fill="#ffd7ff" font-weight="bold">♫</text>
 <text x="507.6" y="206" fill="#c9d1d9">  </text>
@@ -108,7 +107,7 @@
 <text x="12.0" y="224" fill="#c9d1d9">                            </text>
 <text x="247.2" y="224" fill="#ffff5f" font-weight="bold">⠈⢿⣿⣿⣿⣿⠃</text>
 <text x="306.0" y="224" fill="#c9d1d9">               </text>
-<text x="432.0" y="224" fill="#ffd700">⢀⣿⡿⠟⠋⠉</text>
+<text x="432.0" y="224" fill="#ffaf00">⢀⣿⡿⠟⠋⠉</text>
 <text x="482.4" y="224" fill="#ffff5f" font-weight="bold">⠉⠙</text>
 <text x="499.2" y="224" fill="#c9d1d9"> </text>
 <text x="507.6" y="224" fill="#ffff5f" font-weight="bold">⠉⠉</text>
@@ -128,7 +127,7 @@
 <text x="297.6" y="242" fill="#87d7ff">·</text>
 <text x="306.0" y="242" fill="#c9d1d9">              </text>
 <text x="423.6" y="242" fill="#ffff5f" font-weight="bold">⢀</text>
-<text x="432.0" y="242" fill="#ffd700">⠞⠁</text>
+<text x="432.0" y="242" fill="#ffaf00">⠞⠁</text>
 <text x="448.8" y="242" fill="#ffff5f" font-weight="bold">⣿⣿⣿⣿⡀</text>
 <text x="490.8" y="242" fill="#c9d1d9">       </text>
 <text x="549.6" y="242" fill="#afffff">·</text>
