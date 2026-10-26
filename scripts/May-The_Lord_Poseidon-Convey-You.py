@@ -795,7 +795,7 @@ def best_source(date_entry):
 
 
 HISTORY_ON_BOX = "~/.cache/deadtui/history.jsonl"   # the same file, on the box the player is on
-history_lock = threading.Lock()                      # one line on its way to the box at a time, in order
+history_lock = threading.Lock()                      # one line on its way to the box at a time
 
 
 def append_history(rec):
@@ -806,6 +806,8 @@ def append_history(rec):
     line = json.dumps(rec) + "\n"
     host = poseidon.host()
     if host:
+        # deliberately not a daemon: quitting waits for the last line to land on the box or
+        # fall back here (bounded by the ssh timeout), rather than lose it
         threading.Thread(target=append_history_on_box, args=(host, line)).start()
     else:
         append_history_here(line)
@@ -834,7 +836,7 @@ def read_history(tail=None):
     host = poseidon.host()
     if host:
         r = host.run(("tail -n %d " % tail if tail else "cat ") + host.quote(HISTORY_ON_BOX) + " 2>/dev/null || true",
-                     timeout=20)
+                     timeout=5)
         return r.stdout.splitlines(True) if r.returncode == 0 else None
     try:
         with open(HISTORY) as f:

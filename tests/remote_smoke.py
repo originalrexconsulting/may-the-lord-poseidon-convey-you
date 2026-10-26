@@ -7,6 +7,7 @@ $HOME/.config/mpv/mpv.conf, which says ao=null. The temp dir is under /tmp on pu
 socket path must stay under 108 bytes.
 """
 import importlib.util
+import json
 import os
 import shutil
 import signal
@@ -185,6 +186,16 @@ def main():
         with open(os.environ["FAKE_SSH_LOG"]) as f:
             cats = f.read().count("-- cat " + hw)
         check(rates == [44100] * 5 and cats == 1, f"DAC rate from the box, read once for five asks ({cats} reads)")
+
+        tui.append_history({"ts": 0, "identifier": "gd77-05-08", "title": "Scarlet Begonias"})
+        deadline = time.time() + 5
+        lines = None
+        while time.time() < deadline and not lines:          # the append runs in its own thread
+            lines = tui.read_history(tail=5)
+            time.sleep(0.1)
+        check(lines and json.loads(lines[-1])["title"] == "Scarlet Begonias", "history: appended on the box, read back", str(lines))
+        with open(os.environ["FAKE_SSH_LOG"]) as f:
+            check("cat >> " in f.read(), "history: the line went over the link")
 
         mpv.stop()
         check(mpv.probe() is None, "stop: nothing answers on the box any more")
