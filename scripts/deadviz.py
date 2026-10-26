@@ -2624,7 +2624,7 @@ class Viz:
     # from its base negative; the reclining base is the line her chest rests on. Loops per
     # figure: skin (the silhouette, the face profile in it), arm (the reaching arm where it
     # leaves the torso), hair. In the painting the standing siren's near arm hides behind a
-    # crewman; its visible shoulder line is completed down to a hand braced on the rock,
+    # crewman; its visible shoulder line is completed into a reach toward the passing ship,
     # since the island has no crew.
     SIREN_STANDING = {
         "skin": [
@@ -2634,7 +2634,7 @@ class Viz:
             (33.0, 0.0), (31.0, -14.0), (35.3, -22.8), (39.4, -45.6), (45.6, -54.8), (53.1, -66.4), (53.9, -78.8),
             (44.0, -95.4), (32.4, -108.7), (27.0, -117.0), (17.4, -128.6), (7.5, -140.2),
             (-3.3, -149.8), (-12.4, -158.5), (-14.5, -161.8), (-25.7, -182.6), (-33.2, -187.5),
-            (-39.8, -180.1), (-38.6, -176.8), (-41.1, -174.7), (-39.0, -173.4), (-40.7, -171.8)],
+            (-37.5, -180.1), (-36.6, -176.8), (-38.5, -174.7), (-36.5, -173.4), (-38.0, -171.8)],
         "arm": [
             (-33.2, -150.2), (-46.5, -132.8), (-62.2, -108.7), (-72.6, -92.1), (-79.7, -86.3),
             (-75.5, -82.2), (-67.2, -87.1), (-55.6, -103.7), (-42.3, -126.1), (-31.1, -143.2)],
@@ -2646,7 +2646,7 @@ class Viz:
     SIREN_RECLINING = {
         "skin": [
             (-152.7, -42.3), (-143.2, -41.5), (-132.8, -46.5), (-116.2, -51.5), (-91.3, -58.9),
-            (-82.2, -59.8), (-58.1, -53.9), (-40.7, -47.3), (-39.8, -63.1), (-44.8, -71.4),
+            (-82.2, -59.8), (-58.1, -53.9), (-40.7, -47.3), (-39.8, -63.1), (-42.5, -71.4),
             (-43.2, -76.3), (-39.0, -72.6), (-36.1, -67.2), (-32.4, -62.2), (-28.2, -57.3),
             (-24.1, -46.5), (-25.7, -34.0), (-20.7, -19.5), (-13.3, -7.1), (-6.2, -1.7),
             (0.0, 0.0), (7.5, 14.9), (14.5, 32.4), (31.1, 52.3), (53.9, 63.5), (83.0, 73.0),
@@ -2663,6 +2663,7 @@ class Viz:
             (-38.2, -76.3), (-31.1, -82.9)],
     }
     SIREN_MOUTH = {"standing": (-38.2, -173.9), "reclining": (-39.0, -69.3)}
+    SIREN_EYE = {"standing": (-33.0, -181.0), "reclining": (-40.5, -73.5)}
     SIREN_TAIL_CUT = 62.0            # reclining: u + 0.8 v beyond this is her sea-green tail
 
     def _siren_figs(self, h, w):
@@ -2676,7 +2677,8 @@ class Viz:
         bw = w * 0.17 * 2
         sh = max(8, min(top - 12, gw * 0.2))
         sc = sh / 200.0
-        figs = {"sh": sh}
+        vk = min(1.0, 16.0 / (84.2 * sc))        # what hangs below the base stays on the rock face
+        figs = {"sh": sh, "vk": vk}
         for name, fig, fx, fy in (("standing", self.SIREN_STANDING, X - bw * 0.33, top),
                                   ("reclining", self.SIREN_RECLINING, X + bw * 0.45, top - 2)):
             out = {"fx": fx, "fy": fy, "mouth": self.SIREN_MOUTH[name], "skin": [], "hair": [],
@@ -2687,7 +2689,8 @@ class Viz:
                 def cv_of(loops, lean, col):
                     cv = Canvas(h, w)
                     for loop in loops:
-                        cv.poly([(fx + fs * (u + lean * -v) * sc, fy + v * sc) for u, v in loop], col)
+                        cv.poly([(fx + fs * (u + lean * -v) * sc, fy + (v if v <= 0 else v * vk) * sc)
+                                 for u, v in loop], col)
                     return cv
                 skins, tails = [], []
                 for s in (-0.06, 0.0, 0.06):
@@ -2695,7 +2698,9 @@ class Viz:
                     tl = Canvas(h, w)
                     if name == "reclining":
                         for key in [k for k in cv.cells
-                                    if fs * (k[1] * 2 + 1 - fx) / sc + 0.8 * (k[0] * 4 + 2 - fy) / sc
+                                    if fs * (k[1] * 2 + 1 - fx) / sc
+                                    + 0.8 * max((k[0] * 4 + 2 - fy), 0) / (sc * vk)
+                                    + 0.8 * min((k[0] * 4 + 2 - fy), 0) / sc
                                     > self.SIREN_TAIL_CUT]:
                             tl.cells[key] = [cv.cells.pop(key)[0], 0.5]
                     skins.append(cv)
@@ -2810,8 +2815,11 @@ class Viz:
             mo = 0.004 + min(1.0, st["song"] * 1.6) * 0.016 if st["quiet"] < 1 else 0.003
             dark.ellipse(mx, my, 0.014 * sh, mo * sh, 0.05)
             mouths.append((mx, my))
-            if name == "reclining":   # the lyre stands at her hand, strung with the treble
-                lx, ly = f["fx"] + fs * -33 * sc, f["fy"] + 20 * sc
+            eu, ev = self.SIREN_EYE[name]
+            dark.ellipse(f["fx"] + fs * (eu + (bi - 1) * 0.06 * -ev) * sc, f["fy"] + ev * sc,
+                         0.012 * sh, 0.012 * sh, 0.05)
+            if name == "reclining":   # the lyre stands on the meadow at her side, strung with the treble
+                lx, ly = f["fx"] + fs * -72 * sc, f["fy"]
                 b0, b1 = (lx - 9 * sc, ly), (lx + 9 * sc, ly)
                 lyre.line(*b0, *b1, 0.8, width=lw)
                 lyre.line(*b0, lx - 13 * sc, ly - 17 * sc, 0.8, width=lw)
