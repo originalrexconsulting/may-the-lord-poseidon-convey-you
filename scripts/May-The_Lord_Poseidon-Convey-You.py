@@ -794,13 +794,56 @@ def best_source(date_entry):
     return sorted(local or items, key=source_rank)[0]
 
 
+HISTORY_ON_BOX = "~/.cache/deadtui/history.jsonl"   # the same file, on the box the player is on
+history_lock = threading.Lock()                      # one line on its way to the box at a time
+
+
 def append_history(rec):
+    """One line in history.jsonl. With the player on another box the line goes to that box's file,
+    so every machine that plays there adds to one history instead of each keeping its own half.
+    It is sent from a thread (a dropped link holds an ssh for its timeout, the TUI should not wait)
+    and lands in this machine's file instead when the box does not take it."""
+    line = json.dumps(rec) + "\n"
+    host = poseidon.host()
+    if host:
+        # deliberately not a daemon: quitting waits for the last line to land on the box or
+        # fall back here (bounded by the ssh timeout), rather than lose it
+        threading.Thread(target=append_history_on_box, args=(host, line)).start()
+    else:
+        append_history_here(line)
+
+
+def append_history_here(line):
     try:
         os.makedirs(CACHE, exist_ok=True)
         with open(HISTORY, "a") as f:
-            f.write(json.dumps(rec) + "\n")
+            f.write(line)
     except OSError:
         pass
+
+
+def append_history_on_box(host, line):
+    with history_lock:
+        r = host.run(f"mkdir -p {host.quote(os.path.dirname(HISTORY_ON_BOX))} && cat >> {host.quote(HISTORY_ON_BOX)}",
+                     input=line)
+    if r.returncode != 0:
+        append_history_here(line)
+
+
+def read_history(tail=None):
+    """history.jsonl's lines (the last `tail` of them), from the box when the player is on one;
+    None when the box did not answer."""
+    host = poseidon.host()
+    if host:
+        r = host.run(("tail -n %d " % tail if tail else "cat ") + host.quote(HISTORY_ON_BOX) + " 2>/dev/null || true",
+                     timeout=5)
+        return r.stdout.splitlines(True) if r.returncode == 0 else None
+    try:
+        with open(HISTORY) as f:
+            lines = f.readlines()
+    except OSError:
+        return []
+    return lines[-tail:] if tail else lines
 
 
 DOC_KEYS = ("identifier", "date", "collection", "kind", "venue", "coverage", "lp", "artist", "title",
@@ -2640,11 +2683,12 @@ class App:
 
     def stats_lines(self):
         """What the whole history.jsonl adds up to."""
-        try:
-            with open(HISTORY) as f:
-                recs = [json.loads(l) for l in f if l.strip()]
-        except (OSError, ValueError):
-            recs = []
+        recs = []
+        for line in self.history_lines():
+            try:
+                recs.append(json.loads(line))
+            except ValueError:
+                pass                  # a torn line (a kill mid-write) costs that line, not all of Stats
         recs = [r for r in recs if isinstance(r, dict)]
         if not recs:
             return ["  nothing played yet"]
@@ -2796,14 +2840,16 @@ class App:
             rec["track"] = int(track.get("track") or 0)
         append_history(rec)
 
-    def history(self):
-        try:
-            with open(HISTORY) as f:
-                lines = f.readlines()[-HISTORY_ROWS:]
-        except OSError:
+    def history_lines(self, tail=None):
+        lines = read_history(tail)
+        if lines is None:
+            self.say(f"{self.host.name} did not answer: no history to show", 8)
             return []
+        return lines
+
+    def history(self):
         out = []
-        for line in lines:
+        for line in self.history_lines(HISTORY_ROWS):
             try:
                 out.append(json.loads(line))
             except ValueError:
