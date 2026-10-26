@@ -179,9 +179,12 @@ Silence, and she sings at her loom, and the web grows.
 <img src="docs/screenshots/circe.svg" width="900" alt="Circe at her loom with the wand raised, a man at the table with the cup, pigs in the sty">
 
 The Sirens come before the strait, and they are the one episode of the voyage that is
-about music. Two of them on their flowery meadow, women's heads on birds' bodies, a heap
-of bones at the foot of it, a lyre strung with the treble. Their song is the vocal band:
-the mouths open with it, the wings rise, notes drift out to the ship. The crew row past
+about music. Two of them on their flowery meadow, traced from Draper's 1909 painting —
+one standing with her head thrown back in song, one reclining with an arm stretched out
+toward the ship and her tail trailing down the rock — a heap of bones at the foot of it,
+a lyre at the reclining one's hand strung with the treble. Their song is the vocal band:
+the mouths open with it, the figures sway and their hair swings with it, notes drift out
+to the ship. The crew row past
 with wax in their ears, and Odysseus, lashed to the mast, hears all of it. Hold the song
 near the island and the ropes give one by one while he begs to be let loose; a beat and
 Perimedes and Eurylochus bind him faster. Lose all three and he is over the side and

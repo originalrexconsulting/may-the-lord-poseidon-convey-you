@@ -77,10 +77,13 @@ Modes:
              blooming with the treble; in full bloom he takes it in, the wand fails, he
              draws his sword, she yields, and the pigs are men again, taller than before.
              Silence and she sings at her loom, and the web grows
-  sirens     the voyage's next island: the two Sirens on their flowery meadow, women's
-             heads on birds' bodies, the bones of men at its foot, one with a lyre strung
-             with the treble. Their song is the vocal band: the mouths open with it, the
-             wings rise, and notes drift out to the ship. The crew row past with wax in
+  sirens     the voyage's next island: the two Sirens on their flowery meadow, traced
+             from Draper's 1909 painting — one standing with her head thrown back in
+             song, one reclining with an arm stretched toward the ship and her tail
+             trailing down the rock — the bones of men at its foot, a lyre at the
+             reclining one's hand strung with the treble. Their song is the vocal band:
+             the mouths open with it, the figures and their hair sway with it, and
+             notes drift out to the ship. The crew row past with wax in
              their ears; Odysseus is lashed to the mast and hears it all. Hold the song
              near the island and the ropes give, one by one, and he begs to be let loose;
              a beat and Perimedes and Eurylochus bind him faster. Lose all three and he is
@@ -2614,6 +2617,101 @@ class Viz:
                    "past": "PAST THE SIRENS. THE WAX COMES OUT", "silence": "THE SIRENS HAVE A STILL MORE FATAL WEAPON: THEIR SILENCE"}
     COILS = " -=≡"                                                  # the ropes round him, by how many are left
 
+    # The two Sirens traced from Herbert Draper's "Ulysses and the Sirens" (1909): the
+    # standing one a back view, head thrown up in song; the reclining one with her arm
+    # stretched out toward the ship and her tail trailing down the rock. Units of 1/200 of
+    # the standing figure's height (the bears' convention), x from each figure's axis, y up
+    # from its base negative; the reclining base is the line her chest rests on. Loops per
+    # figure: skin (the silhouette, the face profile in it), arm (the reaching arm where it
+    # leaves the torso), hair. In the painting the standing siren's near arm hides behind a
+    # crewman; its visible shoulder line is completed into a reach toward the passing ship,
+    # since the island has no crew.
+    SIREN_STANDING = {
+        "skin": [
+            (-36.5, -171.0), (-32.0, -165.2), (-30.3, -161.0), (-29.9, -145.2), (-27.8, -126.6),
+            (-29.9, -117.0), (-25.7, -110.8), (-19.9, -102.5), (-16.6, -95.4), (-11.6, -87.1),
+            (-4.1, -75.9), (2.1, -61.4), (7.5, -41.5), (11.6, -21.6), (17.0, -10.0), (21.0, -2.1),
+            (33.0, 0.0), (31.0, -14.0), (35.3, -22.8), (39.4, -45.6), (45.6, -54.8), (53.1, -66.4), (53.9, -78.8),
+            (44.0, -95.4), (32.4, -108.7), (27.0, -117.0), (17.4, -128.6), (7.5, -140.2),
+            (-3.3, -149.8), (-12.4, -158.5), (-14.5, -161.8), (-25.7, -182.6), (-33.2, -187.5),
+            (-37.5, -180.1), (-36.6, -176.8), (-38.5, -174.7), (-36.5, -173.4), (-38.0, -171.8)],
+        "arm": [
+            (-33.2, -150.2), (-46.5, -132.8), (-62.2, -108.7), (-72.6, -92.1), (-79.7, -86.3),
+            (-75.5, -82.2), (-67.2, -87.1), (-55.6, -103.7), (-42.3, -126.1), (-31.1, -143.2)],
+        "hair": [
+            (-24.1, -200.0), (-8.3, -199.2), (9.1, -193.4), (19.1, -181.7), (27.0, -161.0),
+            (32.4, -139.0), (35.3, -118.3), (34.0, -103.7), (27.0, -114.1), (21.6, -134.9),
+            (15.8, -153.5), (6.2, -168.1), (-12.4, -161.0), (-27.0, -183.4), (-34.0, -188.8)],
+    }
+    SIREN_RECLINING = {
+        "skin": [
+            (-152.7, -42.3), (-143.2, -41.5), (-132.8, -46.5), (-116.2, -51.5), (-91.3, -58.9),
+            (-82.2, -59.8), (-58.1, -53.9), (-40.7, -47.3), (-39.8, -63.1), (-42.5, -71.4),
+            (-43.2, -76.3), (-39.0, -72.6), (-36.1, -67.2), (-32.4, -62.2), (-28.2, -57.3),
+            (-24.1, -46.5), (-25.7, -34.0), (-20.7, -19.5), (-13.3, -7.1), (-6.2, -1.7),
+            (0.0, 0.0), (7.5, 14.9), (14.5, 32.4), (31.1, 52.3), (53.9, 63.5), (83.0, 73.0),
+            (120.3, 81.3), (157.7, 84.2), (178.4, 84.2), (153.5, 77.2), (120.3, 66.4),
+            (91.3, 52.3), (68.5, 39.8), (56.0, 29.0), (47.7, 15.8), (37.3, -2.9), (27.0, -21.6),
+            (12.4, -42.3), (-8.3, -49.8), (-27.0, -51.5), (-49.8, -49.8), (-82.2, -53.9),
+            (-116.2, -45.6), (-132.8, -41.5), (-143.2, -39.0)],
+        "arm": [
+            (-21.6, -25.7), (-23.2, 5.4), (-33.2, 19.9), (-39.8, 14.9), (-29.9, 0.0),
+            (-27.0, -24.9)],
+        "hair": [
+            (-21.6, -88.8), (0.8, -85.5), (13.3, -74.7), (17.4, -58.1), (11.6, -45.6),
+            (24.1, -24.9), (8.3, -37.3), (-9.1, -46.5), (-26.6, -52.3), (-34.0, -64.7),
+            (-38.2, -76.3), (-31.1, -82.9)],
+    }
+    SIREN_MOUTH = {"standing": (-38.2, -173.9), "reclining": (-39.0, -69.3)}
+    SIREN_EYE = {"standing": (-33.0, -181.0), "reclining": (-40.5, -73.5)}
+    SIREN_TAIL_CUT = 62.0            # reclining: u + 0.8 v beyond this is her sea-green tail
+
+    def _siren_figs(self, h, w):
+        """Both figures' braille layers for this terminal size: per facing (0 west, 1 east)
+        the skin at three leans and the hair at five swings, the reclining one's tail split
+        off to be painted sea-green. The leans and swings shear with height above the base,
+        so a figure leans from her feet and her hair swings the way the song moves her."""
+        gw = max(2, (w - 1) * 2)
+        top = (int(h * 0.42) - 1.5) * 4
+        X = int(w * 0.30) * 2
+        bw = w * 0.17 * 2
+        sh = max(8, min(top - 12, gw * 0.2))
+        sc = sh / 200.0
+        vk = min(1.0, 16.0 / (84.2 * sc))        # what hangs below the base stays on the rock face
+        figs = {"sh": sh}
+        for name, fig, fx, fy in (("standing", self.SIREN_STANDING, X - bw * 0.33, top),
+                                  ("reclining", self.SIREN_RECLINING, X + bw * 0.45, top - 2)):
+            out = {"fx": fx, "fy": fy, "mouth": self.SIREN_MOUTH[name], "skin": [], "hair": [],
+                   "tail": []}
+            for F in (0, 1):
+                fs = -1.0 if F else 1.0          # Draper's figures face west; F = 1 mirrors them east
+
+                def cv_of(loops, lean, col):
+                    cv = Canvas(h, w)
+                    for loop in loops:
+                        cv.poly([(fx + fs * (u + lean * -v) * sc, fy + (v if v <= 0 else v * vk) * sc)
+                                 for u, v in loop], col)
+                    return cv
+                skins, tails = [], []
+                for s in (-0.06, 0.0, 0.06):
+                    cv = cv_of([fig["skin"], fig["arm"]], s, 0.75)
+                    tl = Canvas(h, w)
+                    if name == "reclining":
+                        for key in [k for k in cv.cells
+                                    if fs * (k[1] * 2 + 1 - fx) / sc
+                                    + 0.8 * max((k[0] * 4 + 2 - fy), 0) / (sc * vk)
+                                    + 0.8 * min((k[0] * 4 + 2 - fy), 0) / sc
+                                    > self.SIREN_TAIL_CUT]:
+                            tl.cells[key] = [cv.cells.pop(key)[0], 0.5]
+                    skins.append(cv)
+                    tails.append(tl)
+                out["skin"].append(skins)
+                out["tail"].append(tails)
+                out["hair"].append([cv_of([fig["hair"]], q * 0.12, 0.12 if name == "standing" else 0.32)
+                                    for q in (-1.0, -0.5, 0.0, 0.5, 1.0)])   # dark auburn; the red
+            figs[name] = out
+        return figs
+
     def draw_sirens(self, h, w):
         an = self.an
         t = self.t
@@ -2626,6 +2724,7 @@ class Viz:
         st = self.state("sirens", h, w, lambda: {
             "x": float(w - ship_w - 2), "ropes": 3, "fray": 0.0, "pull": 0.0, "song": 0.0, "cool": t + 3,
             "loose": None, "swim": 0.0, "text": None, "passed": 0, "quiet": 0.0, "notes": [], "phase": 0.0, "hair": 0.0,
+            "figs": self._siren_figs(h, w),
             "stars": np.column_stack([self.rng.random(50) * (w - 1), self.rng.random(50) * max(1, h // 3),
                                       self.rng.random(50)]), **meadow()})
         # the island, and how near the ship is to it
@@ -2689,83 +2788,61 @@ class Viz:
             for e in (-1, 1):
                 bones.dot(bx + e * ux - uy * 0.5, by + e * uy + ux * 0.5, 0.6)
                 bones.dot(bx + e * ux + uy * 0.5, by + e * uy - ux * 0.5, 0.6)
-        # the two Sirens on the meadow: women's heads on birds' bodies, facing the ship, singing with the mids
-        sh = min(top - 12, gw * 0.2)
+        # the two Sirens on the meadow, Draper's figures, each turned to face the ship:
+        # the song leans them and swings their hair, and their mouths open with it
+        figs = st["figs"]
+        sh = figs["sh"]
+        sc = sh / 200.0
         if an.beat > 0.45:
             st["phase"] += 0.6
         st["phase"] += dt * (1.5 + st["song"] * 3)
-        sway = math.sin(st["phase"]) * (0.03 + st["song"] * 0.08)
+        sway = math.sin(st["phase"]) * min(1.0, 0.25 + st["song"] * 1.2)
         st["hair"] += (sway - st["hair"]) * 0.15
-        feathers, hair, skin, dark, lyre, strings = (Canvas(h, w) for _ in range(6))
+        bi = max(0, min(2, int((sway + 1) * 1.5)))
+        hi = max(0, min(4, int((st["hair"] + 1) * 2.5)))
+        dark, lyre, strings = Canvas(h, w), Canvas(h, w), Canvas(h, w)
         lw = max(2, int(sh / 30))
         mouths = []
-        for k, fx in enumerate((X - bw * 0.3, X + bw * 0.3)):
-            f = 1.0 if cx * 2 > fx else -1.0                        # each turns toward the ship
-            fy = top - 1
-            s = sway * (1 if k else -1)
-
-            def S(u, v, lift=1.0):
-                return fx + f * (u + s * v * lift) * sh, fy - v * sh
-            for e in (-0.04, 0.04):                                 # legs and talons on the rock
-                feathers.line(*S(e, 0.0), *S(e * 0.8, 0.22), 0.3, width=lw)
-                feathers.line(*S(e, 0.0), *S(e + 0.08, 0.0), 0.3, width=self.stroke(h, w))
-            feathers.poly([S(-0.10, 0.30), S(-0.44, 0.06), S(-0.38, 0.0), S(-0.04, 0.22)], 0.35)   # the tail
-            for j in range(3):
-                feathers.line(*S(-0.08, 0.27), *S(-0.40 + j * 0.03, 0.02 + j * 0.03), 0.55)
-            feathers.ellipse(*S(0.0, 0.40), 0.17 * sh, 0.20 * sh, 0.45)    # the body, the breast a shade lighter
-            feathers.ellipse(*S(0.07, 0.47), 0.10 * sh, 0.13 * sh, 0.6)
-            a = 0.45 + 0.9 * st["song"] + math.sin(st["phase"] * 0.5 + k) * 0.08   # the wing rises with the song
-            sx, sy = S(-0.02, 0.56)
-            tip = (sx - f * math.cos(a) * 0.62 * sh, sy - math.sin(a) * 0.62 * sh)
-            elbow = (sx - f * math.cos(a + 0.5) * 0.3 * sh, sy - math.sin(a + 0.5) * 0.3 * sh)
-            trail = S(-0.16, 0.30)
-            feathers.poly([(sx, sy), elbow, tip, ((tip[0] + trail[0]) / 2, (tip[1] + trail[1]) / 2 + 0.06 * sh), trail], 0.3)
-            for j in range(1, 6):                                   # primaries along the trailing edge
-                q = j / 6
-                p0 = (elbow[0] + (tip[0] - elbow[0]) * q, elbow[1] + (tip[1] - elbow[1]) * q)
-                p1 = (trail[0] + (tip[0] - trail[0]) * q, trail[1] + (tip[1] - trail[1]) * q + 0.05 * sh)
-                feathers.line(*p0, *p1, 0.6, width=self.stroke(h, w))
-            skin.line(*S(0.05, 0.60), *S(0.08, 0.74, 1.3), 0.75, width=lw * 2)   # neck and head
-            hx, hy = S(0.09, 0.84, 1.4)
-            skin.ellipse(hx, hy, 0.10 * sh, 0.12 * sh, 0.75)
-            lag = (st["hair"] - sway) * 2.0 * (1 if k else -1)
-            for j in range(-3, 4):                                  # long hair from the crown down her back
-                ang = math.radians(-90 - f * 25 + j * 18)
-                x1, y1 = hx + math.cos(ang) * 0.085 * sh, hy + math.sin(ang) * 0.105 * sh
-                hair.line(x1, y1, hx - f * (0.12 + abs(j) * 0.02 - lag) * sh, hy + (0.30 + j * 0.02) * sh,
-                          0.3 + abs(j) * 0.04, width=self.stroke(h, w) * 2)
-            hair.ellipse(hx - f * 0.02 * sh, hy - 0.06 * sh, 0.08 * sh, 0.05 * sh, 0.35)
-            dark.ellipse(hx + f * 0.04 * sh, hy - 0.01 * sh, 0.012 * sh, 0.012 * sh, 0.05)
+        panels = []                   # she who reaches paints first, the singer in front
+        for name in ("reclining", "standing"):
+            f = figs[name]
+            F = 1 if cx * 2 > f["fx"] else 0
+            fs = -1.0 if F else 1.0
+            panels += [(f["tail"][F][bi], WAVE_FG, an.treble > 0.35),
+                       (f["skin"][F][bi], RADIAL_FG, True), (f["hair"][F][hi], RADIAL_FG, False)]
+            mu, mv = f["mouth"]
+            mx, my = f["fx"] + fs * (mu + (bi - 1) * 0.06 * -mv) * sc, f["fy"] + mv * sc
             mo = 0.004 + min(1.0, st["song"] * 1.6) * 0.016 if st["quiet"] < 1 else 0.003
-            mx, my = hx + f * 0.045 * sh, hy + 0.05 * sh
             dark.ellipse(mx, my, 0.014 * sh, mo * sh, 0.05)
             mouths.append((mx, my))
-            if k == 1:                                              # the lyre, standing at her feet, strung with the treble
-                lb0, lb1 = S(0.28, 0.02, 0), S(0.46, 0.02, 0)
-                la0, la1 = S(0.24, 0.34, 0), S(0.50, 0.34, 0)
-                lyre.line(*lb0, *lb1, 0.8, width=lw)
-                lyre.line(*lb0, *S(0.22, 0.18, 0), 0.8, width=lw)
-                lyre.line(*S(0.22, 0.18, 0), *la0, 0.8, width=lw)
-                lyre.line(*lb1, *S(0.52, 0.18, 0), 0.8, width=lw)
-                lyre.line(*S(0.52, 0.18, 0), *la1, 0.8, width=lw)
-                lyre.line(*S(0.22, 0.30, 0), *S(0.52, 0.30, 0), 0.8, width=lw)
+            eu, ev = self.SIREN_EYE[name]
+            dark.ellipse(f["fx"] + fs * (eu + (bi - 1) * 0.06 * -ev) * sc, f["fy"] + ev * sc,
+                         0.012 * sh, 0.012 * sh, 0.05)
+            if name == "reclining":   # the lyre stands on the meadow at her side, strung with the treble
+                lx, ly = f["fx"] + fs * -72 * sc, f["fy"]
+                b0, b1 = (lx - 9 * sc, ly), (lx + 9 * sc, ly)
+                lyre.line(*b0, *b1, 0.8, width=lw)
+                lyre.line(*b0, lx - 13 * sc, ly - 17 * sc, 0.8, width=lw)
+                lyre.line(lx - 13 * sc, ly - 17 * sc, lx - 9 * sc, ly - 34 * sc, 0.8, width=lw)
+                lyre.line(*b1, lx + 13 * sc, ly - 17 * sc, 0.8, width=lw)
+                lyre.line(lx + 13 * sc, ly - 17 * sc, lx + 9 * sc, ly - 34 * sc, 0.8, width=lw)
+                lyre.line(lx - 9 * sc, ly - 28 * sc, lx + 9 * sc, ly - 28 * sc, 0.8, width=lw)
                 for j in range(4):
                     q = (j + 1) / 5
                     lvl = float(an.level[BANDS * 2 // 3 + j * (BANDS // 12)])
                     wob = math.sin(t * 40 + j) * lvl * 1.5
-                    x0 = lb0[0] + (lb1[0] - lb0[0]) * q
-                    strings.line(x0, lb0[1], x0 + wob, S(0.22, 0.30, 0)[1], 0.4 + lvl * 0.6)
+                    x0 = b0[0] + (b1[0] - b0[0]) * q
+                    strings.line(x0, ly, x0 + wob, ly - 28 * sc, 0.4 + lvl * 0.6)
         # paint the island, then the Sirens in front of it
         rock.paint(self, bold=False, base=RADIAL_FG)
         grass.paint(self, bold=False, base=RAIN_FG)
         flowers.paint(self, bold=an.treble > 0.35, base=SPARK_FG)
         bones.paint(self, bold=False, base=MOON_FG)
-        for cv in (feathers, skin, hair):
+        for cv, _base, _bold in panels:
             for (cy, cx_), _ in cv.cells.items():
                 self.put(cy, cx_, " ")
-        feathers.paint(self, bold=False, base=SPIRAL_FG)
-        hair.paint(self, bold=False, base=RADIAL_FG)
-        skin.paint(self, bold=True, base=RADIAL_FG)
+        for cv, base, bold in panels:
+            cv.paint(self, bold=bold, base=base)
         dark.paint(self, bold=False, base=RADIAL_FG)
         lyre.paint(self, bold=True, base=RADIAL_FG)
         strings.paint(self, bold=an.treble > 0.35, base=STAR_FG)
