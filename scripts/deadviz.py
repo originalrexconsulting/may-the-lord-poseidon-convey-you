@@ -2678,7 +2678,7 @@ class Viz:
         sh = max(8, min(top - 12, gw * 0.2))
         sc = sh / 200.0
         vk = min(1.0, 16.0 / (84.2 * sc))        # what hangs below the base stays on the rock face
-        figs = {"sh": sh, "vk": vk}
+        figs = {"sh": sh}
         for name, fig, fx, fy in (("standing", self.SIREN_STANDING, X - bw * 0.33, top),
                                   ("reclining", self.SIREN_RECLINING, X + bw * 0.45, top - 2)):
             out = {"fx": fx, "fy": fy, "mouth": self.SIREN_MOUTH[name], "skin": [], "hair": [],
