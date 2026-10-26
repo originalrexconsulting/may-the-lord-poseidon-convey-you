@@ -2702,8 +2702,8 @@ class Viz:
                     tails.append(tl)
                 out["skin"].append(skins)
                 out["tail"].append(tails)
-                out["hair"].append([cv_of([fig["hair"]], q * 0.12, 0.35 if name == "standing" else 0.5)
-                                    for q in (-1.0, -0.5, 0.0, 0.5, 1.0)])
+                out["hair"].append([cv_of([fig["hair"]], q * 0.12, 0.12 if name == "standing" else 0.32)
+                                    for q in (-1.0, -0.5, 0.0, 0.5, 1.0)])   # dark auburn; the red
             figs[name] = out
         return figs
 
@@ -2799,14 +2799,14 @@ class Viz:
         lw = max(2, int(sh / 30))
         mouths = []
         panels = []                   # she who reaches paints first, the singer in front
-        for name, hair_base in (("reclining", RADIAL_FG), ("standing", RADIAL_FG)):
+        for name in ("reclining", "standing"):
             f = figs[name]
             F = 1 if cx * 2 > f["fx"] else 0
             fs = -1.0 if F else 1.0
             panels += [(f["tail"][F][bi], WAVE_FG, an.treble > 0.35),
-                       (f["skin"][F][bi], RADIAL_FG, True), (f["hair"][F][hi], hair_base, False)]
+                       (f["skin"][F][bi], RADIAL_FG, True), (f["hair"][F][hi], RADIAL_FG, False)]
             mu, mv = f["mouth"]
-            mx, my = f["fx"] + fs * (mu + sway * 0.06 * -mv) * sc, f["fy"] + mv * sc
+            mx, my = f["fx"] + fs * (mu + (bi - 1) * 0.06 * -mv) * sc, f["fy"] + mv * sc
             mo = 0.004 + min(1.0, st["song"] * 1.6) * 0.016 if st["quiet"] < 1 else 0.003
             dark.ellipse(mx, my, 0.014 * sh, mo * sh, 0.05)
             mouths.append((mx, my))
